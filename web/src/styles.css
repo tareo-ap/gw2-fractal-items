@@ -1,0 +1,44 @@
+/* Dunkles Theme, angelehnt an die GW2-Oberfläche. */
+:root {
+  --bg: #121214;
+  --surface: #1c1c20;
+  --border: #33333a;
+  --text: #e6e3dc;
+  --muted: #9a968c;
+  --accent: #d9b45a;
+  --error: #e0605a;
+
+  /* Seltenheitsfarben wie im Spiel, für Itemnamen und Icon-Rahmen. */
+  --rarity-junk: #aaaaaa;
+  --rarity-basic: #ffffff;
+  --rarity-fine: #62a4da;
+  --rarity-masterwork: #1a9306;
+  --rarity-rare: #fcd00b;
+  --rarity-exotic: #ffa405;
+  --rarity-ascended: #fb3e8d;
+  --rarity-legendary: #4c139d;
+
+  color-scheme: dark;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+
+.app-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.app-header h1 { margin: 0; font-size: 1.25rem; color: var(--accent); letter-spacing: 0.02em; }
+
+.content { padding: 24px; max-width: 1200px; margin: 0 auto; }
+.muted { color: var(--muted); }
+.error { color: var(--error); }
+
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 16px; }
+.stat-value { font-size: 1.6rem; font-weight: 600; }
+.stat-label { color: var(--muted); margin-top: 4px; }

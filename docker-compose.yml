@@ -1,0 +1,13 @@
+services:
+  gw2-items:
+    build: .
+    image: gw2-items:latest
+    container_name: gw2-items
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - gw2-items-data:/data
+
+volumes:
+  gw2-items-data:
