@@ -8,6 +8,13 @@ export function rarityClass(rarity: Rarity | string): string {
 }
 
 /** Kurzbeschreibung eines Updates für das Dropdown, z. B. "10.10.2026, 14:03 · 12 neu · 30 geändert". */
+/** Wiki-Suche nach dem Item-Namen, wie wikiUrl im Server (routes/items.ts). */
+export function wikiSearchUrl(lang: 'en' | 'de', name: string): string {
+  return lang === 'de'
+    ? `https://wiki-de.guildwars2.com/wiki/Spezial:Suche/${encodeURIComponent(name)}`
+    : `https://wiki.guildwars2.com/wiki/Special:Search/${encodeURIComponent(name)}`;
+}
+
 /** Zeitpunkt in UTC als "YYYY-MM-DD_HH:MM", unabhängig von Sprache und Zeitzone des Browsers. */
 export function utcStamp(iso: string): string {
   const date = new Date(iso);

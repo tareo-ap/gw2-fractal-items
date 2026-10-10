@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type { ItemListItem } from '../../../shared/types';
 import { api } from '../api';
-import { rarityClass } from '../lib/format';
+import { rarityClass, wikiSearchUrl } from '../lib/format';
 import { errorText, useT } from '../lib/i18n';
 import { PAGE_SIZE, exportUrl, toApiQuery, type ListFilters } from '../lib/filters';
 import { ErrorBox, GameTypeBadges, ItemIcon, Link, Loading, TestBadge } from './common';
@@ -105,7 +105,7 @@ function TypeText({ item }: { item: ItemListItem }) {
 }
 
 function ItemTable({ items }: { items: ItemListItem[] }) {
-  const { t } = useT();
+  const { t, lang } = useT();
   return (
     <table className="item-table">
       <thead>
@@ -131,6 +131,14 @@ function ItemTable({ items }: { items: ItemListItem[] }) {
               <div className="small muted">
                 {item.rarity} · #{item.id}
                 {item.removed && ` · ${t('list.removed')}`}
+                {item.name && (
+                  <>
+                    {' · '}
+                    <a href={wikiSearchUrl(lang, item.name)} target="_blank" rel="noreferrer noopener" className="wiki-link">
+                      {t('list.wiki')}
+                    </a>
+                  </>
+                )}
               </div>
             </td>
             <td className="col-type">
