@@ -6,3 +6,6 @@ data/
 .env
 .DS_Store
 Thumbs.db
+
+# Alte Exporte, nur lokal (nicht veröffentlichen)
+sources/
