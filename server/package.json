@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test \"src/**/*.test.ts\"",
+    "db:import": "node --import tsx src/cli/importDb.ts",
     "start": "node dist/server/src/index.js"
   },
   "dependencies": {

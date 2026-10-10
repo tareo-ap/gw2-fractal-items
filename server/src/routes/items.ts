@@ -24,6 +24,12 @@ export class ValidationError extends Error {}
 // String-Vergleich für den Mengenvergleich.
 const NEEDS_RETEST_SQL = `(t.status IS NOT NULL AND t.status <> 'untested' AND t.game_types_at_test IS NOT i.game_types)`;
 
+// Tonics: Verwandlungs-Items. Teils als Gizmo, teils als Consumable (Untertyp Generic, Food, Utility …),
+// mal mit Flag "Tonic", mal nur am Namen erkennbar. Untertyp Unlock sind die zugehörigen Rezepte.
+export const TONIC_SQL = `(i.type IN ('Gizmo', 'Consumable')
+  AND (EXISTS (SELECT 1 FROM json_each(i.flags) WHERE value = 'Tonic') OR i.name LIKE '%Tonic%')
+  AND (i.subtype IS NULL OR i.subtype <> 'Unlock'))`;
+
 const RARITY_RANK_SQL = `CASE i.rarity ${RARITIES.map((r, idx) => `WHEN '${r}' THEN ${idx}`).join(' ')} ELSE 99 END`;
 
 const SORT_SQL: Record<(typeof SORTS)[number], string> = {
@@ -77,7 +83,7 @@ export function parseItemListQuery(params: Record<string, string | undefined>): 
   const q = params.q?.trim();
   return {
     q: q ? q : undefined,
-    view: oneOf('view', params.view, ['gizmo', 'consumable', 'all'] as const) ?? 'gizmo',
+    view: oneOf('view', params.view, ['gizmo', 'consumable', 'tonic', 'all'] as const) ?? 'gizmo',
     candidate: oneOf('candidate', params.candidate, ['yes', 'no', 'all'] as const) ?? 'yes',
     hideCommon: bool('hideCommon', params.hideCommon) ?? true,
     hidePlaceholders: bool('hidePlaceholders', params.hidePlaceholders) ?? true,
@@ -179,8 +185,10 @@ export function listItems(db: DatabaseSync, query: ParsedItemListQuery): ItemLis
 
   if (query.view === 'gizmo') where.push(`i.type = 'Gizmo'`);
   if (query.view === 'consumable') where.push(`i.type = 'Consumable'`);
+  if (query.view === 'tonic') where.push(TONIC_SQL);
   if (query.candidate !== 'all') where.push(`i.is_candidate = ${query.candidate === 'yes' ? 1 : 0}`);
-  if (query.hideCommon) {
+  // In der Tonic-Ansicht gilt hideCommon nicht: Tonics können den Untertyp Food oder Utility haben.
+  if (query.hideCommon && query.view !== 'tonic') {
     where.push(`NOT (i.type = 'Consumable' AND i.subtype IS NOT NULL AND i.subtype IN ('Food', 'Utility', 'Unlock', 'Transmutation', 'Currency'))`);
     // Mastery Points und Emote Tomes sind Freischaltungen ohne Nutzen im Fraktal, aber vom Untertyp
     // Immediate bzw. Generic. Viele Mastery Points heißen " Mastery Point" mit führendem Leerzeichen.

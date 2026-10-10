@@ -7,6 +7,7 @@ import {
   RARITIES,
   SORTS,
   countExtraFilters,
+  hasHideCommon,
   type Candidate,
   type ListFilters,
   type SortField,
@@ -100,7 +101,7 @@ export function FilterBar({ filters, onChange }: { filters: ListFilters; onChang
             <UpdateSelect value={filters.updateId} onChange={(updateId) => onChange({ updateId })} />
           </div>
           <div className="filter-row checks">
-            {filters.view !== 'gizmo' && (
+            {hasHideCommon(filters.view) && (
               <label className="check">
                 <input
                   type="checkbox"

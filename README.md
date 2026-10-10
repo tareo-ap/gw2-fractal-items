@@ -45,6 +45,12 @@ docker compose up -d --build
 
 Danach läuft die App auf http://localhost:3000. Die Datenbank liegt im Volume `gw2-items-data` unter `/data`.
 
+## Sichern und Umziehen
+
+- Sichern: Im Kopf der App auf „Export“ klicken (bzw. `/api/export` aufrufen). Das lädt eine konsistente Kopie der Datenbank als `gw2-items-JJJJ-MM-TT.db`, auch während ein Update läuft.
+- Einspielen: Server beenden, dann `npm run db:import -- datei.db`. Die bisherige Datenbank bleibt als `gw2-items.db.bak-<Zeitstempel>` neben der neuen liegen. Das Skript bricht ab, wenn der Server noch läuft.
+- Docker: Container stoppen, die Datei per `docker cp datei.db <container>:/data/gw2-items.db` ins Volume kopieren (die alte Datei vorher sichern), Container wieder starten.
+
 ## Konfiguration
 
 | Variable | Default | Bedeutung |

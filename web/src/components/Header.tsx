@@ -9,6 +9,7 @@ import { UpdateButton } from './UpdateButton';
 const TABS: { view: ItemView; label: string }[] = [
   { view: 'gizmo', label: 'Gizmos' },
   { view: 'consumable', label: 'Consumables' },
+  { view: 'tonic', label: 'Tonics' },
   { view: 'all', label: 'Alle' },
 ];
 
@@ -21,6 +22,7 @@ export function Header({ filters, activeView }: { filters: ListFilters; activeVi
     if (!s) return null;
     if (view === 'gizmo') return s.candidates.gizmo;
     if (view === 'consumable') return s.candidates.consumable;
+    if (view === 'tonic') return s.candidates.tonic;
     return null;
   };
 
@@ -43,6 +45,9 @@ export function Header({ filters, activeView }: { filters: ListFilters; activeVi
             </>
           )}
         </div>
+        <a href="/api/export" download className="small" title="Datenbank als Datei herunterladen (Sicherung)">
+          Export
+        </a>
         <UpdateButton />
       </div>
       <nav className="tabs" aria-label="Ansicht">

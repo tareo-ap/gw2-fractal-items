@@ -140,6 +140,49 @@ describe('Platzhalter-Filter', () => {
   });
 });
 
+describe('Tonic-Ansicht', () => {
+  let tonicApi: FakeGw2Api;
+  let tonicApp: Hono;
+
+  before(async () => {
+    const base = fixtureItems()[0]!;
+    const consumable = fixtureItems().find((i) => i.id === 8778)!;
+    tonicApi = await startFakeGw2Api([
+      base,
+      { ...consumable, id: 201, name: "Belcher's Bluff Kit", flags: ['NoSell', 'Tonic'] },
+      { ...base, id: 202, name: 'Feisty Feline Tonic' },
+      { ...consumable, id: 203, name: 'Endless Mystery Tonic', details: { type: 'Food' } },
+      { ...consumable, id: 204, name: 'Recipe: Wolf Tonic', details: { type: 'Unlock' } },
+      { ...consumable, id: 205, name: 'Sharpening Stone', details: { type: 'Utility' } },
+    ]);
+    const { db: tonicDb, importer: tonicImporter } = createTestImporter(tonicApi.url);
+    tonicApp = createApp(tonicDb, null, tonicImporter);
+    await runImport(tonicImporter);
+  });
+  after(() => tonicApi.close());
+
+  it('findet Tonics per Flag oder Name, auch mit Untertyp Food, aber keine Rezepte', async () => {
+    const res = (await (await tonicApp.request('/api/items?view=tonic&sort=id')).json()) as ItemListResponse;
+    assert.deepEqual(res.items.map((i) => i.id), [201, 202, 203]);
+  });
+
+  it('/api/stats zählt Tonic-Kandidaten', async () => {
+    const stats = (await (await tonicApp.request('/api/stats')).json()) as { candidates: { tonic: number } };
+    assert.equal(stats.candidates.tonic, 3);
+  });
+});
+
+describe('GET /api/export', () => {
+  it('liefert die Datenbank als SQLite-Download', async () => {
+    const res = await app.request('/api/export');
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type'), 'application/vnd.sqlite3');
+    assert.match(res.headers.get('content-disposition') ?? '', /^attachment; filename="gw2-items-\d{4}-\d{2}-\d{2}\.db"$/);
+    const body = Buffer.from(await res.arrayBuffer());
+    assert.equal(body.subarray(0, 15).toString('latin1'), 'SQLite format 3');
+  });
+});
+
 describe('GET /api/items/:id', () => {
   it('liefert Details inkl. Verlauf und Wiki-Link', async () => {
     const item = await getJson<ItemDetail>('/api/items/8778');
@@ -237,8 +280,8 @@ describe('Teststatus und Updates', () => {
   });
 
   it('/api/stats funktioniert weiterhin', async () => {
-    const stats = await getJson<{ items: number; candidates: { gizmo: number; consumable: number } }>('/api/stats');
+    const stats = await getJson<{ items: number; candidates: { gizmo: number; consumable: number; tonic: number } }>('/api/stats');
     assert.equal(stats.items, 6);
-    assert.deepEqual(stats.candidates, { gizmo: 0, consumable: 3 });
+    assert.deepEqual(stats.candidates, { gizmo: 0, consumable: 3, tonic: 0 });
   });
 });

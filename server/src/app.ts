@@ -1,4 +1,7 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
@@ -13,6 +16,7 @@ import type {
 import { ImportAlreadyRunningError, type Importer } from './importer/importer.js';
 import {
   getItemDetail,
+  TONIC_SQL,
   listItems,
   parseItemListQuery,
   parseItemTestUpdate,
@@ -38,6 +42,7 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
       candidates: {
         gizmo: count(`SELECT COUNT(*) AS n FROM items WHERE removed = 0 AND is_candidate = 1 AND type = 'Gizmo'`),
         consumable: count(`SELECT COUNT(*) AS n FROM items WHERE removed = 0 AND is_candidate = 1 AND type = 'Consumable'`),
+        tonic: count(`SELECT COUNT(*) AS n FROM items i WHERE i.removed = 0 AND i.is_candidate = 1 AND ${TONIC_SQL}`),
       },
       lastUpdate: last ? toUpdateSummary(last) : null,
     });
@@ -73,6 +78,25 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
     } catch (err) {
       if (err instanceof ImportAlreadyRunningError) return c.json({ error: err.message, status: importer.getStatus() }, 409);
       throw err;
+    }
+  });
+
+  // --- Export --------------------------------------------------------------
+
+  // Konsistente Kopie der Datenbank als Download. VACUUM INTO funktioniert auch während eines Imports.
+  app.get('/api/export', (c) => {
+    const tmpFile = path.join(os.tmpdir(), `gw2-items-export-${crypto.randomUUID()}.db`);
+    try {
+      // VACUUM INTO nimmt keine Parameter; einfache Anführungszeichen im Pfad verdoppeln.
+      db.exec(`VACUUM INTO '${tmpFile.replace(/'/g, "''")}'`);
+      const data = fs.readFileSync(tmpFile);
+      return c.body(data, 200, {
+        'Content-Type': 'application/vnd.sqlite3',
+        'Content-Disposition': `attachment; filename="gw2-items-${new Date().toISOString().slice(0, 10)}.db"`,
+        'Content-Length': String(data.length),
+      });
+    } finally {
+      fs.rmSync(tmpFile, { force: true });
     }
   });
 

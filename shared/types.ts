@@ -9,7 +9,7 @@ export type TestStatus = 'untested' | 'works' | 'broken';
 
 export interface StatsResponse {
   items: number;
-  candidates: { gizmo: number; consumable: number };
+  candidates: { gizmo: number; consumable: number; tonic: number };
   lastUpdate: UpdateSummary | null;
 }
 
@@ -34,8 +34,8 @@ export interface HealthResponse {
 
 export type Rarity = 'Junk' | 'Basic' | 'Fine' | 'Masterwork' | 'Rare' | 'Exotic' | 'Ascended' | 'Legendary';
 
-/** Ansicht in der UI: Gizmos und Consumables sind getrennt. */
-export type ItemView = 'gizmo' | 'consumable' | 'all';
+/** Ansicht in der UI: Gizmos und Consumables sind getrennt, Tonics sind eine eigene Ansicht über beide Typen. */
+export type ItemView = 'gizmo' | 'consumable' | 'tonic' | 'all';
 
 /** Eintrag in der Ergebnisliste. */
 export interface ItemListItem {
@@ -62,7 +62,7 @@ export interface ItemListQuery {
   view?: ItemView; // Default 'gizmo'
   candidate?: 'yes' | 'no' | 'all'; // Default 'yes'
   hidePlaceholders?: boolean; // Default true; blendet Platzhalter aus (Name leer, kein Icon oder Name wie "((906936))" oder "[[913817]]"), in allen Ansichten
-  hideCommon?: boolean; // Default true; blendet Consumables mit subtype Food, Utility, Unlock, Transmutation, Currency sowie Mastery Points, Emote Tomes und Währungspakete aus
+  hideCommon?: boolean; // Default true; gilt nicht in der Ansicht tonic; blendet Consumables mit subtype Food, Utility, Unlock, Transmutation, Currency sowie Mastery Points, Emote Tomes und Währungspakete aus
   rarity?: Rarity[];
   gameType?: GameType[]; // Item muss alle genannten enthalten
   testStatus?: TestStatus | 'retest';

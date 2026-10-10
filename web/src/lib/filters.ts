@@ -5,7 +5,7 @@ import type { GameType, ItemListQuery, ItemView, Rarity, TestStatus } from '../.
 
 export const RARITIES: Rarity[] = ['Junk', 'Basic', 'Fine', 'Masterwork', 'Rare', 'Exotic', 'Ascended', 'Legendary'];
 export const GAME_TYPES: GameType[] = ['Activity', 'Dungeon', 'Pve', 'Pvp', 'PvpLobby', 'Wvw'];
-export const VIEWS: ItemView[] = ['gizmo', 'consumable', 'all'];
+export const VIEWS: ItemView[] = ['gizmo', 'consumable', 'tonic', 'all'];
 export const SORTS = ['name', 'id', 'rarity', 'level', 'lastChanged'] as const;
 export const PAGE_SIZE = 50;
 
@@ -117,6 +117,11 @@ export function toApiQuery(f: ListFilters): string {
   return p.toString();
 }
 
+/** Der Filter hideCommon wirkt nur in den Ansichten Consumables und Alle. */
+export function hasHideCommon(view: ItemView): boolean {
+  return view === 'consumable' || view === 'all';
+}
+
 /** Anzahl gesetzter Filter im aufklappbaren Bereich (für die Anzeige am Button). */
 export function countExtraFilters(f: ListFilters): number {
   let n = 0;
@@ -125,7 +130,7 @@ export function countExtraFilters(f: ListFilters): number {
   if (f.testStatus) n++;
   if (f.updateId !== null) n++;
   if (f.includeRemoved) n++;
-  if (f.view !== 'gizmo' && !f.hideCommon) n++;
+  if (hasHideCommon(f.view) && !f.hideCommon) n++;
   if (!f.hidePlaceholders) n++;
   return n;
 }
