@@ -26,9 +26,9 @@ import {
 } from '../../../shared/staticQuery';
 import { STATIC_SCHEMA_VERSION, type StaticChange, type StaticDetailBlock, type StaticItem, type StaticMeta, type StaticUpdate } from '../../../shared/staticTypes';
 
-// Datenschicht der statischen Fassung (GitHub Pages, VITE_DATA_MODE=static): dieselbe Schnittstelle wie
-// der Server unter /api/*, aber die Antworten werden im Browser aus den JSON-Dateien in data/ berechnet.
-// Die Logik selbst (Filter, Suche, Sortierung, Änderungen, Vergleich) liegt in shared/staticQuery.ts.
+// Data layer of the static version (GitHub Pages, VITE_DATA_MODE=static): the same interface as
+// the server under /api/*, but the responses are computed in the browser from the JSON files in data/.
+// The logic itself (filters, search, sorting, changes, comparison) lives in shared/staticQuery.ts.
 
 const DATA_URL = `${import.meta.env.BASE_URL}data/`;
 
@@ -43,7 +43,7 @@ async function fetchJson<T>(file: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-// Alles Nötige für Liste, Suche und Änderungen wird einmal geladen und danach aus dem Speicher bedient.
+// Everything needed for list, search and changes is loaded once and then served from memory.
 let dataset: Promise<StaticDataset> | null = null;
 
 function loadDataset(): Promise<StaticDataset> {
@@ -58,14 +58,14 @@ function loadDataset(): Promise<StaticDataset> {
     }
     return prepareDataset({ meta, items, updates, changes });
   });
-  // Nach einem Fehler beim nächsten Aufruf neu versuchen.
+  // After an error, retry on the next call.
   dataset.catch(() => {
     dataset = null;
   });
   return dataset;
 }
 
-// Details (restliche API-Antwort) stehen in Blöcken à 500 Items; jeder Block wird höchstens einmal geladen.
+// Details (rest of the API response) are stored in blocks of 500 items; each block is loaded at most once.
 const blocks = new Map<number, Promise<StaticDetailBlock>>();
 
 function loadBlock(n: number): Promise<StaticDetailBlock> {
@@ -78,7 +78,7 @@ function loadBlock(n: number): Promise<StaticDetailBlock> {
   return block;
 }
 
-/** Eingabefehler wie beim Server als Antwort mit Status 400. */
+/** Input errors as a response with status 400, like on the server. */
 function validated<T>(parse: () => T): T {
   try {
     return parse();
@@ -90,7 +90,7 @@ function validated<T>(parse: () => T): T {
 
 const paramsOf = (queryString: string, lang: Lang): Record<string, string> => ({ ...Object.fromEntries(new URLSearchParams(queryString)), lang });
 
-// Die Antworten tragen update/from/to ohne deletable-Felder (die Pages-Fassung löscht nichts).
+// The responses carry update/from/to without deletable fields (the Pages version deletes nothing).
 const asDetail = (update: StaticUpdate) => update as UpdateDetail;
 
 const readOnly = (): Promise<never> => Promise.reject(new ApiError('Read-only version', 405));
@@ -123,7 +123,7 @@ export const staticApi = {
 
   compareUpdates: async (from: number, to: number, queryString: string, lang: Lang): Promise<UpdateCompareResponse> => {
     const ds = await loadDataset();
-    if (from >= to) throw new ApiError('from muss kleiner als to sein', 400);
+    if (from >= to) throw new ApiError('from must be less than to', 400);
     const query = validated(() => parseUpdateChangesQuery(paramsOf(queryString, lang)));
     const fromUpdate = ds.updatesById.get(from);
     const toUpdate = ds.updatesById.get(to);
@@ -131,7 +131,7 @@ export const staticApi = {
     return staticCompare(ds, asDetail(fromUpdate), asDetail(toUpdate), query);
   },
 
-  // Schreibende Aufrufe gibt es nur der Form halber; die Oberfläche bietet sie in dieser Fassung nicht an.
+  // Write calls exist for form only; the UI does not offer them in this version.
   setTest: (_id: number, _update: ItemTestUpdate): Promise<unknown> => readOnly(),
   importStatus: (): Promise<ImportStatus> => readOnly(),
   deleteUpdate: (_id: number): Promise<void> => readOnly(),
@@ -139,8 +139,8 @@ export const staticApi = {
 };
 
 /**
- * Lädt die gefilterte Liste (alle Treffer) als CSV oder JSON herunter, im Browser erzeugt.
- * Gleiches Format wie GET /api/items/export (CSV mit Semikolon und BOM).
+ * Downloads the filtered list (all matches) as CSV or JSON, generated in the browser.
+ * Same format as GET /api/items/export (CSV with semicolon and BOM).
  */
 export async function downloadStaticExport(queryString: string, lang: Lang, format: 'csv' | 'json'): Promise<void> {
   const ds = await loadDataset();

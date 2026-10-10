@@ -1,7 +1,7 @@
-# Baut die statische, schreibgeschützte Fassung und veröffentlicht sie auf GitHub Pages.
-# Die Daten kommen aus site-data/ im Repo (lokal mit "npm run export:static" erzeugt und committet);
-# die GW2-API wird hier nie aufgerufen.
-# Einmalig nötig: GitHub → Settings → Pages → Source: "GitHub Actions".
+# Builds the static, read-only version and publishes it to GitHub Pages.
+# The data comes from site-data/ in the repo (generated locally with "npm run export:static" and committed);
+# the GW2 API is never called here.
+# One-time setup: GitHub -> Settings -> Pages -> Source: "GitHub Actions".
 name: Pages
 
 on:
@@ -14,7 +14,7 @@ permissions:
   pages: write
   id-token: write
 
-# Nur ein Deployment gleichzeitig; ein neuerer Push ersetzt ein laufendes nicht mitten im Lauf.
+# Only one deployment at a time; a newer push does not cancel a running one mid-run.
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -31,7 +31,7 @@ jobs:
       - run: npm ci
       - run: npm run build:pages
         env:
-          # Projektseite unter https://<konto>.github.io/<repo>/. Repo-Name: gw2-fractal-items.
+          # Project site at https://<account>.github.io/<repo>/. Repo name: gw2-fractal-items.
           VITE_BASE: /${{ github.event.repository.name }}/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

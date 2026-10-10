@@ -3,7 +3,7 @@ import { useT } from '../lib/i18n';
 import { GameTypeDiff, Link } from './common';
 import { utcStamp } from '../lib/format';
 
-/** Änderungsverlauf eines Items, neueste zuerst; game_types-Änderungen hervorgehoben. */
+/** Change history of an item, newest first; game_types changes highlighted. */
 export function HistoryList({ history }: { history: ItemChange[] }) {
   const { t } = useT();
   if (history.length === 0) return <p className="small muted">{t('history.empty')}</p>;

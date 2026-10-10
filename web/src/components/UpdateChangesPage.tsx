@@ -14,7 +14,7 @@ import { Pagination } from './ItemListPage';
 const FOCUSES: ChangeFocus[] = ['all', 'gameTypes', 'dungeonGained', 'dungeonLost'];
 const TYPES: ItemView[] = ['gizmo', 'consumable', 'tonic', 'all'];
 
-/** "/updates": springt auf das neueste abgeschlossene Update. */
+/** "/updates": jumps to the latest completed update. */
 export function UpdatesRedirect() {
   const { t } = useT();
   const updates = useQuery({ queryKey: ['updates'], queryFn: api.updates });
@@ -39,9 +39,9 @@ export function UpdatesRedirect() {
 }
 
 /**
- * Bereich "Stände verwalten": alle Update-Läufe mit Löschen-Button. Ob ein Stand löschbar ist, entscheidet der Server
- * (deletable / deleteBlockedReason); nicht löschbare haben einen deaktivierten Button mit dem Grund als Tooltip.
- * shownIds: Stände, die gerade angezeigt werden; wird einer gelöscht, geht es zurück auf /updates.
+ * "Manage states" section: all update runs with a delete button. Whether a state can be deleted is decided by the server
+ * (deletable / deleteBlockedReason); non-deletable ones have a disabled button with the reason as tooltip.
+ * shownIds: states currently displayed; if one is deleted, navigate back to /updates.
  */
 function ManageStates({ updates, shownIds }: { updates: UpdateListEntry[]; shownIds: number[] }) {
   const i18n = useT();
@@ -115,7 +115,7 @@ function same<T>(a: T[], b: T[]): boolean {
   return a.length === b.length && a.every((v, i) => v === b[i]);
 }
 
-/** "/updates/compare?from=A&to=B": liest die beiden Update-IDs aus der URL. */
+/** "/updates/compare?from=A&to=B": reads the two update IDs from the URL. */
 export function CompareRoute({ params }: { params: URLSearchParams }) {
   const { t } = useT();
   const from = Number(params.get('from'));
@@ -137,8 +137,8 @@ type Page = Omit<UpdateCompareResponse, 'from' | 'to'> & { from: UpdateDetail | 
 const isDone = (u: { status?: string }) => u.status === undefined || u.status === 'done';
 
 /**
- * Änderungen: entweder eines Updates (/updates/:id, gegen den Vorgänger) oder zweier frei gewählter Stände
- * (/updates/compare). Zähler als Filter-Kacheln, Filterleiste und Liste.
+ * Changes: either of one update (/updates/:id, against its predecessor) or of two freely chosen states
+ * (/updates/compare). Counters as filter tiles, filter bar and list.
  */
 export function UpdateChangesPage({ source, params }: { source: Source; params: URLSearchParams }) {
   const i18n = useT();
@@ -152,17 +152,17 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
       const { update, ...rest } = await api.updateChanges(source.id, query, lang);
       return { ...rest, from: null, to: update };
     },
-    placeholderData: keepPreviousData, // alte Seite stehen lassen, bis die neue da ist
+    placeholderData: keepPreviousData, // keep the old page until the new one is there
   });
   const updates = useQuery({ queryKey: ['updates'], queryFn: api.updates });
   const toId = 'from' in source ? source.to : source.id;
 
-  // Vorgänger für /updates/:id: das letzte abgeschlossene Update davor.
+  // Predecessor for /updates/:id: the last completed update before it.
   const predecessor = 'from' in source ? undefined : updates.data?.find((u) => u.id < source.id && isDone(u));
   const fromId = 'from' in source ? source.from : predecessor?.id;
   const pageUrl = (f: ChangesFilters) => ('from' in source ? compareUrl(source.from, source.to, f) : changesUrl(source.id, f));
 
-  // Jede Filteränderung springt auf Seite 1, außer beim Blättern selbst (patch.page).
+  // Every filter change jumps to page 1, except when paging itself (patch.page).
   const change = (patch: Partial<ChangesFilters>, options: { replace?: boolean } = {}) =>
     navigate(pageUrl({ ...filters, page: 1, ...patch }), options);
 
@@ -181,7 +181,7 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
 
   const data = changes.data;
   const { to: update, counts } = data;
-  // Das älteste Update ist der Vollimport: Dort ist alles neu, ein Vergleich lohnt erst ab dem zweiten.
+  // The oldest update is the full import: everything is new there, a comparison is only worthwhile from the second.
   const isFirst = !('from' in source) && updates.data !== undefined && updates.data.every((u) => u.id >= update.id);
   const fromUpdate = data.from ?? predecessor ?? null;
   const doneUpdates = (updates.data ?? []).filter(isDone);
@@ -209,7 +209,7 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
     focusTile('dungeonLost', counts.dungeonLost, 'change-removed'),
   ];
 
-  // Reihenfolge wie in CHANGE_KINDS halten, damit die URL stabil bleibt.
+  // Keep the order as in CHANGE_KINDS so the URL stays stable.
   const toggleKind = (kind: ChangeKind) =>
     change({ kind: CHANGE_KINDS.filter((k) => (k === kind ? !filters.kind.includes(k) : filters.kind.includes(k))) });
 
@@ -365,14 +365,14 @@ const MAX_TEXT = 160;
 
 interface FieldRowData {
   name: string;
-  before?: ReactNode; // fehlt = Zelle wird von "message" überspannt
+  before?: ReactNode; // missing = cell is spanned by "message"
   after?: ReactNode;
   message?: string;
 }
 
 const Missing = ({ text }: { text: string }) => <span className="muted">{text}</span>;
 
-/** Zeilen eines Eintrags: game_types immer zuerst, danach die übrigen Felder in API-Reihenfolge. */
+/** Rows of an entry: game_types always first, then the other fields in API order. */
 function buildRows(item: UpdateChangeEntry, t: TFunction): FieldRowData[] {
   const rows: FieldRowData[] = [];
   const notStored = t('changes.notStored');
@@ -439,7 +439,7 @@ function ChangesTable({ items, oldLabel, newLabel }: { items: UpdateChangeEntry[
   );
 }
 
-/** Ein Eintrag als eigener tbody: Item-Zelle mit rowspan, dazu eine Zeile pro geändertem Feld. */
+/** An entry as its own tbody: item cell with rowspan, plus one row per changed field. */
 function ChangeRows({ item, oldLabel, newLabel }: { item: UpdateChangeEntry; oldLabel: string; newLabel: string }) {
   const { t } = useT();
   const dungeonChanged = (item.gameTypesBefore?.includes('Dungeon') ?? false) !== (item.gameTypesAfter?.includes('Dungeon') ?? false);
@@ -454,7 +454,7 @@ function ChangeRows({ item, oldLabel, newLabel }: { item: UpdateChangeEntry; old
           <Link href={`/items/${item.id}`} className={`item-name ${rarityClass(item.rarity)}`}>
             {item.name || `#${item.id}`}
           </Link>
-          {/* In der deutschen Ansicht steht der englische Name klein darunter (Alt/Neu sind englisch). */}
+          {/* In the German view the English name appears small underneath (old/new are English). */}
           {item.nameEn !== item.name && <div className="small muted">{item.nameEn}</div>}
           <div className="small muted">
             {item.type}
@@ -502,7 +502,7 @@ function ChangeRows({ item, oldLabel, newLabel }: { item: UpdateChangeEntry; old
   );
 }
 
-/** Wert eines Feldes lesbar: Text mit GW2-Markup, Arrays als Chips, Objekte als "Schlüssel: Wert". */
+/** Readable value of a field: text with GW2 markup, arrays as chips, objects as "key: value". */
 function ValueView({ value }: { value: unknown }) {
   const { t } = useT();
   if (typeof value === 'string') return <LongText text={value} />;
@@ -534,7 +534,7 @@ function ValueView({ value }: { value: unknown }) {
   return <span>{value === null ? 'null' : String(value)}</span>;
 }
 
-/** Lange Texte gekürzt (ohne GW2-Markup), per Klick vollständig mit Markup. */
+/** Long texts truncated (without GW2 markup), complete with markup on click. */
 function LongText({ text }: { text: string }) {
   const { t } = useT();
   const [open, setOpen] = useState(false);

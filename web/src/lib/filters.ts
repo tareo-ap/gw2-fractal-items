@@ -1,10 +1,10 @@
 import type { GameType, ItemListQuery, ItemView, Lang, Rarity, TestStatus } from '../../../shared/types';
 import { GAME_TYPES, ITEM_SORTS, RARITIES, hideCommonApplies } from '../../../shared/rules';
 
-// Alle Filter der Liste stehen in der URL, damit Links teilbar sind und "Zurück" funktioniert.
-// Standardwerte werden in der URL weggelassen.
+// All list filters live in the URL so links are shareable and "Back" works.
+// Default values are omitted from the URL.
 
-// Seltenheiten, Game Types und Sortierungen stammen aus shared/rules.ts (dieselben Listen wie im Server).
+// Rarities, game types and sort options come from shared/rules.ts (the same lists as on the server).
 export { GAME_TYPES, RARITIES };
 export const VIEWS: ItemView[] = ['gizmo', 'consumable', 'tonic', 'all'];
 export const SORTS = ITEM_SORTS;
@@ -81,7 +81,7 @@ export function parseFilters(params: URLSearchParams): ListFilters {
   };
 }
 
-/** URL-Parameter für die Browserzeile (ohne Standardwerte). */
+/** URL parameters for the address bar (without default values). */
 export function filtersToParams(f: ListFilters): URLSearchParams {
   const d = DEFAULT_FILTERS;
   const p = new URLSearchParams();
@@ -106,7 +106,7 @@ export function listUrl(f: ListFilters): string {
   return qs ? `/?${qs}` : '/';
 }
 
-/** Query-String für GET /api/items: alle Werte explizit, damit der Server keine Defaults raten muss. */
+/** Query string for GET /api/items: all values explicit so the server does not have to guess defaults. */
 export function toApiQuery(f: ListFilters): string {
   const p = filtersToParams(f);
   p.set('view', f.view);
@@ -118,17 +118,17 @@ export function toApiQuery(f: ListFilters): string {
   return p.toString();
 }
 
-/** URL für den Download der gefilterten Liste (alle Treffer, page/pageSize ignoriert der Server). */
+/** URL for downloading the filtered list (all matches; the server ignores page/pageSize). */
 export function exportUrl(f: ListFilters, format: 'csv' | 'json', lang: Lang): string {
   return `/api/items/export?${toApiQuery(f)}&lang=${lang}&format=${format}`;
 }
 
-/** Der Filter hideCommon wirkt nur in den Ansichten Consumables und Alle. */
+/** The hideCommon filter only applies in the Consumables and All views. */
 export function hasHideCommon(view: ItemView): boolean {
   return hideCommonApplies(view);
 }
 
-/** Anzahl gesetzter Filter im aufklappbaren Bereich (für die Anzeige am Button). */
+/** Number of active filters in the collapsible section (shown on the button). */
 export function countExtraFilters(f: ListFilters): number {
   let n = 0;
   if (f.rarity.length) n++;

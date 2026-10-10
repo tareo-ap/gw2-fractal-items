@@ -21,10 +21,10 @@ import { compareUpdates, getUpdate, getUpdateChanges, listUpdates } from './rout
 import { startFakeGw2Api, type FakeGw2Api } from './test/fakeGw2Api.js';
 import { chatLinkFor, createTestImporter, fixtureItems, runImport } from './test/fixtures.js';
 
-// Konsistenz-Test: Die Browser-Logik der statischen Fassung (shared/staticQuery.ts, gelesen aus dem Export)
-// muss dieselben Ergebnisse liefern wie die SQL-Abfragen des Servers (gleiche IDs, gleiche Reihenfolge).
-// Der Server kennt alle Items, die statische Fassung nur die veröffentlichten; deshalb werden die
-// Serverantworten auf die veröffentlichten Items beschränkt.
+// Consistency test: the browser logic of the static version (shared/staticQuery.ts, reading from the export)
+// must return the same results as the server's SQL queries (same IDs, same order).
+// The server knows all items, the static version only the published ones; therefore the
+// server responses are restricted to the published items.
 
 let api: FakeGw2Api;
 let db: DatabaseSync;
@@ -41,12 +41,12 @@ const entries = (qs: string): Record<string, string> => Object.fromEntries(new U
 before(async () => {
   api = await startFakeGw2Api([
     ...fixtureItems(),
-    // Platzhalter
+    // Placeholders
     { ...gizmo, id: 101, name: '   ', game_types: ['Dungeon', 'Pve'] },
     { ...gizmo, id: 102, name: 'Ohne Icon', icon: undefined },
     { ...gizmo, id: 103, name: '((906936))' },
     { ...gizmo, id: 106, name: '[[913817]]' },
-    // hideCommon: Mastery Points, Emote Tomes, Währungspakete, Currency
+    // hideCommon: Mastery Points, Emote Tomes, currency packs, Currency
     { ...consumable, id: 104, name: ' Mastery Point', details: { type: 'Immediate' } },
     { ...consumable, id: 105, name: '"/Clap" Emote Tome', details: { type: 'Generic' } },
     { ...consumable, id: 107, name: '300 Geodes', details: { type: 'Immediate' } },
@@ -58,7 +58,7 @@ before(async () => {
     { ...gizmo, id: 202, name: 'Feisty Feline Tonic' },
     { ...consumable, id: 203, name: 'Endless Mystery Tonic', details: { type: 'Food' } },
     { ...consumable, id: 204, name: 'Recipe: Wolf Tonic', details: { type: 'Unlock' } },
-    // Sprache, Markup, andere Typen
+    // Language, markup, other types
     { ...consumable, id: 301, name: 'Sweet Cheese', description: 'A tasty cheese.', details: { type: 'Generic' } },
     { ...gizmo, id: 302, name: 'Flavor Gizmo', description: '<c=@flavor>Flavor text</c>\nSecond line', rarity: 'Legendary', level: 80 },
     { ...gizmo, id: 303, name: 'zebra gizmo', game_types: ['Pve', 'Pvp'], level: 40 },
@@ -76,7 +76,7 @@ before(async () => {
   const importer = created.importer;
   baselineId = (await runImport(importer)).updateId!;
 
-  // Teststatus, danach ändert das zweite Update die game_types (→ "neu testen").
+  // Test status; then the second update changes the game_types (-> "retest").
   saveItemTest(db, 1, { status: 'works', note: 'klappt; "gut"' });
   saveItemTest(db, 8778, { status: 'works', note: null });
   saveItemTest(db, 2, { status: 'broken', note: 'Zeile 1\nZeile 2' });
@@ -96,7 +96,7 @@ before(async () => {
   await runImport(importer);
 
   api.items.get(1)!.game_types = ['Dungeon', 'Pve', 'Wvw'];
-  api.items.set(3, { ...gizmo, id: 3, name: 'Old Gizmo', game_types: ['Dungeon', 'Pve'] }); // wieder da
+  api.items.set(3, { ...gizmo, id: 3, name: 'Old Gizmo', game_types: ['Dungeon', 'Pve'] }); // back again
   api.items.delete(9);
   api.items.get(2)!.game_types = ['Pve'];
   api.items.get(5)!.description = 'Noch eine Beschreibung';
@@ -109,10 +109,10 @@ before(async () => {
   saveItemTest(db, 3, { status: 'broken', note: 'entfernt' });
   saveItemTest(db, 302, { status: 'works', note: null });
 
-  // Item ohne deutsche Texte (Zeile fehlt) → Fallback auf Englisch
+  // Item without German texts (row missing) -> fall back to English
   db.exec(`DELETE FROM item_texts WHERE item_id IN (4, 304); DELETE FROM items_fts_de WHERE rowid IN (4, 304)`);
 
-  // Export und "Dateien" simulieren: durch JSON schicken, wie der Browser sie lädt.
+  // Simulate export and "files": round-trip through JSON, as the browser loads them.
   exported = JSON.parse(JSON.stringify(buildStaticExport(db))) as StaticExport;
   ds = prepareDataset(exported);
   published = new Set(ds.items.map((i) => i.id));
@@ -120,11 +120,11 @@ before(async () => {
 });
 after(() => api.close());
 
-/** Serverantwort der Liste, beschränkt auf veröffentlichte Items. */
+/** Server list response, restricted to published items. */
 function serverList(qs: string) {
   const query = parseItemListQuery({ ...entries(qs), pageSize: '200', page: '1' });
   const res = listItems(db, query);
-  assert.ok(res.total <= 200, 'Testdaten passen auf eine Seite');
+  assert.ok(res.total <= 200, 'Test data fits on one page');
   return res.items.filter((i) => published.has(i.id));
 }
 
@@ -136,8 +136,8 @@ function checkList(qs: string) {
   assert.deepEqual(staticList(qs), serverList(qs), `Liste: ${qs}`);
 }
 
-describe('Export: Auswahl der Items', () => {
-  it('veröffentlicht Kandidaten (Gizmo/Consumable) und Items aus Änderungen ab dem zweiten Update', () => {
+describe('Export: item selection', () => {
+  it('publishes candidates (Gizmo/Consumable) and items from changes from the second update on', () => {
     const candidates = db
       .prepare(`SELECT id FROM items WHERE removed = 0 AND is_candidate = 1 AND type IN ('Gizmo', 'Consumable')`)
       .all()
@@ -148,15 +148,15 @@ describe('Export: Auswahl der Items', () => {
       .map((r) => r.item_id as number);
     const expected = [...new Set([...candidates, ...changed])].sort((a, b) => a - b);
     assert.deepEqual(exported.items.map((i) => i.id), expected);
-    // Der Vollimport allein veröffentlicht keine Nicht-Kandidaten: Trophy 6 steht nur wegen der Änderung drin.
+    // The full import alone does not publish non-candidates: trophy 6 is only included because of the change.
     assert.ok(published.has(6) && published.has(3) && published.has(9) && published.has(2));
     assert.ok(!published.has(204) || changed.includes(204));
     assert.ok(!published.has(102) || candidates.includes(102));
-    // Items ohne Änderung, die keine Kandidaten sind, fehlen (Item 303 wurde im dritten Update Kandidat).
+    // Items without a change that are not candidates are missing (item 303 became a candidate in the third update).
     assert.ok(!exported.items.some((i) => i.id === 304 && !i.isCandidate));
   });
 
-  it('enthält nur die Änderungen ab dem zweiten abgeschlossenen Update', () => {
+  it('contains only the changes from the second completed update on', () => {
     assert.ok(exported.changes.length > 0);
     assert.ok(exported.changes.every((c) => c.updateId !== baselineId));
     assert.equal(exported.updates.length, 3);
@@ -166,17 +166,17 @@ describe('Export: Auswahl der Items', () => {
     assert.equal(exported.meta.itemCount, exported.items.length);
   });
 
-  it('items.json ist nach ID sortiert, Details stehen in Blöcken', () => {
+  it('items.json is sorted by ID, details are in blocks', () => {
     assert.deepEqual(exported.items.map((i) => i.id), [...published].sort((a, b) => a - b));
     for (const item of exported.items) {
       const block = detailBlockOf(ds, item.id)!;
-      assert.ok(exported.detailBlocks[block]![item.id], `Detail für ${item.id}`);
+      assert.ok(exported.detailBlocks[block]![item.id], `Detail for ${item.id}`);
     }
   });
 });
 
-describe('Liste: Browser-Logik gegen Server', () => {
-  it('Ansichten × Kandidat × Filter × Sprache', () => {
+describe('List: browser logic against server', () => {
+  it('Views × candidate × filter × language', () => {
     for (const view of ['gizmo', 'consumable', 'tonic', 'all']) {
       for (const candidate of ['yes', 'no', 'all']) {
         for (const hideCommon of ['true', 'false']) {
@@ -192,7 +192,7 @@ describe('Liste: Browser-Logik gegen Server', () => {
     }
   });
 
-  it('Sortierung (alle Felder, auf- und absteigend, beide Sprachen)', () => {
+  it('Sorting (all fields, ascending and descending, both languages)', () => {
     for (const sort of ['name', 'id', 'rarity', 'level', 'lastChanged']) {
       for (const order of ['asc', 'desc']) {
         for (const lang of ['en', 'de']) {
@@ -202,7 +202,7 @@ describe('Liste: Browser-Logik gegen Server', () => {
     }
   });
 
-  it('Seltenheit, Game Types und Teststatus', () => {
+  it('Rarity, game types and test status', () => {
     for (const rarity of ['Rare', 'Rare,Exotic', 'Legendary', 'Basic,Fine,Masterwork']) {
       checkList(`view=all&candidate=all&rarity=${rarity}&includeRemoved=true`);
     }
@@ -214,10 +214,10 @@ describe('Liste: Browser-Logik gegen Server', () => {
         checkList(`view=all&candidate=${candidate}&testStatus=${testStatus}&includeRemoved=true&hidePlaceholders=false`);
       }
     }
-    assert.ok(staticList('view=all&candidate=all&testStatus=retest').length > 0, 'Testdaten enthalten ein "neu testen"');
+    assert.ok(staticList('view=all&candidate=all&testStatus=retest').length > 0, 'Test data contains a "retest"');
   });
 
-  it('Update-Filter (jeder Stand außer dem Vollimport)', () => {
+  it('Update filter (every state except the full import)', () => {
     for (const id of updateIds.filter((u) => u !== baselineId)) {
       for (const includeRemoved of ['true', 'false']) {
         checkList(`view=all&candidate=all&updateId=${id}&includeRemoved=${includeRemoved}&hidePlaceholders=false`);
@@ -226,7 +226,7 @@ describe('Liste: Browser-Logik gegen Server', () => {
     assert.ok(staticList(`view=all&candidate=all&updateId=${updateIds[1]}&includeRemoved=true`).length > 0);
   });
 
-  it('Suche: Text, ID, Chat-Link, Sonderzeichen, Umlaute', () => {
+  it('Search: text, ID, chat link, special characters, umlauts', () => {
     const queries = [
       'mini', 'golem bomb', 'GOLEM', 'gol', 'mini bom', 'description banner', 'description', 'a tasty', 'tasty cheese',
       '8778', '301', '99999', chatLinkFor(8778), chatLinkFor(1), '[&AgEAWgAA]', `[&${Buffer.from([2, 5, 0x4a, 0x22, 0, 0]).toString('base64')}]`,
@@ -246,7 +246,7 @@ describe('Liste: Browser-Logik gegen Server', () => {
     assert.deepEqual(staticList('view=all&candidate=all&lang=en&q=kaese').map((i) => i.id), []);
   });
 
-  it('Paginierung', () => {
+  it('Pagination', () => {
     const base = 'view=all&candidate=all&hideCommon=false&hidePlaceholders=false&includeRemoved=true&sort=level&order=desc';
     for (const pageSize of [1, 3, 7]) {
       for (const page of [1, 2, 4]) {
@@ -260,7 +260,7 @@ describe('Liste: Browser-Logik gegen Server', () => {
     }
   });
 
-  it('Export CSV/JSON: gleiche Zeilen wie der Server, CSV mit Semikolon und BOM', () => {
+  it('Export CSV/JSON: same rows as the server, CSV with semicolon and BOM', () => {
     for (const qs of [
       'view=all&candidate=all&hideCommon=false&hidePlaceholders=false&includeRemoved=true',
       'view=gizmo&sort=id&order=desc',
@@ -278,7 +278,7 @@ describe('Liste: Browser-Logik gegen Server', () => {
     assert.ok(csv.includes('\r\n'));
   });
 
-  it('Kennzahlen', () => {
+  it('Key figures', () => {
     const stats = staticStats(ds);
     const count = (sql: string) => (db.prepare(sql).get() as { n: number }).n;
     assert.equal(stats.candidates.gizmo, count(`SELECT COUNT(*) AS n FROM items WHERE removed = 0 AND is_candidate = 1 AND type = 'Gizmo'`));
@@ -288,27 +288,27 @@ describe('Liste: Browser-Logik gegen Server', () => {
   });
 });
 
-describe('Details: Browser-Logik gegen Server', () => {
-  it('alle veröffentlichten Items, beide Sprachen', () => {
+describe('Details: browser logic against server', () => {
+  it('all published items, both languages', () => {
     for (const id of published) {
       for (const lang of ['en', 'de'] as Lang[]) {
         const rest = exported.detailBlocks[detailBlockOf(ds, id)!]![id];
         const fromStatic = staticItemDetail(ds, id, lang, rest)!;
         const fromServer = getItemDetail(db, id, lang)!;
-        // Die Änderungen des ersten Updates (alles "neu") gehören nicht zur statischen Fassung.
+        // The changes of the first update (everything "new") are not part of the static version.
         const expected: ItemDetail = { ...fromServer, history: fromServer.history.filter((h) => h.updateId !== baselineId) };
         assert.deepEqual(fromStatic, expected, `Detail ${id} (${lang})`);
       }
     }
   });
 
-  it('unbekannte ID → null', () => {
+  it('unknown ID -> null', () => {
     assert.equal(staticItemDetail(ds, 424242, 'en', undefined), null);
     assert.equal(detailBlockOf(ds, 424242), null);
   });
 });
 
-describe('Änderungen: Browser-Logik gegen Server', () => {
+describe('Changes: browser logic against server', () => {
   const queries = [''];
   for (const kind of ['', 'added', 'changed', 'removed', 'added,removed', 'changed,added']) {
     for (const focus of ['all', 'gameTypes', 'dungeonGained', 'dungeonLost']) {
@@ -319,7 +319,7 @@ describe('Änderungen: Browser-Logik gegen Server', () => {
   for (const q of ['gizmo', 'GIZMO', '5', '9', 'ost', '%', '_', 'cheese', 'käse', 'sweet', 'rock']) queries.push(`q=${encodeURIComponent(q)}`);
   queries.push('hidePlaceholders=false', 'hidePlaceholders=false&kind=added', 'pageSize=2&page=2', 'pageSize=3&page=3');
 
-  it('Einträge, Zähler und Gesamtzahl je Stand (ohne den Vollimport)', () => {
+  it('entries, counters and total per state (without the full import)', () => {
     for (const id of updateIds.filter((u) => u !== baselineId)) {
       const update = getUpdate(db, id)!;
       for (const lang of ['en', 'de']) {
@@ -327,13 +327,13 @@ describe('Änderungen: Browser-Logik gegen Server', () => {
           const params = { ...entries(qs), lang };
           const fromServer = getUpdateChanges(db, update, parseUpdateChangesQuery(params));
           const fromStatic = staticUpdateChanges(ds, update, parseUpdateChangesQuery(params));
-          assert.deepEqual(fromStatic, fromServer, `Änderungen ${id} ${lang} ${qs}`);
+          assert.deepEqual(fromStatic, fromServer, `Changes ${id} ${lang} ${qs}`);
         }
       }
     }
   });
 
-  it('Vergleich zweier Stände', () => {
+  it('Comparison of two states', () => {
     let nonEmpty = 0;
     for (const from of updateIds) {
       for (const to of updateIds.filter((u) => u > from)) {
@@ -350,10 +350,10 @@ describe('Änderungen: Browser-Logik gegen Server', () => {
         }
       }
     }
-    assert.ok(nonEmpty > 20, 'Testdaten liefern echte Vergleichsergebnisse');
+    assert.ok(nonEmpty > 20, 'Test data produces real comparison results');
   });
 
-  it('der erste Stand hat keine Einträge, die Zähler stammen aus dem Update', () => {
+  it('the first state has no entries, the counters come from the update', () => {
     const baseline = getUpdate(db, baselineId)!;
     const res = staticUpdateChanges(ds, baseline, parseUpdateChangesQuery({}));
     assert.equal(res.total, 0);

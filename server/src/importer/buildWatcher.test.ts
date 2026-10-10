@@ -28,19 +28,19 @@ describe('BuildWatcher', () => {
     await api.close();
   });
 
-  it('startet ohne abgeschlossenes Update nichts (noBaseline)', async () => {
+  it('starts nothing without a completed update (noBaseline)', async () => {
     assert.equal(await watcher.checkNow(), 'noBaseline');
     assert.equal(updateCount(), 0);
     assert.equal(watcher.getStatus().lastSeenBuild, 123456);
   });
 
-  it('startet bei gleicher Build-ID nichts (unchanged)', async () => {
+  it('starts nothing for the same build ID (unchanged)', async () => {
     await runImport(importer);
     assert.equal(await watcher.checkNow(), 'unchanged');
     assert.equal(updateCount(), 1);
   });
 
-  it('startet bei neuer Build-ID einen Import (started)', async () => {
+  it('starts an import for a new build ID (started)', async () => {
     await runImport(importer);
     api.buildId = 123457;
     assert.equal(await watcher.checkNow(), 'started');
@@ -54,7 +54,7 @@ describe('BuildWatcher', () => {
     assert.ok(status.lastCheckAt);
   });
 
-  it('startet nichts, solange ein Import läuft (running)', async () => {
+  it('starts nothing while an import is running (running)', async () => {
     await runImport(importer);
     api.buildId = 123457;
     importer.start();
@@ -63,7 +63,7 @@ describe('BuildWatcher', () => {
     assert.equal(updateCount(), 2);
   });
 
-  it('merkt sich einen Fehler bei /v2/build und wirft nicht (error)', async () => {
+  it('remembers an error from /v2/build and does not throw (error)', async () => {
     await runImport(importer);
     api.buildId = null;
     const logged: unknown[][] = [];
@@ -79,7 +79,7 @@ describe('BuildWatcher', () => {
     assert.equal(updateCount(), 1);
   });
 
-  it('start/stop setzen enabled und nextCheckAt', () => {
+  it('start/stop set enabled and nextCheckAt', () => {
     assert.equal(watcher.getStatus().enabled, false);
     watcher.start();
     assert.equal(watcher.getStatus().enabled, true);

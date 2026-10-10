@@ -1,11 +1,11 @@
-// Logik der Änderungsseite, die Server und statische Fassung gemeinsam nutzen:
-// Dungeon dazu/weg, Zusammenfassen mehrerer Updates zu einer Netto-Änderung (Vergleich zweier Stände)
-// und die Auswahl samt Sortierung der Einträge.
+// Logic of the changes page shared by the server and the static version:
+// Dungeon gained/lost, merging several updates into one net change (comparison of two states)
+// and the selection and sorting of the entries.
 
 import type { ChangeFocus, ChangeKind, GameType, UpdateChangeCounts } from './types.js';
 import { compareNoCase, hasDungeon, stableStringify } from './rules.js';
 
-/** Eine Zeile aus item_changes mit geparsten JSON-Spalten. */
+/** A row from item_changes with parsed JSON columns. */
 export interface ChangeRow {
   updateId: number;
   itemId: number;
@@ -17,15 +17,15 @@ export interface ChangeRow {
   valuesAfter: Record<string, unknown> | null;
 }
 
-/** game_types sind sortierte Arrays (siehe normalizeGameTypes): gleiche Reihenfolge = gleiche Menge. */
+/** game_types are sorted arrays (see normalizeGameTypes): same order = same set. */
 export function sameGameTypes(a: readonly string[] | null, b: readonly string[] | null): boolean {
   if (a === null || b === null) return a === b;
   return a.length === b.length && a.every((v, i) => v === b[i]);
 }
 
-// Gezählt werden nur geänderte Items (kind = 'changed'), bei denen "Dungeon" in game_types
-// dazugekommen bzw. weggefallen ist. Neue und entfernte Items stehen schon in added/removed;
-// sonst wäre beim ersten Vollimport jeder Kandidat ein "Dungeon gewonnen".
+// Only changed items (kind = 'changed') are counted where "Dungeon" was added to or removed from
+// game_types. New and removed items are already in added/removed;
+// otherwise every candidate would be a "Dungeon gained" on the first full import.
 interface DungeonView {
   kind: ChangeKind;
   gameTypesBefore: readonly string[] | null;
@@ -36,13 +36,13 @@ export const isDungeonGained = (c: DungeonView): boolean => c.kind === 'changed'
 export const isDungeonLost = (c: DungeonView): boolean => c.kind === 'changed' && hasDungeon(c.gameTypesBefore) && !hasDungeon(c.gameTypesAfter);
 
 /**
- * game_types wirklich geändert: Eine reine Umsortierung in der API-Antwort steht zwar in changed_fields,
- * zählt hier aber nicht.
+ * game_types really changed: a pure reordering in the API response is listed in changed_fields,
+ * but does not count here.
  */
 export const isGameTypesChanged = (c: DungeonView & { changedFields: readonly string[] | null }): boolean =>
   c.kind === 'changed' && (c.changedFields?.includes('game_types') ?? false) && !sameGameTypes(c.gameTypesBefore, c.gameTypesAfter);
 
-/** Zähler über die Zeilen eines einzelnen Updates. */
+/** Counters over the rows of a single update. */
 export function countChangeRows(rows: readonly (DungeonView & { changedFields: readonly string[] | null })[]): UpdateChangeCounts {
   const counts: UpdateChangeCounts = { added: 0, changed: 0, removed: 0, gameTypesChanged: 0, dungeonGained: 0, dungeonLost: 0 };
   for (const row of rows) {
@@ -54,7 +54,7 @@ export function countChangeRows(rows: readonly (DungeonView & { changedFields: r
   return counts;
 }
 
-/** Trifft die Zeile den Fokus-Filter (nur kind=changed kann dazugehören, außer bei 'all')? */
+/** Does the row match the focus filter (only kind=changed can belong, except for 'all')? */
 export function matchesFocus(focus: ChangeFocus, c: DungeonView & { changedFields: readonly string[] | null }): boolean {
   if (focus === 'gameTypes') return isGameTypesChanged(c);
   if (focus === 'dungeonGained') return isDungeonGained(c);
@@ -64,7 +64,7 @@ export function matchesFocus(focus: ChangeFocus, c: DungeonView & { changedField
 
 export const CHANGE_KIND_RANK: Record<ChangeKind, number> = { changed: 0, added: 1, removed: 2 };
 
-/** Sortierung der Einträge: Dungeon-Änderungen zuerst, dann geändert, neu, entfernt, dann nach Name und ID. */
+/** Sort order of the entries: Dungeon changes first, then changed, new, removed, then by name and ID. */
 export function compareChangeEntries(
   a: DungeonView & { name: string; itemId: number },
   b: DungeonView & { name: string; itemId: number },
@@ -78,7 +78,7 @@ export function compareChangeEntries(
   );
 }
 
-/** Die für den Vergleich relevanten Felder eines Items aus der rohen API-Antwort. */
+/** The fields of an item relevant for the comparison, from the raw API response. */
 export function summarize(raw: Record<string, unknown>): Record<string, unknown> {
   const details = raw.details as { type?: unknown } | undefined;
   const out: Record<string, unknown> = {};
@@ -90,17 +90,17 @@ export function summarize(raw: Record<string, unknown>): Record<string, unknown>
 }
 
 // ---------------------------------------------------------------------------
-// Vergleich zweier Stände
+// Comparison of two states
 // ---------------------------------------------------------------------------
 
-/** Änderungszeile samt Name des Items und der Info, ob es die Item-Filter (Typ, Suche …) erfüllt. */
+/** Change row with the item's name and whether it satisfies the item filters (type, search …). */
 export interface RangeChange extends ChangeRow {
   name: string;
   nameEn: string;
   matches: boolean;
 }
 
-/** Netto-Änderung eines Items über alle Updates im Bereich (from, to]. */
+/** Net change of an item across all updates in the range (from, to]. */
 export interface NetChange {
   itemId: number;
   name: string;
@@ -117,11 +117,11 @@ export interface NetChange {
 }
 
 /**
- * Fasst die Änderungen eines Items (nach updateId sortiert) zusammen:
- * - erste Änderung added und letzte removed: gab es in keinem der beiden Stände, entfällt
- * - erste added: neu; sonst letzte removed: entfernt; sonst geändert
- * - game_types: vorher der Wert der ersten, nachher der Wert der letzten Änderung; netto gleich = keine Änderung
- * - Felder: alter Wert aus der ersten, neuer Wert aus der letzten Änderung, die das Feld betrifft; netto gleiche entfallen
+ * Summarizes the changes of an item (sorted by updateId):
+ * - first change added and last removed: existed in neither state, dropped
+ * - first added: new; otherwise last removed: removed; otherwise changed
+ * - game_types: before = value of the first, after = value of the last change; net equal = no change
+ * - fields: old value from the first, new value from the last change that touches the field; net-equal ones are dropped
  */
 export function aggregateChanges(rows: RangeChange[]): NetChange | null {
   const first = rows[0]!;
@@ -148,7 +148,7 @@ export function aggregateChanges(rows: RangeChange[]): NetChange | null {
   net.gameTypesChanged = !sameGameTypes(net.gameTypesBefore, net.gameTypesAfter);
   if (net.gameTypesChanged) net.changedFields.push('game_types');
 
-  // Zwischenzeitlich entfernt und wieder da: Dafür sind keine Feldwerte gespeichert, der Eintrag bleibt trotzdem.
+  // Removed in between and back again: no field values are stored for that, the entry stays anyway.
   const changedRows = rows.filter((r) => r.kind === 'changed');
   const fieldsOf = (r: RangeChange) => r.changedFields ?? [];
   const names = [...new Set(changedRows.flatMap(fieldsOf))].filter((n) => n !== 'game_types').sort();
@@ -172,8 +172,8 @@ export function aggregateChanges(rows: RangeChange[]): NetChange | null {
 }
 
 /**
- * Gruppiert die Zeilen des Bereichs (nach itemId, updateId sortiert) pro Item, fasst sie zusammen und zählt
- * (ungefiltert). Gibt die Netto-Änderungen in der Reihenfolge der Items zurück.
+ * Groups the rows of the range (sorted by itemId, updateId) per item, summarizes them and counts
+ * (unfiltered). Returns the net changes in item order.
  */
 export function aggregateRange(rows: RangeChange[]): { all: NetChange[]; counts: UpdateChangeCounts } {
   const all: NetChange[] = [];
@@ -193,7 +193,7 @@ export function aggregateRange(rows: RangeChange[]): { all: NetChange[]; counts:
   return { all, counts };
 }
 
-/** Filtert (Item-Filter, Art, Fokus) und sortiert die Netto-Änderungen. */
+/** Filters (item filter, kind, focus) and sorts the net changes. */
 export function selectNetChanges(all: NetChange[], query: { kind: readonly ChangeKind[]; focus: ChangeFocus }): NetChange[] {
   return all
     .filter((n) => n.matches && (query.kind.length === 0 || query.kind.includes(n.kind)) && matchesFocus(query.focus, n))

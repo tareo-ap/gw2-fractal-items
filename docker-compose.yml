@@ -5,8 +5,8 @@ services:
     container_name: gw2-items
     restart: unless-stopped
     environment:
-      # Automatische Prüfung auf neue Game-Builds (Image-Default on, off schaltet sie aus).
-      # Zeitplan, alles optional (Defaults wie gezeigt):
+      # Automatic check for new game builds (image default is on, off disables it).
+      # Schedule, all optional (defaults as shown):
       # UPDATE_CHECK: "on"
       # UPDATE_CHECK_TZ: "Europe/Berlin"
       # UPDATE_CHECK_DAILY_AT: "06:00"

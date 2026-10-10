@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 
-// Rendert GW2-Beschreibungen sicher als React-Elemente (kein innerHTML).
-// Unterstützt: <c=@flavor>…</c> bzw. <c=#hex>…</c> → <span class="gw2-c-…">, <br> und \n → Zeilenumbruch.
-// Alle anderen Tags werden entfernt, ihr Text bleibt stehen.
+// Renders GW2 descriptions safely as React elements (no innerHTML).
+// Supports: <c=@flavor>…</c> and <c=#hex>…</c> -> <span class="gw2-c-…">, <br> and \n -> line break.
+// All other tags are removed, their text is kept.
 
 interface Node {
   className: string | null;
@@ -36,7 +36,7 @@ export function parseGw2Markup(text: string): ReactNode[] {
     if (name === 'br') {
       top().children.push(<br key={key()} />);
     } else if (name === 'c' && !closing) {
-      // @flavor → gw2-c-flavor; Hex-Farben werden nicht übernommen, nur als "gw2-c-color" markiert.
+      // @flavor -> gw2-c-flavor; hex colors are not taken over, only marked as "gw2-c-color".
       const cls = value?.startsWith('@') ? `gw2-c-${value.slice(1).toLowerCase().replace(/[^a-z0-9-]/g, '')}` : 'gw2-c-color';
       stack.push({ className: cls, children: [] });
     } else if (name === 'c' && closing && stack.length > 1) {
@@ -47,11 +47,11 @@ export function parseGw2Markup(text: string): ReactNode[] {
         </span>,
       );
     }
-    // Unbekannte Tags: ignorieren.
+    // Unknown tags: ignore.
   }
   pushText(top().children, text.slice(last), key);
 
-  // Nicht geschlossene <c>-Tags trotzdem ausgeben.
+  // Still output unclosed <c> tags.
   while (stack.length > 1) {
     const node = stack.pop()!;
     top().children.push(

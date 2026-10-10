@@ -1,7 +1,7 @@
-// Abfragen der statischen Fassung als reine Funktionen auf den geladenen JSON-Dateien.
-// Sie bilden die Antworten von /api/* nach (Liste, Details, Updates, Änderungen, Vergleich, Export) und
-// folgen der Logik von server/src/routes/*.ts: gleiche Filter, gleiche Sortierung, gleiche Antwortformen.
-// Keine Browser- und keine Node-Abhängigkeiten, damit ein Test beide Seiten vergleichen kann.
+// Queries of the static version as pure functions on the loaded JSON files.
+// They reproduce the responses of /api/* (list, details, updates, changes, comparison, export) and
+// follow the logic of server/src/routes/*.ts: same filters, same sorting, same response shapes.
+// No browser or Node dependencies so a test can compare both sides.
 
 import type {
   ItemChange,
@@ -43,7 +43,7 @@ import {
 import type { StaticChange, StaticItem, StaticMeta, StaticUpdate } from './staticTypes.js';
 import { DETAIL_BLOCK_SIZE } from './staticTypes.js';
 
-/** Inhalt von meta.json, items.json, updates.json und changes.json. */
+/** Content of meta.json, items.json, updates.json and changes.json. */
 export interface StaticFiles {
   meta: StaticMeta;
   items: StaticItem[];
@@ -51,13 +51,13 @@ export interface StaticFiles {
   changes: StaticChange[];
 }
 
-/** Item mit vorberechneten Werten, damit Filtern und Sortieren im Browser schnell bleiben. */
+/** Item with precomputed values so filtering and sorting stay fast in the browser. */
 export interface PreparedItem {
   src: StaticItem;
   id: number;
   nameEn: string;
-  nameDe: string | null; // nicht leer; null = englischen Namen verwenden
-  hasDe: boolean; // es gibt eine Zeile in item_texts
+  nameDe: string | null; // non-empty; null = use the English name
+  hasDe: boolean; // there is a row in item_texts
   descriptionEn: string | null;
   descriptionDe: string | null;
   subtype: string | null;
@@ -70,22 +70,22 @@ export interface PreparedItem {
   common: boolean;
   rarityRank: number;
   chatLink: string | null;
-  /** Wörter für die Volltextsuche je Spalte [Name, Beschreibung], erst bei der ersten Suche berechnet. */
+  /** Words for the full-text search per column [name, description], computed on the first search. */
   tokensEn?: string[][];
   tokensDe?: string[][];
 }
 
 export interface StaticDataset {
   meta: StaticMeta;
-  items: PreparedItem[]; // nach ID sortiert
+  items: PreparedItem[]; // sorted by ID
   byId: Map<number, PreparedItem>;
-  indexById: Map<number, number>; // Position in items, bestimmt den Block in details/<n>.json
-  updates: StaticUpdate[]; // neueste zuerst
+  indexById: Map<number, number>; // position in items, determines the block in details/<n>.json
+  updates: StaticUpdate[]; // newest first
   updatesById: Map<number, StaticUpdate>;
-  baselineId: number | null; // erster abgeschlossener Stand (Vollimport), dessen Änderungen nicht exportiert werden
-  changes: StaticChange[]; // nach itemId, dann updateId sortiert
+  baselineId: number | null; // first completed state (full import), whose changes are not exported
+  changes: StaticChange[]; // sorted by itemId, then updateId
   changesByUpdate: Map<number, StaticChange[]>;
-  summaries: Map<number, Record<string, unknown>>; // Item → summarize() der API-Antwort (aus added/removed-Einträgen)
+  summaries: Map<number, Record<string, unknown>>; // item -> summarize() of the API response (from added/removed entries)
 }
 
 export function prepareDataset(files: StaticFiles): StaticDataset {
@@ -145,26 +145,26 @@ function rarityRank(rarity: string): number {
   return index < 0 ? 99 : index;
 }
 
-/** Name in der Sprache der Ansicht, Fallback Englisch (wie COALESCE(NULLIF(d.name, ''), i.name)). */
+/** Name in the view's language, falling back to English (like COALESCE(NULLIF(d.name, ''), i.name)). */
 const nameOf = (item: PreparedItem, lang: Lang): string => (lang === 'de' && item.nameDe ? item.nameDe : item.nameEn);
 const descriptionOf = (item: PreparedItem, lang: Lang): string | null =>
   lang === 'de' && item.hasDe ? item.descriptionDe : item.descriptionEn;
 
 // ---------------------------------------------------------------------------
-// Volltextsuche (bildet FTS5 mit dem Tokenizer unicode61 nach)
+// Full-text search (reproduces FTS5 with the unicode61 tokenizer)
 // ---------------------------------------------------------------------------
 
 /**
- * Zerlegt Text in Wörter wie der FTS5-Tokenizer unicode61: Buchstaben und Ziffern bilden Wörter,
- * alles andere trennt; Groß-/Kleinschreibung und Akzente (ä → a) spielen keine Rolle.
+ * Splits text into words like the FTS5 tokenizer unicode61: letters and digits form words,
+ * everything else separates; case and accents (ä -> a) do not matter.
  */
 export function tokenize(text: string): string[] {
   return text.normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase().match(/[\p{L}\p{N}\p{Co}]+/gu) ?? [];
 }
 
 /**
- * Suchbegriffe wie toFtsQuery im Server: Jedes Wort ist eine Phrase, deren letztes Wort als Präfix gilt.
- * Alle Wörter müssen vorkommen. Leere Liste = keine Einschränkung.
+ * Search terms like toFtsQuery on the server: every word is a phrase whose last word counts as a prefix.
+ * All words must occur. Empty list = no restriction.
  */
 export function searchPhrases(input: string): string[][] {
   return input
@@ -184,7 +184,7 @@ function phraseMatches(tokens: string[], phrase: string[]): boolean {
   return false;
 }
 
-/** Alle Phrasen kommen vor (je in Name oder Beschreibung). */
+/** All phrases occur (each in name or description). */
 const allPhrasesMatch = (columns: string[][], phrases: string[][]): boolean =>
   phrases.every((phrase) => columns.some((tokens) => phraseMatches(tokens, phrase)));
 
@@ -198,10 +198,10 @@ function tokensDe(item: PreparedItem): string[][] | null {
 }
 
 // ---------------------------------------------------------------------------
-// Liste
+// List
 // ---------------------------------------------------------------------------
 
-/** Filter der Liste, einmal vorbereitet. */
+/** List filter, prepared once. */
 function compileFilter(ds: StaticDataset, query: ParsedItemListQuery): (item: PreparedItem) => boolean {
   const q = query.q;
   const phrases = q && !/^\d+$/.test(q) && !q.startsWith('[&') ? searchPhrases(q) : [];
@@ -217,7 +217,7 @@ function compileFilter(ds: StaticDataset, query: ParsedItemListQuery): (item: Pr
       if (item.chatLink !== chatQuery.link && item.id !== chatQuery.id) return false;
     } else if (phrases.length > 0) {
       const de = query.lang === 'de' ? tokensDe(item) : null;
-      // Deutsch: Treffer im deutschen oder im englischen Index genügt (Eigennamen, Chat-Begriffe).
+      // German: a hit in the German or the English index is enough (proper names, chat terms).
       if (!(de && allPhrasesMatch(de, phrases)) && !allPhrasesMatch(tokensEn(item), phrases)) return false;
     }
 
@@ -225,7 +225,7 @@ function compileFilter(ds: StaticDataset, query: ParsedItemListQuery): (item: Pr
     if (query.view === 'consumable' && item.src.type !== 'Consumable') return false;
     if (query.view === 'tonic' && !item.tonic) return false;
     if (query.candidate !== 'all' && item.src.isCandidate !== (query.candidate === 'yes')) return false;
-    // In der Tonic-Ansicht gilt hideCommon nicht: Tonics können den Untertyp Food oder Utility haben.
+    // In the tonic view hideCommon does not apply: tonics can have the subtype Food or Utility.
     if (hideCommon && item.common) return false;
     if (query.hidePlaceholders && item.placeholder) return false;
     if (query.rarity.length > 0 && !query.rarity.includes(item.src.rarity)) return false;
@@ -241,7 +241,7 @@ function compileFilter(ds: StaticDataset, query: ParsedItemListQuery): (item: Pr
   };
 }
 
-/** Alle Treffer in der gewählten Sortierung (ohne Paginierung). */
+/** All matches in the chosen sort order (without pagination). */
 export function filterItems(ds: StaticDataset, query: ParsedItemListQuery): PreparedItem[] {
   const matches = ds.items.filter(compileFilter(ds, query));
   const sign = query.order === 'desc' ? -1 : 1;
@@ -257,7 +257,7 @@ export function filterItems(ds: StaticDataset, query: ParsedItemListQuery): Prep
       case 'lastChanged':
         return a.src.lastChanged - b.src.lastChanged;
       default:
-        return 0; // id: entscheidet der Gleichstand unten
+        return 0; // id: the tie-break below decides
     }
   };
   return matches.sort((a, b) => sign * (compare(a, b) || a.id - b.id));
@@ -292,7 +292,7 @@ export function listStaticItems(ds: StaticDataset, query: ParsedItemListQuery): 
   };
 }
 
-/** Alle Treffer als Zeilen für CSV/JSON (siehe exportItems im Server). */
+/** All matches as rows for CSV/JSON (see exportItems on the server). */
 export function exportStaticItems(ds: StaticDataset, query: ParsedItemListQuery): ExportRow[] {
   return filterItems(ds, query).map((item) => {
     const name = nameOf(item, query.lang);
@@ -349,13 +349,13 @@ export function staticStats(ds: StaticDataset): StatsResponse {
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
-/** Nummer der Datei details/<n>.json, in der das Item steht; null = unbekannte ID. */
+/** Number of the file details/<n>.json that contains the item; null = unknown ID. */
 export function detailBlockOf(ds: StaticDataset, id: number): number | null {
   const index = ds.indexById.get(id);
   return index === undefined ? null : Math.floor(index / DETAIL_BLOCK_SIZE);
 }
 
-/** Verlauf eines Items, neueste zuerst. */
+/** History of an item, newest first. */
 function historyOf(ds: StaticDataset, id: number): ItemChange[] {
   return ds.changes
     .filter((c) => c.itemId === id)
@@ -371,8 +371,8 @@ function historyOf(ds: StaticDataset, id: number): ItemChange[] {
 }
 
 /**
- * Details eines Items. rest ist der Eintrag des Items aus details/<n>.json (restliche API-Antwort).
- * Null, wenn das Item nicht veröffentlicht ist.
+ * Details of an item. rest is the item's entry from details/<n>.json (rest of the API response).
+ * Null if the item is not published.
  */
 export function staticItemDetail(ds: StaticDataset, id: number, lang: Lang, rest: Record<string, unknown> | undefined): ItemDetail | null {
   const item = ds.byId.get(id);
@@ -400,13 +400,13 @@ export function staticItemDetail(ds: StaticDataset, id: number, lang: Lang, rest
 }
 
 // ---------------------------------------------------------------------------
-// Änderungen eines Updates und Vergleich
+// Changes of an update and comparison
 // ---------------------------------------------------------------------------
 
-/** Bedingungen auf den Items (Typ, Platzhalter, Suche); gemeinsam für /changes und /compare. */
+/** Conditions on the items (type, placeholders, search); shared by /changes and /compare. */
 function compileChangeItemFilter(query: ParsedUpdateChangesQuery): (item: PreparedItem) => boolean {
   const q = query.q;
-  // LIKE '%q%' ohne Beachtung der ASCII-Groß-/Kleinschreibung; eine reine Zahl findet zusätzlich die ID.
+  // LIKE '%q%' ignoring ASCII case; a plain number also matches the ID.
   const needle = q ? asciiLower(q) : null;
   const idQuery = q && /^\d+$/.test(q) ? Number(q) : null;
   return (item) => {
@@ -415,7 +415,7 @@ function compileChangeItemFilter(query: ParsedUpdateChangesQuery): (item: Prepar
     if (query.type === 'tonic' && !item.tonic) return false;
     if (query.hidePlaceholders && item.placeholder) return false;
     if (needle !== null) {
-      // Deutsch: Treffer im deutschen oder im englischen Namen genügt.
+      // German: a hit in the German or the English name is enough.
       const hit = asciiLower(item.nameEn).includes(needle) || (query.lang === 'de' && item.nameDe !== null && asciiLower(item.nameDe).includes(needle));
       if (!hit && item.id !== idQuery) return false;
     }
@@ -423,7 +423,7 @@ function compileChangeItemFilter(query: ParsedUpdateChangesQuery): (item: Prepar
   };
 }
 
-/** Eintrag für die Tabelle; before/after je nach Art aus den gespeicherten Werten oder der Zusammenfassung. */
+/** Entry for the table; before/after come from the stored values or the summary depending on the kind. */
 function toEntry(
   item: PreparedItem,
   lang: Lang,
@@ -444,8 +444,8 @@ function toEntry(
 }
 
 /**
- * Änderungen eines Updates (gegen den Vorgänger). Für den ersten Stand (Vollimport) enthält die statische
- * Fassung keine Einträge; die Zähler stammen dann aus dem Update selbst.
+ * Changes of an update (against its predecessor). For the first state (full import) the static
+ * version contains no entries; the counters then come from the update itself.
  */
 export function staticUpdateChanges(ds: StaticDataset, update: UpdateDetail, query: ParsedUpdateChangesQuery): UpdateChangesResponse {
   const rows = ds.changesByUpdate.get(update.id) ?? [];
@@ -471,7 +471,7 @@ export function staticUpdateChanges(ds: StaticDataset, update: UpdateDetail, que
       changedFields: view.changedFields ?? [],
       gameTypesBefore: view.gameTypesBefore,
       gameTypesAfter: view.gameTypesAfter,
-      // Neue und entfernte Items: Der Stand steht in der Zusammenfassung (bei entfernten der letzte bekannte).
+      // New and removed items: the state is in the summary (for removed ones the last known).
       before: row.kind === 'removed' ? summary : row.kind === 'changed' ? (row.valuesBefore ?? null) : null,
       after: row.kind === 'added' ? summary : row.kind === 'changed' ? (row.valuesAfter ?? null) : null,
     });
@@ -500,7 +500,7 @@ function toView(row: StaticChange) {
   };
 }
 
-/** Stand nach Update from gegen Stand nach Update to (from < to): Änderungen im Bereich pro Item zusammengefasst. */
+/** State after update from versus state after update to (from < to): changes in the range summarized per item. */
 export function staticCompare(ds: StaticDataset, from: UpdateDetail, to: UpdateDetail, query: ParsedUpdateChangesQuery): UpdateCompareResponse {
   const itemFilter = compileChangeItemFilter(query);
   const rows: RangeChange[] = [];

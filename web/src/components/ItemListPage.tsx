@@ -12,7 +12,7 @@ import { FilterBar, type FilterChange } from './FilterBar';
 type Layout = 'table' | 'grid';
 const LAYOUT_KEY = 'gw2items.layout';
 
-// localStorage kann gesperrt sein (privater Modus o. ä.), daher immer mit try/catch.
+// localStorage can be blocked (private mode etc.), so always use try/catch.
 function loadLayout(): Layout {
   try {
     return localStorage.getItem(LAYOUT_KEY) === 'grid' ? 'grid' : 'table';
@@ -25,7 +25,7 @@ function saveLayout(layout: Layout) {
   try {
     localStorage.setItem(LAYOUT_KEY, layout);
   } catch {
-    /* egal */
+    /* ignore */
   }
 }
 
@@ -36,7 +36,7 @@ export function ItemListPage({ filters, onChange }: { filters: ListFilters; onCh
   const items = useQuery({
     queryKey: ['items', lang, query],
     queryFn: () => api.items(query, lang),
-    placeholderData: keepPreviousData, // alte Seite stehen lassen, bis die neue da ist
+    placeholderData: keepPreviousData, // keep the old page until the new one is there
   });
 
   const changeLayout = (next: Layout) => {
@@ -57,7 +57,7 @@ export function ItemListPage({ filters, onChange }: { filters: ListFilters; onCh
         <span className="small muted">
           {t('list.export')}{' '}
           {import.meta.env.VITE_DATA_MODE === 'static' ? (
-            // Pages-Fassung: Die Datei entsteht im Browser aus den geladenen Daten.
+            // Pages version: the file is generated in the browser from the loaded data.
             <>
               <button type="button" className="link-button" onClick={() => void downloadStaticExport(query, lang, 'csv')} title={t('list.exportTitle')}>
                 CSV
@@ -106,7 +106,7 @@ function itemHref(item: ItemListItem) {
   return `/items/${item.id}`;
 }
 
-/** Tooltip mit dem englischen Namen, wenn die Ansicht einen anderen Namen zeigt (Deutsch). */
+/** Tooltip with the English name when the view shows a different name (German). */
 function nameTitle(item: ItemListItem) {
   return item.nameEn && item.nameEn !== item.name ? item.nameEn : undefined;
 }

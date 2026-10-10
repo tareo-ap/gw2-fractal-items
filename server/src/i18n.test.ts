@@ -14,7 +14,7 @@ import { Importer } from './importer/importer.js';
 import { startFakeGw2Api, type FakeGw2Api } from './test/fakeGw2Api.js';
 import { createTestImporter, fixtureItems, runImport } from './test/fixtures.js';
 
-describe('Sprache (lang=de)', () => {
+describe('Language (lang=de)', () => {
   let api: FakeGw2Api;
   let app: Hono;
   let db: DatabaseSync;
@@ -34,19 +34,19 @@ describe('Sprache (lang=de)', () => {
     db = created.db;
     app = createApp(db, null, created.importer);
     await runImport(created.importer);
-    // Item 2 ("Banner of Strength") soll keinen deutschen Text haben (Fallback auf Englisch).
+    // Item 2 ("Banner of Strength") should have no German text (fallback to English).
     db.prepare('DELETE FROM item_texts WHERE item_id = 2').run();
     db.prepare('DELETE FROM items_fts_de WHERE rowid = 2').run();
   });
   after(() => api.close());
 
-  it('Liste: deutscher Name plus nameEn, Sortierung nach dem deutschen Namen', async () => {
+  it('List: German name plus nameEn, sorted by the German name', async () => {
     const res = await get<ItemListResponse>('/api/items?lang=de&candidate=all');
     assert.deepEqual(
       res.items.map((i) => [i.id, i.name, i.nameEn]),
       [
         [3, 'Alter Apparat', 'Old Gizmo'],
-        [2, 'Banner of Strength', 'Banner of Strength'], // Fallback Englisch
+        [2, 'Banner of Strength', 'Banner of Strength'], // English fallback
         [1, 'Mini-Golem-Bausatz', 'Mini Golem Kit'],
       ],
     );
@@ -55,21 +55,21 @@ describe('Sprache (lang=de)', () => {
     assert.equal(en.items[1]!.nameEn, 'Mini Golem Kit');
   });
 
-  it('Suche: deutsches Wort findet das Item, englisches ebenfalls; auf Englisch nur englisch', async () => {
+  it('Search: German word finds the item, English one too; in English only English', async () => {
     assert.deepEqual(await idsOf('lang=de&q=bausatz'), [1]);
-    assert.deepEqual(await idsOf('lang=de&q=golems'), [1]); // Beschreibung
-    assert.deepEqual(await idsOf('lang=de&q=kit'), [1]); // englischer Index
+    assert.deepEqual(await idsOf('lang=de&q=golems'), [1]); // description
+    assert.deepEqual(await idsOf('lang=de&q=kit'), [1]); // English index
     assert.deepEqual(await idsOf('lang=en&q=bausatz'), []);
     assert.deepEqual(await idsOf('q=bausatz'), []);
   });
 
-  it('Detail: Fallback auf Englisch ohne deutschen Text', async () => {
+  it('Detail: fall back to English without German text', async () => {
     const item = await get<ItemDetail>('/api/items/2?lang=de');
     assert.equal(item.name, 'Banner of Strength');
     assert.equal(item.description, 'Description of Banner of Strength.');
   });
 
-  it('Detail: deutscher Name, Beschreibung, nameEn und Wiki-Link', async () => {
+  it('Detail: German name, description, nameEn and wiki link', async () => {
     const item = await get<ItemDetail>('/api/items/1?lang=de');
     assert.equal(item.name, 'Mini-Golem-Bausatz');
     assert.equal(item.nameEn, 'Mini Golem Kit');
@@ -80,21 +80,21 @@ describe('Sprache (lang=de)', () => {
     assert.equal(en.wikiUrl, 'https://wiki.guildwars2.com/wiki/Special:Search/Mini%20Golem%20Kit');
   });
 
-  it('Export und Änderungen respektieren lang', async () => {
+  it('Export and changes respect lang', async () => {
     const rows = await get<{ id: number; name: string; wiki_url: string }[]>('/api/items/export?format=json&lang=de&candidate=all');
     assert.equal(rows[0]!.name, 'Alter Apparat');
     assert.match(rows[0]!.wiki_url, /^https:\/\/wiki-de\.guildwars2\.com\//);
 
     const changes = await get<UpdateChangesResponse>('/api/updates/1/changes?lang=de&type=gizmo&q=bausatz&hidePlaceholders=false');
     assert.deepEqual(changes.items.map((i) => [i.id, i.name, i.nameEn]), [[1, 'Mini-Golem-Bausatz', 'Mini Golem Kit']]);
-    // Auch der englische Name wird in der deutschen Ansicht gefunden; Alt/Neu bleibt englisch.
+    // The English name is also found in the German view; old/new stays English.
     const byEn = await get<UpdateChangesResponse>('/api/updates/1/changes?lang=de&type=gizmo&q=mini%20golem&hidePlaceholders=false');
     assert.equal(byEn.items[0]!.after?.name, 'Mini Golem Kit');
     const en = await get<UpdateChangesResponse>('/api/updates/1/changes?type=gizmo&q=bausatz&hidePlaceholders=false');
     assert.equal(en.items.length, 0);
   });
 
-  it('ungültiges lang → 400 auf allen Endpunkten', async () => {
+  it('invalid lang -> 400 on all endpoints', async () => {
     for (const url of [
       '/api/items?lang=fr',
       '/api/items/1?lang=fr',
@@ -106,7 +106,7 @@ describe('Sprache (lang=de)', () => {
     }
   });
 
-  it('/api/stats meldet die Anzahl deutscher Texte', async () => {
+  it('/api/stats reports the number of German texts', async () => {
     assert.equal((await get<{ germanTexts: number }>('/api/stats')).germanTexts, 6);
     const emptyDb = openDatabase(':memory:');
     try {
@@ -120,7 +120,7 @@ describe('Sprache (lang=de)', () => {
 });
 
 describe('Migration 4 (item_texts)', () => {
-  it('DB mit Stand 3 wird migriert; Texte lassen sich speichern und suchen', async () => {
+  it('DB at version 3 is migrated; texts can be stored and searched', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gw2-items-mig4-'));
     const file = path.join(dir, 'v3.db');
     const old = new DatabaseSync(file);
@@ -136,7 +136,7 @@ describe('Migration 4 (item_texts)', () => {
       assert.equal((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, migrations.length);
       const client = new Gw2Client({ baseUrl: 'http://127.0.0.1:1', minIntervalMs: 0, retryBaseDelayMs: 1 });
       const migrated = createApp(db, null, new Importer(db, client));
-      // Ohne deutsche Texte: Fallback auf den englischen Namen
+      // Without German texts: fall back to the English name
       const before = (await (await migrated.request('/api/items?lang=de')).json()) as ItemListResponse;
       assert.deepEqual(before.items.map((i) => [i.name, i.nameEn]), [['Old Gizmo', 'Old Gizmo']]);
 

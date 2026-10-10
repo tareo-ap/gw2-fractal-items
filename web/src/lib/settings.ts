@@ -1,14 +1,14 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-// Anzeigeeinstellungen (Farbschema, Akzentfarbe, Inhaltsbreite), nur im eigenen Browser gespeichert.
-// Wirkung über Attribute und CSS-Variablen am <html>-Element, siehe :root in styles.css.
+// Display settings (color scheme, accent color, content width), stored only in the user's own browser.
+// Applied via attributes and CSS variables on the <html> element, see :root in styles.css.
 
 export type ThemeSetting = 'dark' | 'light' | 'system';
 export type WidthSetting = 'normal' | 'wide' | 'wider' | 'full';
 
 export interface Settings {
   theme: ThemeSetting;
-  /** 'default' = Gold, sonst ein Eintrag aus ACCENTS */
+  /** 'default' = gold, otherwise an entry from ACCENTS */
   accent: string;
   width: WidthSetting;
 }
@@ -16,7 +16,7 @@ export interface Settings {
 export const THEMES: ThemeSetting[] = ['dark', 'light', 'system'];
 export const WIDTHS: WidthSetting[] = ['normal', 'wide', 'wider', 'full'];
 
-/** Standardakzent (Gold) und die neun GW2-Klassenfarben. Die Klassennamen bleiben in allen Sprachen englisch. */
+/** Default accent (gold) and the nine GW2 class colors. The class names stay English in all languages. */
 export const DEFAULT_ACCENT = { id: 'default', color: '#d9b45a', text: '#1a1408' };
 export const ACCENTS = [
   { id: 'Guardian', color: '#72C1D9' },
@@ -36,7 +36,7 @@ export const DEFAULT_SETTINGS: Settings = { theme: 'dark', accent: DEFAULT_ACCEN
 
 const KEY = 'gw2items.settings';
 
-/** Liest die gespeicherten Einstellungen; unbekannte oder kaputte Werte fallen auf den Standard zurück. */
+/** Reads the stored settings; unknown or broken values fall back to the default. */
 export function parseSettings(json: string | null): Settings {
   if (!json) return DEFAULT_SETTINGS;
   try {
@@ -51,7 +51,7 @@ export function parseSettings(json: string | null): Settings {
   }
 }
 
-// localStorage kann gesperrt sein (privater Modus o. ä.), daher immer mit try/catch.
+// localStorage can be blocked (private mode etc.), so always use try/catch.
 function loadSettings(): Settings {
   try {
     return parseSettings(localStorage.getItem(KEY));
@@ -64,11 +64,11 @@ function saveSettings(settings: Settings) {
   try {
     localStorage.setItem(KEY, JSON.stringify(settings));
   } catch {
-    /* egal */
+    /* ignore */
   }
 }
 
-/** Relative Leuchtdichte nach WCAG für #rrggbb. */
+/** Relative luminance per WCAG for #rrggbb. */
 function luminance(hex: string): number {
   const channel = (i: number) => {
     const v = parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16) / 255;
@@ -77,7 +77,7 @@ function luminance(hex: string): number {
   return 0.2126 * channel(0) + 0.7152 * channel(1) + 0.0722 * channel(2);
 }
 
-/** Textfarbe auf einer Akzentfläche: dunkel oder weiß, je nachdem, was mehr Kontrast bringt. */
+/** Text color on an accent surface: dark or white, whichever gives more contrast. */
 export function accentTextColor(hex: string): string {
   const dark = '#1a1408';
   const contrast = (a: number, b: number) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
@@ -87,7 +87,7 @@ export function accentTextColor(hex: string): string {
 
 const systemDark = () => (typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null);
 
-/** Setzt data-theme und die CSS-Variablen für Akzent und Breite. */
+/** Sets data-theme and the CSS variables for accent and width. */
 export function applySettings(settings: Settings, root: HTMLElement = document.documentElement) {
   root.dataset.theme = settings.theme === 'system' ? (systemDark()?.matches === false ? 'light' : 'dark') : settings.theme;
   const accent = ACCENTS.find((a) => a.id === settings.accent);
@@ -96,7 +96,7 @@ export function applySettings(settings: Settings, root: HTMLElement = document.d
   root.style.setProperty('--content-width', WIDTH_VALUES[settings.width]);
 }
 
-// Schon beim Laden des Moduls anwenden, damit beim ersten Rendern kein Flackern entsteht.
+// Apply as soon as the module loads so there is no flicker on the first render.
 const initial = loadSettings();
 if (typeof document !== 'undefined') applySettings(initial);
 
@@ -120,7 +120,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     applySettings(settings);
     if (settings.theme !== 'system') return;
-    // System: bei Wechsel des Betriebssystem-Schemas mitziehen
+    // System: follow changes of the operating system scheme
     const media = systemDark();
     const onChange = () => applySettings(settings);
     media?.addEventListener('change', onChange);

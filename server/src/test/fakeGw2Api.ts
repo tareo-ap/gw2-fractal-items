@@ -1,4 +1,4 @@
-// Lokaler Ersatz für api.guildwars2.com in den Tests.
+// Local stand-in for api.guildwars2.com in tests.
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Gw2Item } from '../gw2/client.js';
@@ -6,14 +6,14 @@ import type { Gw2Item } from '../gw2/client.js';
 export interface FakeGw2Api {
   url: string;
   items: Map<number, Gw2Item>;
-  /** IDs, die /v2/items auflistet, für die es aber keine Details gibt (→ 206 Partial Content). */
+  /** IDs that /v2/items lists but for which there are no details (-> 206 Partial Content). */
   ghostIds: number[];
   buildId: number | null;
-  /** Deutsche Texte pro ID für lang=de. Ohne Eintrag (oder ohne Feld) liefert die API den englischen Text. */
+  /** German texts per ID for lang=de. Without an entry (or field) the API returns the English text. */
   german: Map<number, { name?: string; description?: string }>;
-  /** Wenn true, antwortet jeder Request mit lang=de mit 500 (englische Requests laufen normal). */
+  /** If true, every request with lang=de responds with 500 (English requests work normally). */
   failGerman: boolean;
-  /** Statuscodes, die den nächsten Requests (egal welcher Pfad) der Reihe nach geliefert werden. */
+  /** Status codes returned in order for the next requests (regardless of path). */
   failures: number[];
   requests: string[];
   close(): Promise<void>;
@@ -32,7 +32,7 @@ export async function startFakeGw2Api(items: Gw2Item[]): Promise<FakeGw2Api> {
     close: () =>
       new Promise((resolve) => {
         server.close(() => resolve());
-        server.closeAllConnections(); // Keep-Alive-Verbindungen von fetch sonst offen
+        server.closeAllConnections(); // keep-alive connections from fetch would stay open otherwise
       }),
   };
 

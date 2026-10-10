@@ -2,7 +2,7 @@
   "name": "gw2-items",
   "private": true,
   "version": "0.1.0",
-  "description": "Durchsucht Guild-Wars-2-Items und zeigt, welche in Fractals of the Mist nutzbar sein könnten.",
+  "description": "Searches Guild Wars 2 items and shows which ones might be usable in Fractals of the Mist.",
   "type": "module",
   "workspaces": [
     "server",

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { migrations } from './schema.js';
 
-// Öffnet die Datenbank und spielt fehlende Migrationen ein.
+// Opens the database and applies missing migrations.
 export function openDatabase(dbPath: string): DatabaseSync {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   const db = new DatabaseSync(dbPath);
@@ -20,7 +20,7 @@ function migrate(db: DatabaseSync): void {
       db.exec(migrations[version]!);
       db.exec(`PRAGMA user_version = ${version + 1}`);
       db.exec('COMMIT');
-      console.log(`DB-Migration ${version + 1} eingespielt`);
+      console.log(`DB migration ${version + 1} applied`);
     } catch (err) {
       db.exec('ROLLBACK');
       throw err;
@@ -28,7 +28,7 @@ function migrate(db: DatabaseSync): void {
   }
 }
 
-/** Führt fn in einer Transaktion aus: COMMIT bei Erfolg, ROLLBACK bei Fehler. */
+/** Runs fn in a transaction: COMMIT on success, ROLLBACK on error. */
 export function transaction<T>(db: DatabaseSync, fn: () => T): T {
   db.exec('BEGIN');
   try {

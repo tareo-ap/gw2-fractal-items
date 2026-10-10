@@ -9,8 +9,8 @@ import { CompareRoute, UpdateChangesPage, UpdatesRedirect } from './components/U
 import { Link } from './components/common';
 import { useT } from './lib/i18n';
 
-// Routen: "/" = Liste (Filter in den Query-Parametern), "/items/:id" = Detailansicht,
-// "/updates/:id" = Änderungen eines Updates, "/updates" = Weiterleitung auf das neueste.
+// Routes: "/" = list (filters in the query parameters), "/items/:id" = detail view,
+// "/updates/:id" = changes of an update, "/updates" = redirect to the latest.
 export function App() {
   const { t } = useT();
   const { path, params } = useLocation();
@@ -20,13 +20,13 @@ export function App() {
   const isUpdatesRoot = /^\/updates\/?$/.test(path);
   const isList = path === '/';
 
-  // Letzte Listen-URL merken, damit "Zurück zur Liste" und die Tabs die Filter behalten.
+  // Remember the last list URL so "Back to list" and the tabs keep the filters.
   const lastList = useRef<ListFilters>(DEFAULT_FILTERS);
   if (isList) lastList.current = parseFilters(params);
   const filters = lastList.current;
 
   const changeFilters: FilterChange = (change, options = {}) => {
-    // Jede Filteränderung springt auf Seite 1, außer beim Blättern selbst.
+    // Every filter change jumps to page 1, except when paging itself.
     const next = { ...filters, ...change, page: options.keepPage ? (change.page ?? filters.page) : 1 };
     navigate(listUrl(next), { replace: options.replace });
   };

@@ -1,5 +1,5 @@
-// Typen, die Server und Web gemeinsam nutzen.
-// Nur Typen, kein Laufzeitcode: Die Imports verschwinden beim Kompilieren.
+// Types shared by server and web.
+// Types only, no runtime code: the imports disappear during compilation.
 
 export type ItemType = 'Gizmo' | 'Consumable' | (string & {});
 
@@ -7,36 +7,36 @@ export type GameType = 'Activity' | 'Dungeon' | 'Pve' | 'Pvp' | 'PvpLobby' | 'Wv
 
 export type TestStatus = 'untested' | 'works' | 'broken';
 
-/** Sprache der Item-Namen und -Beschreibungen (Query-Parameter lang, Default 'en'). */
+/** Language of item names and descriptions (query parameter lang, default 'en'). */
 export type Lang = 'en' | 'de';
 
 export interface StatsResponse {
   items: number;
   candidates: { gizmo: number; consumable: number; tonic: number };
-  germanTexts: number; // Anzahl Items mit deutschem Namen (item_texts, lang=de); 0 = noch kein Update mit Deutsch
+  germanTexts: number; // number of items with a German name (item_texts, lang=de); 0 = no update with German yet
   lastUpdate: UpdateSummary | null;
-  autoCheck: AutoCheckStatus | null; // null = Server hat keinen Watcher (UPDATE_CHECK nicht on)
+  autoCheck: AutoCheckStatus | null; // null = server has no watcher (UPDATE_CHECK not on)
 }
 
-/** Ergebnis der letzten automatischen Prüfung auf eine neue Game-Build. */
+/** Result of the last automatic check for a new game build. */
 export type AutoCheckResult = 'unchanged' | 'started' | 'running' | 'error' | 'noBaseline';
 
-/** Zeitplan des Auto-Checks: täglich um dailyAt, dazu im Patch-Fenster alle patchEveryMinutes (Ortszeit in timeZone). */
+/** Schedule of the auto check: daily at dailyAt, plus every patchEveryMinutes in the patch window (local time in timeZone). */
 export interface AutoCheckSchedule {
-  timeZone: string; // IANA, z. B. Europe/Berlin
+  timeZone: string; // IANA, e.g. Europe/Berlin
   dailyAt: string; // HH:MM
   patchWindow: { day: 'Sun' | 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat'; start: string; end: string } | null;
   patchEveryMinutes: number;
 }
 
-/** Zustand des automatischen Update-Checks (UPDATE_CHECK=on). */
+/** State of the automatic update check (UPDATE_CHECK=on). */
 export interface AutoCheckStatus {
   enabled: boolean;
   schedule: AutoCheckSchedule;
-  lastCheckAt: string | null; // ISO-Zeitpunkt
+  lastCheckAt: string | null; // ISO timestamp
   lastSeenBuild: number | null;
   lastResult: AutoCheckResult | null;
-  nextCheckAt: string | null; // ISO-Zeitpunkt
+  nextCheckAt: string | null; // ISO timestamp
 }
 
 export interface UpdateSummary {
@@ -55,51 +55,51 @@ export interface HealthResponse {
 }
 
 // ---------------------------------------------------------------------------
-// API-Vertrag ab Meilenstein 2/3. Server und Web halten sich beide daran.
+// API contract. Server and web both adhere to it.
 // ---------------------------------------------------------------------------
 
 export type Rarity = 'Junk' | 'Basic' | 'Fine' | 'Masterwork' | 'Rare' | 'Exotic' | 'Ascended' | 'Legendary';
 
-/** Ansicht in der UI: Gizmos und Consumables sind getrennt, Tonics sind eine eigene Ansicht über beide Typen. */
+/** View in the UI: gizmos and consumables are separate, tonics are their own view across both types. */
 export type ItemView = 'gizmo' | 'consumable' | 'tonic' | 'all';
 
-/** Eintrag in der Ergebnisliste. */
+/** Entry in the result list. */
 export interface ItemListItem {
   id: number;
-  name: string; // in der gewählten Sprache (lang), Fallback Englisch
-  nameEn: string; // immer der englische Name
+  name: string; // in the chosen language (lang), falling back to English
+  nameEn: string; // always the English name
   type: ItemType;
-  subtype: string | null; // details.type, z. B. Food, Utility, Generic
+  subtype: string | null; // details.type, e.g. Food, Utility, Generic
   rarity: Rarity;
   level: number;
   icon: string | null;
   gameTypes: GameType[];
-  isCandidate: boolean; // gameTypes enthält "Dungeon"
-  removed: boolean; // nicht mehr in der API vorhanden
+  isCandidate: boolean; // gameTypes contains "Dungeon"
+  removed: boolean; // no longer present in the API
   testStatus: TestStatus;
-  needsRetest: boolean; // getestet, aber gameTypes haben sich seit dem Test geändert
+  needsRetest: boolean; // tested, but gameTypes have changed since the test
 }
 
 /**
- * Query-Parameter für GET /api/items (alle optional).
- * Mehrfachwerte (rarity, gameType) als kommagetrennte Liste, z. B. rarity=Rare,Exotic.
+ * Query parameters for GET /api/items (all optional).
+ * Multiple values (rarity, gameType) as a comma-separated list, e.g. rarity=Rare,Exotic.
  */
 export interface ItemListQuery {
   lang?: Lang; // Default 'en'
-  q?: string; // Volltext über Name + Beschreibung; reine Zahl = Item-ID; "[&...]" = Chat-Link
+  q?: string; // full text over name + description; plain number = item ID; "[&...]" = chat link
   view?: ItemView; // Default 'gizmo'
   candidate?: 'yes' | 'no' | 'all'; // Default 'yes'
-  hidePlaceholders?: boolean; // Default true; blendet Platzhalter aus (Name leer, kein Icon oder Name wie "((906936))" oder "[[913817]]"), in allen Ansichten
-  hideCommon?: boolean; // Default true; gilt nicht in der Ansicht tonic; blendet Consumables mit subtype Food, Utility, Unlock, Transmutation, Currency sowie Mastery Points, Emote Tomes und Währungspakete aus
+  hidePlaceholders?: boolean; // Default true; hides placeholders (empty name, no icon, or name like "((906936))" or "[[913817]]"), in all views
+  hideCommon?: boolean; // Default true; does not apply in the tonic view; hides consumables with subtype Food, Utility, Unlock, Transmutation, Currency as well as Mastery Points, Emote Tomes and currency packs
   rarity?: Rarity[];
-  gameType?: GameType[]; // Item muss alle genannten enthalten
+  gameType?: GameType[]; // item must contain all of the listed ones
   testStatus?: TestStatus | 'retest';
-  updateId?: number; // nur Items, die in diesem Update neu oder geändert sind
+  updateId?: number; // only items that are new or changed in this update
   includeRemoved?: boolean; // Default false
   sort?: 'name' | 'id' | 'rarity' | 'level' | 'lastChanged'; // Default 'name'
   order?: 'asc' | 'desc'; // Default 'asc'
-  page?: number; // ab 1, Default 1
-  pageSize?: number; // Default 50, max 200
+  page?: number; // from 1, default 1
+  pageSize?: number; // default 50, max 200
 }
 
 export interface ItemListResponse {
@@ -112,7 +112,7 @@ export interface ItemListResponse {
 export interface ItemTest {
   status: TestStatus;
   note: string | null;
-  testedAt: string | null; // ISO-Zeitpunkt
+  testedAt: string | null; // ISO timestamp
   gameTypesAtTest: GameType[] | null;
 }
 
@@ -122,22 +122,22 @@ export interface ItemChange {
   updateId: number;
   updateStartedAt: string;
   kind: ChangeKind;
-  changedFields: string[]; // Top-Level-Felder der API-Antwort, z. B. ["game_types","description"]
+  changedFields: string[]; // top-level fields of the API response, e.g. ["game_types","description"]
   gameTypesBefore: GameType[] | null;
   gameTypesAfter: GameType[] | null;
 }
 
 /** GET /api/items/:id */
 export interface ItemDetail extends ItemListItem {
-  description: string | null; // in der gewählten Sprache; kann GW2-Markup wie <c=@flavor>…</c> enthalten
+  description: string | null; // in the chosen language; may contain GW2 markup such as <c=@flavor>…</c>
   chatLink: string | null;
   flags: string[];
   restrictions: string[];
   vendorValue: number;
-  details: Record<string, unknown> | null; // details-Objekt der API, roh
+  details: Record<string, unknown> | null; // details object of the API, raw
   wikiUrl: string; // en: https://wiki.guildwars2.com/wiki/Special:Search/<Name>, de: https://wiki-de.guildwars2.com/wiki/Spezial:Suche/<Name>
   test: ItemTest;
-  history: ItemChange[]; // neueste zuerst
+  history: ItemChange[]; // newest first
 }
 
 /** PUT /api/items/:id/test, Body */
@@ -146,81 +146,81 @@ export interface ItemTestUpdate {
   note?: string | null;
 }
 
-/** GET /api/updates: Liste aller Update-Läufe, neueste zuerst → UpdateDetail[] */
+/** GET /api/updates: list of all update runs, newest first -> UpdateDetail[] */
 
-/** Zusätzlich pro Update: wie viele Kandidaten haben Dungeon verloren/gewonnen. */
+/** Additionally per update: how many candidates lost/gained Dungeon. */
 export interface UpdateDetail extends UpdateSummary {
   status: 'running' | 'done' | 'failed';
   error: string | null;
   dungeonGained: number;
   dungeonLost: number;
-  /** Darf der Stand gelöscht werden? Dieselbe Regel nutzt der Server bei DELETE /api/updates/:id. */
+  /** May the state be deleted? The server uses the same rule for DELETE /api/updates/:id. */
   deletable: boolean;
-  /** Grund, wenn nicht löschbar: läuft noch, enthält Änderungen (abgeschlossen) oder Items verweisen darauf. */
+  /** Reason if not deletable: still running, contains changes (completed), or items reference it. */
   deleteBlockedReason: 'running' | 'hasChanges' | 'referenced' | null;
 }
 
-/** GET /api/updates/status: Fortschritt des laufenden Imports. POST /api/updates startet einen. */
+/** GET /api/updates/status: progress of the running import. POST /api/updates starts one. */
 export interface ImportStatus {
   running: boolean;
   updateId: number | null;
   phase: 'idle' | 'ids' | 'details' | 'details_de' | 'diff' | 'done' | 'failed';
-  processed: number; // Items mit geladenen Details (in details_de: deutsche Texte)
-  total: number; // Anzahl Item-IDs laut API (in details_de: Anzahl geladener Items)
+  processed: number; // items with loaded details (in details_de: German texts)
+  total: number; // number of item IDs according to the API (in details_de: number of loaded items)
   startedAt: string | null;
-  error: string | null; // bei phase 'done' nur gesetzt, wenn die deutschen Texte nicht vollständig geladen wurden
+  error: string | null; // at phase 'done' only set if the German texts were not loaded completely
 }
 
 // ---------------------------------------------------------------------------
-// Änderungsseite: GET /api/updates/:id/changes
+// Changes page: GET /api/updates/:id/changes
 // ---------------------------------------------------------------------------
 
-/** Fokus auf game_types: alle, nur game_types-Änderungen, Dungeon dazugekommen oder weggefallen (nur kind=changed). */
+/** Focus on game_types: all, only game_types changes, Dungeon gained or lost (kind=changed only). */
 export type ChangeFocus = 'all' | 'gameTypes' | 'dungeonGained' | 'dungeonLost';
 
 /**
- * Query-Parameter (alle optional). kind als kommagetrennte Liste, z. B. kind=added,changed.
+ * Query parameters (all optional). kind as a comma-separated list, e.g. kind=added,changed.
  */
 export interface UpdateChangesQuery {
-  lang?: Lang; // Default 'en'; Name und Suche, Alt/Neu-Werte bleiben englisch
-  kind?: ChangeKind[]; // Default: alle
+  lang?: Lang; // Default 'en'; name and search; old/new values stay English
+  kind?: ChangeKind[]; // Default: all
   focus?: ChangeFocus; // Default 'all'
   type?: ItemView; // Default 'all'
-  q?: string; // Name enthält (ohne Groß-/Kleinschreibung) oder exakte Item-ID
+  q?: string; // name contains (case-insensitive) or exact item ID
   hidePlaceholders?: boolean; // Default true
-  page?: number; // ab 1, Default 1
-  pageSize?: number; // Default 50, max 200
+  page?: number; // from 1, default 1
+  pageSize?: number; // default 50, max 200
 }
 
-/** Zähler für das gesamte Update, unabhängig von den Filtern. */
+/** Counters for the whole update, independent of the filters. */
 export interface UpdateChangeCounts {
   added: number;
   changed: number;
   removed: number;
-  gameTypesChanged: number; // kind=changed und game_types unterscheiden sich
+  gameTypesChanged: number; // kind=changed and game_types differ
   dungeonGained: number;
   dungeonLost: number;
 }
 
 export interface UpdateChangeEntry extends Omit<ItemChange, 'updateId' | 'updateStartedAt'> {
   id: number;
-  name: string; // in der gewählten Sprache, Fallback Englisch
+  name: string; // in the chosen language, falling back to English
   nameEn: string;
   type: ItemType;
   subtype: string | null;
   rarity: Rarity;
   icon: string | null;
-  removed: boolean; // Item ist heute (nicht nur in diesem Update) entfernt
+  removed: boolean; // item is removed today (not only in this update)
   isCandidate: boolean;
   /**
-   * Alte und neue Werte pro Top-Level-Feld der API-Antwort.
-   * changed: nur die geänderten Felder; null, wenn das Update vor Einführung der Spalten importiert wurde.
+   * Old and new values per top-level field of the API response.
+   * changed: only the changed fields; null if the update was imported before the columns were introduced.
    * added: before = null, after = name, game_types, flags, description, rarity, details.type.
-   * removed: before = dieselben Felder (letzter bekannter Stand), after = null.
+   * removed: before = the same fields (last known state), after = null.
    */
   before: Record<string, unknown> | null;
   after: Record<string, unknown> | null;
-  /** Nur bei compare: geänderte Felder, deren alter Wert nicht gespeichert ist (Update vor Migration 3). */
+  /** Only for compare: changed fields whose old value is not stored (update before migration 3). */
   unknownFields?: string[];
 }
 
@@ -231,10 +231,10 @@ export interface UpdateChangesResponse {
   total: number;
   page: number;
   pageSize: number;
-  legacyValues: boolean; // mindestens eine Änderung ohne gespeicherte alte Werte (vor Migration 3)
+  legacyValues: boolean; // at least one change without stored old values (before migration 3)
 }
 
-/** GET /api/updates/compare?from=A&to=B: Stand nach Update A gegen Stand nach Update B (A < B). Gleiche Filter wie /changes. */
+/** GET /api/updates/compare?from=A&to=B: state after update A versus state after update B (A < B). Same filters as /changes. */
 export interface UpdateCompareResponse extends Omit<UpdateChangesResponse, 'update'> {
   from: UpdateDetail;
   to: UpdateDetail;

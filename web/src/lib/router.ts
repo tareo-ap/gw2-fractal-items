@@ -1,14 +1,14 @@
 import { useSyncExternalStore, type MouseEvent } from 'react';
 
-// Minimaler Router über die History API: Pfad und Query-Parameter kommen direkt aus der URL.
-// Der Server liefert für unbekannte Pfade index.html aus, daher funktionieren auch Reloads auf /items/123.
-// Auf GitHub Pages liegt die App unter einem Unterpfad (z. B. /gw2_items/, Vite-Option base) und 404.html ist
-// eine Kopie von index.html. Die App rechnet intern immer mit Pfaden ohne Basis ("/items/123"); die Basis
-// kommt nur beim Lesen und Schreiben der Browserzeile und bei href dazu.
+// Minimal router on the History API: path and query parameters come straight from the URL.
+// The server serves index.html for unknown paths, so reloads on /items/123 work too.
+// On GitHub Pages the app lives under a subpath (e.g. /gw2_items/, Vite option base) and 404.html is
+// a copy of index.html. Internally the app always uses paths without the base ("/items/123"); the base
+// is only added when reading and writing the address bar and for href.
 
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, ''); // "" oder "/gw2_items"
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, ''); // "" or "/gw2_items"
 
-/** App-Pfad → Pfad in der Browserzeile / im href. */
+/** App path -> path in the address bar / in href. */
 export const withBase = (url: string): string => BASE + url;
 
 function stripBase(pathname: string): string {
@@ -51,7 +51,7 @@ export function useLocation(): Location {
   return { path: url.pathname, params: url.searchParams };
 }
 
-/** Klick-Handler für <a href>: normale Klicks bleiben in der App, Strg/Mittelklick öffnet einen neuen Tab. */
+/** Click handler for <a href>: normal clicks stay in the app, Ctrl/middle click opens a new tab. */
 export function linkHandler(href: string) {
   return (event: MouseEvent<HTMLAnchorElement>) => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {

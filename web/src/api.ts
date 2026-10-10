@@ -16,8 +16,8 @@ import { staticApi } from './lib/staticApi';
 export { ApiError };
 
 /**
- * Eintrag aus GET /api/updates. Laut Vertrag UpdateSummary; liefert der Server
- * zusätzlich die Felder aus UpdateDetail, zeigt die UI sie an.
+ * Entry from GET /api/updates. By contract UpdateSummary; if the server also
+ * returns the fields from UpdateDetail, the UI displays them.
  */
 export type UpdateListEntry = UpdateSummary & Partial<Pick<UpdateDetail, 'status' | 'dungeonGained' | 'dungeonLost' | 'deletable' | 'deleteBlockedReason'>>;
 
@@ -30,16 +30,16 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
-    throw new ApiError('Backend nicht erreichbar', 0);
+    throw new ApiError('Backend unreachable', 0);
   }
   if (!res.ok) {
-    // Der Server liefert Fehler als { error: "…" }; sonst reicht der Statuscode.
+    // The server returns errors as { error: "…" }; otherwise the status code is enough.
     let message = `HTTP ${res.status}`;
     try {
       const data = (await res.json()) as { error?: unknown };
       if (typeof data.error === 'string') message = data.error;
     } catch {
-      /* kein JSON */
+      /* not JSON */
     }
     throw new ApiError(message, res.status);
   }
@@ -64,7 +64,7 @@ const restApi = {
 };
 
 /**
- * Datenquelle der App, beim Build festgelegt (VITE_DATA_MODE): "api" (Standard) fragt den Server, "static" liest die
- * JSON-Dateien der Pages-Fassung. Die Bedingung steht direkt hier, damit Vite den jeweils anderen Zweig weglässt.
+ * Data source of the app, fixed at build time (VITE_DATA_MODE): "api" (default) queries the server, "static" reads the
+ * JSON files of the Pages version. The condition is written right here so Vite drops the other branch.
  */
 export const api: typeof restApi = import.meta.env.VITE_DATA_MODE === 'static' ? staticApi : restApi;

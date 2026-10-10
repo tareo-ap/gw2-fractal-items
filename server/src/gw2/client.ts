@@ -1,6 +1,6 @@
-// Kleiner Client für die öffentliche GW2-API v2 (ohne API-Key).
+// Small client for the public GW2 API v2 (no API key).
 
-/** Ein Item, wie es /v2/items?ids=… liefert. Nur die Felder, die wir direkt nutzen, sind typisiert. */
+/** An item as returned by /v2/items?ids=…. Only the fields we use directly are typed. */
 export interface Gw2Item {
   id: number;
   name: string;
@@ -20,14 +20,14 @@ export interface Gw2Item {
 
 export interface Gw2ClientOptions {
   baseUrl: string;
-  /** Mindestabstand zwischen zwei Requests. 200 ms = höchstens 5 pro Sekunde (API erlaubt ca. 300/min). */
+  /** Minimum gap between two requests. 200 ms = at most 5 per second (the API allows about 300/min). */
   minIntervalMs?: number;
-  /** Wartezeit vor dem ersten Retry, verdoppelt sich mit jedem weiteren Versuch. */
+  /** Wait before the first retry, doubles with each further attempt. */
   retryBaseDelayMs?: number;
   maxAttempts?: number;
 }
 
-/** Fehler mit HTTP-Status, damit der Aufrufer zwischen "Retry sinnvoll" und "endgültig" unterscheiden kann. */
+/** Error with an HTTP status so the caller can distinguish "retry makes sense" from "final". */
 export class Gw2ApiError extends Error {
   constructor(
     message: string,
@@ -47,7 +47,7 @@ export class Gw2Client {
   private readonly minIntervalMs: number;
   private readonly retryBaseDelayMs: number;
   private readonly maxAttempts: number;
-  private nextSlot = 0; // frühester Zeitpunkt (ms) für den nächsten Request
+  private nextSlot = 0; // earliest time (ms) for the next request
 
   constructor(options: Gw2ClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, '');
@@ -56,30 +56,30 @@ export class Gw2Client {
     this.maxAttempts = options.maxAttempts ?? 5;
   }
 
-  /** Alle Item-IDs. */
+  /** All item IDs. */
   async getItemIds(): Promise<number[]> {
     const data = await this.getJson('/v2/items');
     if (!Array.isArray(data) || !data.every((id) => Number.isInteger(id))) {
-      throw new Gw2ApiError('Unerwartete Antwort von /v2/items', null);
+      throw new Gw2ApiError('Unexpected response from /v2/items', null);
     }
     return data as number[];
   }
 
   /**
-   * Details zu bis zu 200 IDs. Unbekannte IDs fehlen einfach in der Antwort
-   * (HTTP 206 Partial Content); sind alle unbekannt, antwortet die API mit 404.
+* Details for up to 200 IDs. Unknown IDs are simply missing from the response
+* (HTTP 206 Partial Content); if all are unknown, the API responds with 404.
    */
   async getItems(ids: number[], lang: 'en' | 'de' = 'en'): Promise<Gw2Item[]> {
     if (ids.length === 0) return [];
-    if (ids.length > IDS_PER_REQUEST) throw new Error(`Höchstens ${IDS_PER_REQUEST} IDs pro Request`);
+    if (ids.length > IDS_PER_REQUEST) throw new Error(`At most ${IDS_PER_REQUEST} IDs per request`);
     const data = await this.getJson(`/v2/items?ids=${ids.join(',')}&lang=${lang}`, { notFoundAsEmpty: true });
-    if (!Array.isArray(data)) throw new Gw2ApiError('Unerwartete Antwort von /v2/items?ids=', null);
+    if (!Array.isArray(data)) throw new Gw2ApiError('Unexpected response from /v2/items?ids=', null);
     return data.filter(
       (item): item is Gw2Item => typeof item === 'object' && item !== null && Number.isInteger(item.id),
     );
   }
 
-  /** Aktuelle Build-ID oder null, wenn die API keine plausible Antwort liefert. */
+  /** Current build ID, or null if the API returns no plausible response. */
   async getBuildId(): Promise<number | null> {
     try {
       const data = (await this.getJson('/v2/build')) as { id?: unknown } | null;
@@ -90,7 +90,7 @@ export class Gw2Client {
     }
   }
 
-  // GET mit Drosselung und Retry. Wiederholt wird bei Netzwerkfehlern, 429 und 5xx.
+  // GET with throttling and retry. Retries on network errors, 429 and 5xx.
   private async getJson(path: string, opts: { notFoundAsEmpty?: boolean } = {}): Promise<unknown> {
     const url = this.baseUrl + path;
     for (let attempt = 1; ; attempt++) {
@@ -100,27 +100,27 @@ export class Gw2Client {
       let res: Response | null = null;
       try {
         res = await fetch(url, { headers: { Accept: 'application/json' } });
-        if (res.ok) return await res.json(); // 200 und 206
+        if (res.ok) return await res.json(); // 200 and 206
       } catch {
-        res = null; // Netzwerkfehler oder abgebrochene/kaputte Antwort → wie Netzwerkfehler behandeln
+        res = null; // Network error or aborted/broken response -> treat like a network error
       }
       if (res) {
         if (res.status === 404 && opts.notFoundAsEmpty) return [];
         await res.body?.cancel();
-        error = new Gw2ApiError(`GW2-API ${res.status} für ${path}`, res.status);
-        if (res.status !== 429 && res.status < 500) throw error; // 4xx: Wiederholen bringt nichts
+        error = new Gw2ApiError(`GW2 API ${res.status} for ${path}`, res.status);
+        if (res.status !== 429 && res.status < 500) throw error; // 4xx: retrying is pointless
         retryAfterMs = parseRetryAfter(res.headers.get('retry-after'));
       } else {
-        error = new Gw2ApiError(`Netzwerkfehler für ${path}`, null);
+        error = new Gw2ApiError(`Network error for ${path}`, null);
       }
       if (attempt >= this.maxAttempts) throw error;
-      // Exponentielles Backoff: 1 s, 2 s, 4 s, 8 s (bzw. Retry-After, falls größer).
+      // Exponential backoff: 1 s, 2 s, 4 s, 8 s (or Retry-After, if larger).
       const backoff = this.retryBaseDelayMs * 2 ** (attempt - 1);
       await sleep(Math.max(backoff, retryAfterMs ?? 0));
     }
   }
 
-  // Einfache Drosselung: Jeder Request bekommt einen Zeitslot im Abstand von minIntervalMs.
+  // Simple throttling: each request gets a time slot minIntervalMs apart.
   private async throttle(): Promise<void> {
     const now = Date.now();
     const slot = Math.max(now, this.nextSlot);
@@ -132,6 +132,6 @@ export class Gw2Client {
 function parseRetryAfter(value: string | null): number | null {
   if (!value) return null;
   const seconds = Number(value);
-  // Obergrenze, damit ein seltsamer Header den Import nicht ewig blockiert.
+  // Upper limit so a strange header cannot block the import forever.
   return Number.isFinite(seconds) && seconds >= 0 ? Math.min(seconds * 1000, 60_000) : null;
 }

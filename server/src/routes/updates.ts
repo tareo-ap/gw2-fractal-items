@@ -34,23 +34,23 @@ export interface UpdateRow {
   removed: number;
 }
 
-// Gezählt werden nur geänderte Items (kind = 'changed'), bei denen "Dungeon" in game_types
-// dazugekommen bzw. weggefallen ist. Neue und entfernte Items stehen schon in added/removed;
-// sonst wäre beim ersten Vollimport jeder Kandidat ein "Dungeon gewonnen".
+// Only changed items (kind = 'changed') are counted where "Dungeon" was added to or removed from
+// game_types. New and removed items are already in added/removed;
+// otherwise every candidate would be a "Dungeon gained" on the first full import.
 const HAS_DUNGEON = (column: string) => `EXISTS (SELECT 1 FROM json_each(c.${column}) WHERE value = 'Dungeon')`;
 
 const DUNGEON_GAINED_SQL = `c.kind = 'changed' AND ${HAS_DUNGEON('game_types_after')} AND NOT ${HAS_DUNGEON('game_types_before')}`;
 const DUNGEON_LOST_SQL = `c.kind = 'changed' AND ${HAS_DUNGEON('game_types_before')} AND NOT ${HAS_DUNGEON('game_types_after')}`;
-// game_types sind sortierte JSON-Arrays (siehe normalizeGameTypes): ungleiche Strings = andere Menge.
-// Eine reine Umsortierung in der API-Antwort steht zwar in changed_fields, zählt hier aber nicht.
+// game_types are sorted JSON arrays (see normalizeGameTypes): different strings = different set.
+// A pure reordering in the API response is listed in changed_fields but does not count here.
 const GAME_TYPES_CHANGED_SQL = `c.kind = 'changed' AND EXISTS (SELECT 1 FROM json_each(c.changed_fields) WHERE value = 'game_types')
   AND c.game_types_before IS NOT c.game_types_after`;
 
 type UpdateRowWithDungeon = UpdateRow & { dungeon_gained: number; dungeon_lost: number; change_rows: number; item_refs: number };
 
 /**
- * Löschregel für Stände: fehlgeschlagene immer, abgeschlossene nur ohne Änderungen, laufende nie.
- * Verweist noch ein Item oder ein item_changes-Eintrag auf den Stand, bleibt er, sonst würde der Verlauf verfälscht.
+ * Deletion rule for states: failed ones always, completed ones only without changes, running ones never.
+ * If an item or an item_changes entry still references the state, it stays; otherwise the history would be corrupted.
  */
 function deleteState(row: UpdateRowWithDungeon): Pick<UpdateDetail, 'deletable' | 'deleteBlockedReason'> {
   const blocked = (reason: NonNullable<UpdateDetail['deleteBlockedReason']>) => ({ deletable: false, deleteBlockedReason: reason });
@@ -95,19 +95,19 @@ export function getUpdate(db: DatabaseSync, id: number): UpdateDetail | null {
 export type DeleteUpdateResult = { ok: true } | { ok: false; status: 404 | 409; error: string };
 
 const BLOCKED_MESSAGES = {
-  running: 'Der Stand läuft noch und kann nicht gelöscht werden',
-  hasChanges: 'Der Stand enthält Änderungen; Löschen würde den Verlauf verfälschen',
-  referenced: 'Items verweisen noch auf diesen Stand; Löschen würde den Verlauf verfälschen',
+  running: 'The state is still running and cannot be deleted',
+  hasChanges: 'The state contains changes; deleting it would corrupt the history',
+  referenced: 'Items still reference this state; deleting it would corrupt the history',
 } as const;
 
-/** Löscht einen Stand samt seinen item_changes in einer Transaktion, sofern die Regel (deleteState) es erlaubt. */
+/** Deletes a state with its item_changes in one transaction, if the rule (deleteState) allows it. */
 export function deleteUpdate(db: DatabaseSync, id: number): DeleteUpdateResult {
   db.exec('BEGIN IMMEDIATE');
   try {
     const update = getUpdate(db, id);
     if (!update) {
       db.exec('ROLLBACK');
-      return { ok: false, status: 404, error: 'Update nicht gefunden' };
+      return { ok: false, status: 404, error: 'Update not found' };
     }
     if (!update.deletable) {
       db.exec('ROLLBACK');
@@ -124,7 +124,7 @@ export function deleteUpdate(db: DatabaseSync, id: number): DeleteUpdateResult {
 }
 
 // ---------------------------------------------------------------------------
-// Änderungen eines Updates
+// Changes of an update
 // ---------------------------------------------------------------------------
 
 interface ChangeRow {
@@ -148,7 +148,7 @@ interface ChangeRow {
 
 const fromChangesSql = (lang: Lang) => `FROM item_changes c JOIN items i ON i.id = c.item_id ${textsJoin(lang)}`;
 
-/** Bedingungen auf den Items (Typ, Platzhalter, Suche); gemeinsam für /changes und /compare. Alias i. */
+/** Conditions on the items (type, placeholders, search); shared by /changes and /compare. Alias i. */
 function itemFilter(query: ParsedUpdateChangesQuery): { conditions: string[]; params: SQLInputValue[] } {
   const conditions: string[] = [];
   const params: SQLInputValue[] = [];
@@ -157,9 +157,9 @@ function itemFilter(query: ParsedUpdateChangesQuery): { conditions: string[]; pa
   if (query.type === 'tonic') conditions.push(TONIC_SQL);
   if (query.hidePlaceholders) conditions.push(`NOT ${PLACEHOLDER_SQL}`);
   if (query.q) {
-    // %, _ und \ sind in LIKE Sonderzeichen und werden mit \ maskiert. Eine reine Zahl findet zusätzlich die ID.
+    // %, _ and \ are special characters in LIKE and are escaped with \. A plain number also matches the ID.
     const pattern = `%${query.q.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
-    // Deutsch: Treffer im deutschen oder im englischen Namen genügt.
+    // German: a hit in the German or the English name is enough.
     const nameLike = query.lang === 'de' ? `(i.name LIKE ? ESCAPE '\\' OR d.name LIKE ? ESCAPE '\\')` : `i.name LIKE ? ESCAPE '\\'`;
     const patterns = query.lang === 'de' ? [pattern, pattern] : [pattern];
     if (/^\d+$/.test(query.q)) {
@@ -191,7 +191,7 @@ export function getUpdateChanges(db: DatabaseSync, update: UpdateDetail, query: 
   const whereSql = `WHERE ${where.join(' AND ')}`;
   const { total } = db.prepare(`SELECT COUNT(*) AS total ${fromChangesSql(query.lang)} ${whereSql}`).get(...params) as { total: number };
 
-  // Dungeon-Änderungen zuerst, dann geändert, neu, entfernt, dann nach Name.
+  // Dungeon changes first, then changed, new, removed, then by name.
   const rows = db
     .prepare(
       `SELECT c.item_id, c.kind, c.changed_fields, c.game_types_before, c.game_types_after,
@@ -219,7 +219,7 @@ export function getUpdateChanges(db: DatabaseSync, update: UpdateDetail, query: 
     changedFields: row.changed_fields ? (JSON.parse(row.changed_fields) as string[]) : [],
     gameTypesBefore: parseTypes(row.game_types_before),
     gameTypesAfter: parseTypes(row.game_types_after),
-    // Neue und entfernte Items: Der Stand steht in raw_json (bei entfernten der letzte bekannte).
+    // New and removed items: the state is in raw_json (for removed ones the last known).
     before: row.kind === 'removed' ? summarizeJson(row.raw_json) : row.kind === 'changed' ? parseValues(row.values_before) : null,
     after: row.kind === 'added' ? summarizeJson(row.raw_json) : row.kind === 'changed' ? parseValues(row.values_after) : null,
   }));
@@ -231,7 +231,7 @@ export function getUpdateChanges(db: DatabaseSync, update: UpdateDetail, query: 
 }
 
 // ---------------------------------------------------------------------------
-// Vergleich zweier Stände (Update A gegen Update B)
+// Comparison of two states (update A versus update B)
 // ---------------------------------------------------------------------------
 
 interface RangeRow {
@@ -252,9 +252,9 @@ const parseTypes = (json: string | null) => (json ? (JSON.parse(json) as GameTyp
 const parseValues = (json: string | null) => (json ? (JSON.parse(json) as Record<string, unknown>) : null);
 
 /**
- * Vergleicht den Stand nach Update from mit dem Stand nach Update to anhand der gespeicherten Änderungen
- * im Bereich (from, to]. Die Zusammenfassung (shared/changes.ts, dieselbe Logik wie in der statischen Fassung)
- * läuft in TypeScript: alle Änderungen des Bereichs laden, pro Item zusammenfassen, filtern, sortieren, paginieren.
+ * Compares the state after update from with the state after update to using the stored changes
+ * in the range (from, to]. The summary (shared/changes.ts, same logic as in the static version)
+ * runs in TypeScript: load all changes in the range, summarize per item, filter, sort, paginate.
  */
 export function compareUpdates(db: DatabaseSync, from: UpdateDetail, to: UpdateDetail, query: ParsedUpdateChangesQuery): UpdateCompareResponse {
   const filter = itemFilter(query);
@@ -281,7 +281,7 @@ export function compareUpdates(db: DatabaseSync, from: UpdateDetail, to: UpdateD
     matches: r.matches === 1,
   }));
 
-  // Gruppieren (Zeilen sind nach item_id sortiert), zusammenfassen und zählen (ungefiltert).
+  // Group (rows are sorted by item_id), summarize and count (unfiltered).
   const { all, counts } = aggregateRange(rows);
   const selected = selectNetChanges(all, query);
 
@@ -337,10 +337,10 @@ interface ItemInfoRow {
   raw_json: string;
 }
 
-/** Die für den Vergleich relevanten Felder eines Items aus raw_json (siehe summarize in shared/changes.ts). */
+/** The fields of an item relevant for the comparison, from raw_json (see summarize in shared/changes.ts). */
 export const summarizeJson = (rawJson: string): Record<string, unknown> => summarize(JSON.parse(rawJson) as Record<string, unknown>);
 
-/** Zähler über das ganze Update, ohne Filter. */
+/** Counters over the whole update, without filters. */
 function countChanges(db: DatabaseSync, updateId: number): UpdateChangeCounts {
   const row = db
     .prepare(

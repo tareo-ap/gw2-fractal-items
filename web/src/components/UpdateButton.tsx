@@ -27,7 +27,7 @@ function describeAutoCheck(a: AutoCheckStatus, t: I18n['t']): string {
   return parts.join(' · ');
 }
 
-// Button "Aktualisieren": startet einen Import und pollt den Status, solange er läuft.
+// "Update" button: starts an import and polls the status while it runs.
 export function UpdateButton() {
   const { t, formatNumber } = useT();
   const queryClient = useQueryClient();
@@ -40,14 +40,14 @@ export function UpdateButton() {
     refetchInterval: (query) => (query.state.data?.running ? 1500 : false),
   });
 
-  // Zustand des Auto-Checks steckt in den Kennzahlen; alle 60 s neu laden, damit "zuletzt" aktuell bleibt.
+  // The auto-check state is part of the key figures; reload every 60 s so "last" stays current.
   const stats = useQuery({ queryKey: ['stats'], queryFn: api.stats, refetchInterval: 60_000 });
   const autoCheck = stats.data?.autoCheck?.enabled ? stats.data.autoCheck : null;
 
   const running = status.data?.running ?? false;
   const autoCheckText = autoCheck ? describeAutoCheck(autoCheck, t) : '';
 
-  // Wechsel von "läuft" auf "fertig": Listen, Kennzahlen und Updates neu laden.
+  // Transition from "running" to "done": reload lists, key figures and updates.
   useEffect(() => {
     if (wasRunning.current && !running) {
       for (const key of ['items', 'item', 'stats', 'updates']) {
@@ -104,7 +104,7 @@ export function UpdateButton() {
           {t('update.viewChanges')}
         </Link>
       )}
-      {/* Update fertig, aber der deutsche Teil fehlt (error ist bei phase 'done' nur dafür gesetzt) */}
+      {/* Update done, but the German part is missing (error is only set for that at phase 'done') */}
       {!running && data?.phase === 'done' && data.error && <span className="small muted">{t('update.germanIncomplete')}</span>}
       {!running && data?.phase === 'failed' && (
         <span className="error small">{t('update.lastFailed', { error: data.error ?? t('update.unknownError') })}</span>

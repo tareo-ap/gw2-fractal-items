@@ -4,18 +4,18 @@ import { transaction } from '../db/index.js';
 import { IDS_PER_REQUEST, type Gw2Client, type Gw2Item } from '../gw2/client.js';
 import { diffItem, hashItem, normalizeGameTypes } from './diff.js';
 
-/** Wie viele Items pro DB-Transaktion geschrieben werden. */
+/** How many items are written per DB transaction. */
 const WRITE_BLOCK_SIZE = 1000;
 
 export class ImportAlreadyRunningError extends Error {
   constructor() {
-    super('Es läuft bereits ein Import');
+    super('An import is already running');
     this.name = 'ImportAlreadyRunningError';
   }
 }
 
-/** Hinweis an Update und Status, wenn der deutsche Teil nicht vollständig geladen werden konnte. */
-const GERMAN_INCOMPLETE = 'Deutsche Texte nicht vollständig geladen';
+/** Notice on update and status if the German part could not be loaded completely. */
+const GERMAN_INCOMPLETE = 'German texts not loaded completely';
 
 const idleStatus = (): ImportStatus => ({
   running: false,
@@ -27,20 +27,20 @@ const idleStatus = (): ImportStatus => ({
   error: null,
 });
 
-/** Setzt Update-Läufe, die beim letzten Beenden des Servers noch liefen, auf 'failed'. */
+/** Sets update runs that were still running at the last server shutdown to 'failed'. */
 export function failOrphanedUpdates(db: DatabaseSync): void {
   db.prepare(
-    `UPDATE updates SET status = 'failed', error = 'Server wurde während des Imports beendet', finished_at = ?
+    `UPDATE updates SET status = 'failed', error = 'Server was stopped during the import', finished_at = ?
      WHERE status = 'running'`,
   ).run(new Date().toISOString());
 }
 
 /**
- * Import/Update aller Items als Hintergrundjob im selben Prozess. Es läuft immer nur einer.
+ * Import/update of all items as a background job in the same process. Only one runs at a time.
  *
- * Ablauf: IDs laden → alle Details laden (nur im Speicher) → deutsche Texte laden → mit der DB vergleichen und schreiben.
- * Erst wenn alle Details da sind, wird geschrieben. Bricht der Download ab, bleibt die DB unverändert.
- * Ausnahme: Scheitert nur der deutsche Teil, gilt das Update trotzdem (siehe run).
+ * Flow: load IDs -> load all details (in memory only) -> load German texts -> compare with the DB and write.
+ * Writing only starts once all details are present. If the download aborts, the DB stays unchanged.
+ * Exception: if only the German part fails, the update still counts (see run).
  */
 export class Importer {
   private status: ImportStatus = idleStatus();
@@ -55,7 +55,7 @@ export class Importer {
     return { ...this.status };
   }
 
-  /** Startet einen Import und kehrt sofort zurück. Wirft ImportAlreadyRunningError, wenn schon einer läuft. */
+  /** Starts an import and returns immediately. Throws ImportAlreadyRunningError if one is already running. */
   start(): ImportStatus {
     if (this.status.running) throw new ImportAlreadyRunningError();
 
@@ -70,32 +70,32 @@ export class Importer {
     return this.getStatus();
   }
 
-  /** Wartet, bis der laufende Import beendet ist (für Tests und sauberes Herunterfahren). */
+  /** Waits until the running import has finished (for tests and clean shutdown). */
   async waitForIdle(): Promise<void> {
     await this.job;
   }
 
   private async run(updateId: number): Promise<void> {
-    // Phase 1: Build-ID und Item-IDs
+    // Phase 1: build ID and item IDs
     const buildId = await this.client.getBuildId();
     this.db.prepare('UPDATE updates SET build_id = ? WHERE id = ?').run(buildId, updateId);
     const ids = [...new Set(await this.client.getItemIds())];
     this.status.total = ids.length;
 
-    // Phase 2: Details in Blöcken zu 200 IDs
+    // Phase 2: details in blocks of 200 IDs
     this.status.phase = 'details';
     const items = new Map<number, Gw2Item>();
     for (let i = 0; i < ids.length; i += IDS_PER_REQUEST) {
       const chunk = ids.slice(i, i + IDS_PER_REQUEST);
       for (const item of await this.client.getItems(chunk)) items.set(item.id, item);
-      // Zählt angefragte IDs, damit der Fortschritt auch bei fehlenden Items 100 % erreicht.
+      // Counts requested IDs so progress reaches 100 % even with missing items.
       this.status.processed += chunk.length;
     }
 
-    // Phase 3: deutsche Texte (nur Name und Beschreibung) in denselben Blöcken, nur für Items mit englischen Details.
-    // Scheitert dieser Teil (nach den Retries des Clients), wäre es schade um den fertigen englischen Download:
-    // Das Update wird trotzdem geschrieben und als 'done' markiert, die bis dahin geladenen deutschen Texte
-    // werden behalten. Der Hinweis steht in updates.error bzw. ImportStatus.error; das nächste Update holt alles nach.
+    // Phase 3: German texts (name and description only) in the same blocks, only for items with English details.
+    // If this part fails (after the client's retries), it would be a pity to lose the finished English download:
+    // the update is still written and marked 'done', and the German texts loaded so far
+    // are kept. The notice is in updates.error or ImportStatus.error; the next update catches up.
     this.status.phase = 'details_de';
     this.status.processed = 0;
     this.status.total = items.size;
@@ -109,14 +109,14 @@ export class Importer {
         this.status.processed += chunk.length;
       }
     } catch (err) {
-      console.error(`Import ${updateId}: deutsche Texte nicht vollständig geladen:`, err);
+      console.error(`Import ${updateId}: German texts not loaded completely:`, err);
       germanError = GERMAN_INCOMPLETE;
     }
 
-    this.status.total = ids.length; // Zähler der Details-Phase wiederherstellen
+    this.status.total = ids.length; // restore the counter of the details phase
     this.status.processed = ids.length;
 
-    // Phase 4: Vergleich mit der DB und Schreiben (Hash und Diff nur über den englischen Stand)
+    // Phase 4: compare with the DB and write (hash and diff only over the English state)
     this.status.phase = 'diff';
     const counts = writeItems(this.db, updateId, [...items.values()], new Set(ids));
     writeTexts(this.db, 'de', texts);
@@ -133,13 +133,13 @@ export class Importer {
 
   private fail(updateId: number, err: unknown): void {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`Import ${updateId} fehlgeschlagen:`, err);
+    console.error(`Import ${updateId} failed:`, err);
     try {
       this.db
         .prepare(`UPDATE updates SET status = 'failed', error = ?, finished_at = ? WHERE id = ?`)
         .run(message, new Date().toISOString(), updateId);
     } catch (dbErr) {
-      console.error('Konnte Fehlerstatus nicht speichern:', dbErr);
+      console.error('Could not save error status:', dbErr);
     }
     this.status = { ...this.status, running: false, phase: 'failed', error: message };
   }
@@ -159,9 +159,9 @@ interface StoredRow {
 }
 
 /**
- * Vergleicht die geladenen Items mit der DB und schreibt items + item_changes.
- * liveIds = alle IDs, die /v2/items aktuell liefert. Items in der DB, die dort fehlen, gelten als entfernt.
- * Exportiert, damit sich die Diff-Logik ohne HTTP testen lässt.
+ * Compares the loaded items with the DB and writes items + item_changes.
+ * liveIds = all IDs that /v2/items currently returns. Items in the DB that are missing there count as removed.
+ * Exported so the diff logic can be tested without HTTP.
  */
 export function writeItems(db: DatabaseSync, updateId: number, items: Gw2Item[], liveIds: Set<number>): DiffCounts {
   const counts: DiffCounts = { added: 0, changed: 0, removed: 0 };
@@ -225,7 +225,7 @@ export function writeItems(db: DatabaseSync, updateId: number, items: Gw2Item[],
     });
   }
 
-  // Entfernte Items: nicht löschen, nur markieren, damit Teststatus und Verlauf erhalten bleiben.
+  // Removed items: do not delete, only mark, so test status and history are preserved.
   transaction(db, () => {
     const active = db.prepare('SELECT id, game_types FROM items WHERE removed = 0').all() as {
       id: number;
@@ -256,16 +256,16 @@ function toText(item: Gw2Item): ItemText {
 }
 
 /**
- * Speichert übersetzte Texte in item_texts und im Volltextindex der Sprache (derzeit nur 'de').
- * Unveränderte Texte werden übersprungen. Entfernte Items behalten ihre Texte (es wird nie gelöscht).
- * Kein Teil des Vergleichs: erzeugt weder Hash-Änderungen noch item_changes.
+ * Stores translated texts in item_texts and in the language's full-text index (currently only 'de').
+ * Unchanged texts are skipped. Removed items keep their texts (nothing is ever deleted).
+ * Not part of the comparison: produces neither hash changes nor item_changes.
  */
 export function writeTexts(db: DatabaseSync, lang: 'de', texts: Map<number, ItemText>): void {
   const select = db.prepare('SELECT name, description FROM item_texts WHERE item_id = ? AND lang = ?');
   const upsert = db.prepare(`
     INSERT INTO item_texts (item_id, lang, name, description) VALUES (?, ?, ?, ?)
     ON CONFLICT(item_id, lang) DO UPDATE SET name = excluded.name, description = excluded.description`);
-  // items_fts_de hat eigenen Inhalt: alten Eintrag über die rowid löschen, neuen einfügen.
+  // items_fts_de has its own content: delete the old entry via the rowid, insert the new one.
   const deleteFts = db.prepare('DELETE FROM items_fts_de WHERE rowid = ?');
   const insertFts = db.prepare('INSERT INTO items_fts_de (rowid, name, description) VALUES (?, ?, ?)');
 
@@ -283,7 +283,7 @@ export function writeTexts(db: DatabaseSync, lang: 'de', texts: Map<number, Item
   }
 }
 
-/** Abgeleitete Spalten für die Tabelle items. */
+/** Derived columns for the items table. */
 function toColumns(item: Gw2Item) {
   const gameTypes = normalizeGameTypes(item.game_types);
   const subtype = item.details?.type;

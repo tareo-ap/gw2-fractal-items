@@ -2,7 +2,7 @@ import { openDatabase } from '../db/index.js';
 import { Gw2Client, type Gw2Item } from '../gw2/client.js';
 import { Importer } from '../importer/importer.js';
 
-/** Chat-Link für eine Item-ID, so wie ihn das Spiel erzeugt (Typ 2, Anzahl 1). */
+/** Chat link for an item ID as the game generates it (type 2, quantity 1). */
 export function chatLinkFor(id: number): string {
   const bytes = Buffer.from([0x02, 0x01, id & 0xff, (id >> 8) & 0xff, (id >> 16) & 0xff, 0x00]);
   return `[&${bytes.toString('base64')}]`;
@@ -36,14 +36,14 @@ export const fixtureItems = (): Gw2Item[] => [
   item(6, 'Shiny Rock', 'Trophy', 'Default', 'Junk', ['Pve']),
 ];
 
-/** In-Memory-DB plus Importer gegen den Fake-Server, ohne Drosselung und mit kurzem Backoff. */
+/** In-memory DB plus importer against the fake server, without throttling and with short backoff. */
 export function createTestImporter(apiUrl: string) {
   const db = openDatabase(':memory:');
   const client = new Gw2Client({ baseUrl: apiUrl, minIntervalMs: 0, retryBaseDelayMs: 1 });
   return { db, importer: new Importer(db, client) };
 }
 
-/** Startet einen Import und wartet auf sein Ende. */
+/** Starts an import and waits for it to finish. */
 export async function runImport(importer: Importer) {
   importer.start();
   await importer.waitForIdle();

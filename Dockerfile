@@ -1,4 +1,4 @@
-# Stufe 1: Abhängigkeiten installieren und alles bauen
+# Stage 1: install dependencies and build everything
 FROM node:24-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -11,7 +11,7 @@ COPY server server
 COPY web web
 RUN npm run build
 
-# Stufe 2: schlankes Laufzeit-Image nur mit Produktionsabhängigkeiten
+# Stage 2: slim runtime image with production dependencies only
 FROM node:24-slim
 WORKDIR /app
 ENV NODE_ENV=production \

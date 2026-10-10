@@ -42,7 +42,7 @@ before(async () => {
 after(() => api.close());
 
 describe('GET /api/items', () => {
-  it('Default: Gizmo-Kandidaten, nach Name sortiert', async () => {
+  it('Default: Gizmo candidates, sorted by name', async () => {
     const res = await getJson<ItemListResponse>('/api/items');
     assert.deepEqual(res.items.map((i) => i.name), ['Mini Golem Kit', 'Old Gizmo']);
     assert.equal(res.total, 2);
@@ -56,36 +56,36 @@ describe('GET /api/items', () => {
     assert.equal(kit.subtype, 'Default');
   });
 
-  it('Consumables: Food/Utility standardmäßig ausgeblendet', async () => {
+  it('Consumables: Food/Utility hidden by default', async () => {
     assert.deepEqual(await ids('?view=consumable'), [8778]);
     assert.deepEqual(await ids('?view=consumable&hideCommon=false&sort=id'), [4, 5, 8778]);
   });
 
-  it('candidate und view=all', async () => {
+  it('candidate and view=all', async () => {
     assert.deepEqual(await ids('?view=gizmo&candidate=no'), [2]);
     assert.deepEqual(await ids('?view=all&candidate=all&sort=id'), [1, 2, 3, 6, 8778]);
   });
 
-  it('Suche: ID, Chat-Link, Volltext-Präfix, Sonderzeichen', async () => {
+  it('Search: ID, chat link, full-text prefix, special characters', async () => {
     assert.deepEqual(await ids('?view=all&q=8778'), [8778]);
     assert.deepEqual(await ids(`?view=all&q=${encodeURIComponent(chatLinkFor(8778))}`), [8778]);
-    // Ingame-Link mit anderer Anzahl → trotzdem über die enthaltene ID gefunden
+    // In-game link with a different quantity -> still found via the contained ID
     const withQuantity = `[&${Buffer.from([2, 5, 0x4a, 0x22, 0, 0]).toString('base64')}]`;
     assert.deepEqual(await ids(`?view=all&q=${encodeURIComponent(withQuantity)}`), [8778]);
     assert.deepEqual(await ids('?view=all&q=gol&sort=id'), [1, 8778]);
     assert.deepEqual(await ids('?view=all&q=mini%20bom'), [8778]);
     assert.deepEqual(await ids('?view=all&candidate=all&q=description%20banner'), [2]);
-    // FTS-Syntax darf nicht ausgewertet werden und keinen Fehler werfen
+    // FTS syntax must not be evaluated and must not throw an error
     assert.deepEqual(await ids(`?view=all&q=${encodeURIComponent('"golem" OR -NEAR( name:*')}`), []);
     assert.deepEqual(await ids(`?view=all&q=${encodeURIComponent('---')}&sort=id`), [1, 3, 8778]);
   });
 
-  it('Filter rarity und gameType', async () => {
+  it('Filter rarity and gameType', async () => {
     assert.deepEqual(await ids('?view=all&candidate=all&rarity=Rare,Exotic&sort=id'), [1, 2]);
     assert.deepEqual(await ids('?view=all&candidate=all&gameType=Pve,Wvw&sort=id'), [1, 2, 8778]);
   });
 
-  it('Sortierung und Paginierung', async () => {
+  it('Sorting and pagination', async () => {
     assert.deepEqual(await ids('?view=all&candidate=all&sort=rarity&order=desc'), [2, 1, 8778, 3, 6]);
     const page2 = await getJson<ItemListResponse>('/api/items?view=all&candidate=all&sort=id&pageSize=2&page=2');
     assert.deepEqual(page2.items.map((i) => i.id), [3, 6]);
@@ -94,7 +94,7 @@ describe('GET /api/items', () => {
     assert.equal(capped.pageSize, 200);
   });
 
-  it('ungültige Parameter → 400', async () => {
+  it('invalid parameters -> 400', async () => {
     await getJson('/api/items?view=foo', 400);
     await getJson('/api/items?rarity=Shiny', 400);
     await getJson('/api/items?page=0', 400);
@@ -102,7 +102,7 @@ describe('GET /api/items', () => {
   });
 });
 
-describe('Platzhalter-Filter', () => {
+describe('Placeholder filter', () => {
   let phApi: FakeGw2Api;
   let phApp: Hono;
 
@@ -131,22 +131,22 @@ describe('Platzhalter-Filter', () => {
   const phIds = async (query: string) =>
     ((await (await phApp.request(`/api/items${query}`)).json()) as ItemListResponse).items.map((i) => i.id);
 
-  it('blendet Items mit leerem Namen, ohne Icon oder mit ((ID))- oder [[ID]]-Namen standardmäßig aus', async () => {
+  it('hides items with an empty name, without an icon or with ((ID)) or [[ID]] names by default', async () => {
     assert.deepEqual(await phIds('?sort=id'), [1]);
     assert.deepEqual(await phIds('?view=all&sort=id'), [1, 109, 8778]);
   });
 
-  it('hidePlaceholders=false zeigt sie', async () => {
+  it('hidePlaceholders=false shows them', async () => {
     assert.deepEqual(await phIds('?hidePlaceholders=false&sort=id'), [1, 101, 102, 103, 106]);
   });
 
-  it('hideCommon blendet Mastery Points, Emote Tomes und Währungen aus', async () => {
+  it('hideCommon hides Mastery Points, Emote Tomes and currencies', async () => {
     assert.deepEqual(await phIds('?view=consumable&sort=id'), [109, 8778]);
     assert.deepEqual(await phIds('?view=consumable&hideCommon=false&sort=id'), [104, 105, 107, 108, 109, 8778]);
   });
 });
 
-describe('Tonic-Ansicht', () => {
+describe('Tonic view', () => {
   let tonicApi: FakeGw2Api;
   let tonicApp: Hono;
 
@@ -167,19 +167,19 @@ describe('Tonic-Ansicht', () => {
   });
   after(() => tonicApi.close());
 
-  it('findet Tonics per Flag oder Name, auch mit Untertyp Food, aber keine Rezepte', async () => {
+  it('finds tonics by flag or name, also with subtype Food, but no recipes', async () => {
     const res = (await (await tonicApp.request('/api/items?view=tonic&sort=id')).json()) as ItemListResponse;
     assert.deepEqual(res.items.map((i) => i.id), [201, 202, 203]);
   });
 
-  it('/api/stats zählt Tonic-Kandidaten', async () => {
+  it('/api/stats counts tonic candidates', async () => {
     const stats = (await (await tonicApp.request('/api/stats')).json()) as { candidates: { tonic: number } };
     assert.equal(stats.candidates.tonic, 3);
   });
 });
 
 describe('GET /api/export', () => {
-  it('liefert die Datenbank als SQLite-Download', async () => {
+  it('returns the database as a SQLite download', async () => {
     const res = await app.request('/api/export');
     assert.equal(res.status, 200);
     assert.equal(res.headers.get('content-type'), 'application/vnd.sqlite3');
@@ -190,7 +190,7 @@ describe('GET /api/export', () => {
 });
 
 describe('GET /api/items/:id', () => {
-  it('liefert Details inkl. Verlauf und Wiki-Link', async () => {
+  it('returns details including history and wiki link', async () => {
     const item = await getJson<ItemDetail>('/api/items/8778');
     assert.equal(item.name, 'Mini Golem Bomb');
     assert.equal(item.chatLink, chatLinkFor(8778));
@@ -204,21 +204,21 @@ describe('GET /api/items/:id', () => {
     assert.equal(item.history[0]!.kind, 'added');
   });
 
-  it('404 für unbekannte, 400 für ungültige IDs', async () => {
+  it('404 for unknown, 400 for invalid IDs', async () => {
     await getJson('/api/items/424242', 404);
     await getJson('/api/items/abc', 400);
   });
 });
 
-describe('Teststatus und Updates', () => {
-  it('PUT test validiert den Body', async () => {
+describe('Test status and updates', () => {
+  it('PUT test validates the body', async () => {
     assert.equal((await putTest(1, { status: 'maybe' })).status, 400);
     assert.equal((await putTest(1, { status: 'works', note: 5 })).status, 400);
-    assert.equal((await putTest(1, 'kein json')).status, 400);
+    assert.equal((await putTest(1, 'not json')).status, 400);
     assert.equal((await putTest(424242, { status: 'works' })).status, 404);
   });
 
-  it('PUT test speichert und needsRetest greift nach Änderung der game_types', async () => {
+  it('PUT test saves and needsRetest applies after game_types change', async () => {
     const res = await putTest(1, { status: 'works', note: '  klappt in Fraktal 40  ' });
     assert.equal(res.status, 200);
     const saved = (await res.json()) as ItemDetail;
@@ -230,10 +230,10 @@ describe('Teststatus und Updates', () => {
     assert.deepEqual(await ids('?testStatus=works'), [1]);
     assert.deepEqual(await ids('?testStatus=untested'), [3]);
 
-    // Item 2 auch testen; seine game_types ändern sich nur in der Reihenfolge → kein Retest
+    // Also test item 2; its game_types only change in order -> no retest
     await putTest(2, { status: 'broken' });
 
-    // Neues Update: Item 1 verliert Dungeon, Item 2 bekommt andere Reihenfolge, Item 3 verschwindet
+    // New update: item 1 loses Dungeon, item 2 gets a different order, item 3 disappears
     api.items.get(1)!.game_types = ['Wvw', 'Pve'];
     api.items.get(2)!.game_types = ['Wvw', 'Pve'];
     api.items.delete(3);
@@ -257,18 +257,18 @@ describe('Teststatus und Updates', () => {
     assert.deepEqual(await ids('?view=all&candidate=all&testStatus=retest'), [1]);
     assert.equal((await getJson<ItemDetail>('/api/items/2')).needsRetest, false);
 
-    // Nur Items aus diesem Update; entfernte nur mit includeRemoved
+    // Only items from this update; removed ones only with includeRemoved
     assert.deepEqual(await ids(`?view=all&candidate=all&updateId=${status.updateId}&sort=id`), [1, 2]);
     assert.deepEqual(await ids(`?view=all&candidate=all&updateId=${status.updateId}&includeRemoved=true&sort=id`), [1, 2, 3]);
     const removed = await getJson<ItemDetail>('/api/items/3');
     assert.equal(removed.removed, true);
 
-    // Erneut testen → Retest erledigt
+    // Test again -> retest done
     await putTest(1, { status: 'broken' });
     assert.equal((await getJson<ItemDetail>('/api/items/1')).needsRetest, false);
   });
 
-  it('GET /api/updates: neueste zuerst mit Dungeon-Zählern', async () => {
+  it('GET /api/updates: newest first with Dungeon counters', async () => {
     const updates = await getJson<UpdateDetail[]>('/api/updates');
     assert.equal(updates.length, 2);
     const [latest, first] = updates;
@@ -285,14 +285,14 @@ describe('Teststatus und Updates', () => {
     assert.equal(latest!.error, null);
   });
 
-  it('/api/stats funktioniert weiterhin', async () => {
+  it('/api/stats still works', async () => {
     const stats = await getJson<{ items: number; candidates: { gizmo: number; consumable: number; tonic: number } }>('/api/stats');
     assert.equal(stats.items, 6);
     assert.deepEqual(stats.candidates, { gizmo: 0, consumable: 3, tonic: 0 });
   });
 });
 
-// Läuft nach "Teststatus und Updates": Item 1 und 2 sind dann getestet (broken), Item 3 ist entfernt.
+// Runs after "Test status and updates": items 1 and 2 are then tested (broken), item 3 is removed.
 describe('GET /api/items/export', () => {
   const exportJson = async (query: string) => {
     const res = await app.request(`/api/items/export?${query}`);
@@ -302,7 +302,7 @@ describe('GET /api/items/export', () => {
     return (await res.json()) as Record<string, unknown>[];
   };
 
-  it('JSON: alle Treffer ohne Paginierung, echte Typen', async () => {
+  it('JSON: all matches without pagination, real types', async () => {
     const rows = await exportJson('format=json&view=all&candidate=all&sort=id&pageSize=1&page=2');
     assert.deepEqual(rows.map((r) => r.id), [1, 2, 6, 8778]);
     const kit = rows[0]!;
@@ -322,21 +322,21 @@ describe('GET /api/items/export', () => {
     ]);
   });
 
-  it('JSON: respektiert view, testStatus und Sortierung', async () => {
+  it('JSON: respects view, testStatus and sorting', async () => {
     const consumables = await exportJson('format=json&view=consumable&hideCommon=false&sort=id&order=desc');
     assert.deepEqual(consumables.map((r) => r.id), [8778, 5, 4]);
     const broken = await exportJson('format=json&view=all&candidate=all&testStatus=broken&sort=id');
     assert.deepEqual(broken.map((r) => r.id), [1, 2]);
   });
 
-  it('CSV: BOM, Semikolon, Kopfzeile, Quoting und Formel-Absicherung', async () => {
+  it('CSV: BOM, semicolon, header, quoting and formula protection', async () => {
     await putTest(8778, { status: 'works', note: 'a;b "c"\nzweite Zeile' });
     await putTest(6, { status: 'works', note: '=1+1' });
     const res = await app.request('/api/items/export?format=csv&view=all&candidate=all&testStatus=works&sort=id');
     assert.equal(res.status, 200);
     assert.equal(res.headers.get('content-type'), 'text/csv; charset=utf-8');
     assert.match(res.headers.get('content-disposition') ?? '', /^attachment; filename="gw2-items-all-\d{4}-\d{2}-\d{2}\.csv"$/);
-    // text() würde das BOM verschlucken, daher die Rohbytes prüfen
+    // text() would swallow the BOM, so check the raw bytes
     const bytes = Buffer.from(await res.arrayBuffer());
     assert.deepEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
     const body = bytes.subarray(3).toString('utf8');
@@ -348,14 +348,14 @@ describe('GET /api/items/export', () => {
     assert.ok(body.includes(';false;false;works;'));
   });
 
-  it('ungültiges oder fehlendes format → 400', async () => {
+  it('invalid or missing format -> 400', async () => {
     await getJson('/api/items/export?format=xml', 400);
     await getJson('/api/items/export', 400);
     await getJson('/api/items/export?format=csv&view=foo', 400);
   });
 });
 
-describe('GET /api/updates/:id/changes (zweite Importrunde)', () => {
+describe('GET /api/updates/:id/changes (second import round)', () => {
   let chApi: FakeGw2Api;
   let chApp: Hono;
   let firstId: number;
@@ -399,24 +399,24 @@ describe('GET /api/updates/:id/changes (zweite Importrunde)', () => {
   };
   const changeIds = async (query: string) => (await load(query)).items.map((i) => i.id);
 
-  it('Zähler gelten für das ganze Update und sind ungefiltert', async () => {
+  it('counters cover the whole update and are unfiltered', async () => {
     const res = await load('?kind=removed&type=consumable');
     assert.equal(res.update.id, secondId);
     assert.equal(res.update.buildId, 123457);
     assert.deepEqual(res.counts, { added: 2, changed: 5, removed: 1, gameTypesChanged: 3, dungeonGained: 1, dungeonLost: 2 });
-    // Umsortierte game_types (Item 6) zählen nicht als game_types-Änderung
+    // Reordered game_types (item 6) do not count as a game_types change
     assert.equal(res.update.dungeonLost, 2);
   });
 
-  it('erstes Update: alles neu', async () => {
+  it('first update: everything new', async () => {
     const res = await load('?hidePlaceholders=false', firstId);
     assert.equal(res.counts.added, 8);
     assert.equal(res.counts.changed, 0);
     assert.equal(res.total, 8);
   });
 
-  it('Sortierung: Dungeon-Änderungen zuerst, dann geändert, neu, entfernt, jeweils nach Name', async () => {
-    // Platzhalter (10) standardmäßig ausgeblendet
+  it('Sorting: Dungeon changes first, then changed, new, removed, each by name', async () => {
+    // Placeholders (10) hidden by default
     assert.deepEqual(await changeIds(''), [3, 2, 7, 5, 6, 9, 4]);
     assert.deepEqual(await changeIds('?hidePlaceholders=false'), [3, 2, 7, 5, 6, 10, 9, 4]);
   });
@@ -440,7 +440,7 @@ describe('GET /api/updates/:id/changes (zweite Importrunde)', () => {
     assert.deepEqual(await changeIds('?focus=gameTypes'), [3, 2, 7]);
   });
 
-  it('kind=added / removed / mehrere', async () => {
+  it('kind=added / removed / several', async () => {
     const added = await load('?kind=added&hidePlaceholders=false');
     assert.deepEqual(added.items.map((i) => i.id), [10, 9]);
     assert.equal(added.items[1]!.gameTypesBefore, null);
@@ -460,19 +460,19 @@ describe('GET /api/updates/:id/changes (zweite Importrunde)', () => {
     assert.equal(removed.items[0]!.before?.name, 'Removed Gizmo');
 
     assert.deepEqual(await changeIds('?kind=added,removed'), [9, 4]);
-    // focus gilt nur für geänderte Items
+    // focus only applies to changed items
     assert.deepEqual(await changeIds('?kind=added&focus=dungeonLost'), []);
     assert.deepEqual(await changeIds('?kind=changed&focus=all'), [3, 2, 7, 5, 6]);
   });
 
-  it('before/after: nur geänderte Felder, hier die Beschreibung', async () => {
+  it('before/after: only changed fields, here the description', async () => {
     const desc = (await load('?q=Desc')).items[0]!;
     assert.deepEqual(desc.changedFields, ['description']);
     assert.deepEqual(desc.before, { description: 'Description of Mini Golem Kit.' });
     assert.deepEqual(desc.after, { description: 'Neue Beschreibung' });
   });
 
-  it('type-Filter, Suche und Paginierung', async () => {
+  it('type filter, search and pagination', async () => {
     assert.deepEqual(await changeIds('?type=consumable'), [7]);
     assert.deepEqual(await changeIds('?type=gizmo&kind=changed'), [3, 2, 5, 6]);
     assert.deepEqual(await changeIds('?type=tonic'), []);
@@ -488,7 +488,7 @@ describe('GET /api/updates/:id/changes (zweite Importrunde)', () => {
     assert.equal((await load('?pageSize=1000')).pageSize, 200);
   });
 
-  it('404 bei unbekanntem Update, 400 bei ungültigen Werten', async () => {
+  it('404 for unknown update, 400 for invalid values', async () => {
     assert.equal((await changes(9999)).status, 404);
     assert.equal((await changes('abc' as unknown as number)).status, 400);
     for (const query of ['?kind=foo', '?focus=foo', '?type=foo', '?page=0', '?pageSize=x', '?hidePlaceholders=maybe']) {
@@ -498,7 +498,7 @@ describe('GET /api/updates/:id/changes (zweite Importrunde)', () => {
 });
 
 describe('Migration 3 (values_before/values_after)', () => {
-  it('alte DB ohne die Spalten wird migriert, alte Einträge liefern before/after = null', async () => {
+  it('old DB without the columns is migrated, old entries return before/after = null', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gw2-items-mig-'));
     const file = path.join(dir, 'old.db');
     const old = new DatabaseSync(file);
@@ -530,7 +530,7 @@ describe('Migration 3 (values_before/values_after)', () => {
   });
 });
 
-describe('GET /api/updates/compare (drei Importrunden)', () => {
+describe('GET /api/updates/compare (three import rounds)', () => {
   let cmpApi: FakeGw2Api;
   let cmpDb: DatabaseSync;
   let cmpApp: Hono;
@@ -551,14 +551,14 @@ describe('GET /api/updates/compare (drei Importrunden)', () => {
     cmpApp = createApp(cmpDb, null, created.importer);
     u1 = (await runImport(created.importer)).updateId!;
 
-    // Runde 2: Dungeon dazu, Beschreibung und Name geändert, ein Item neu
+    // Round 2: Dungeon added, description and name changed, one new item
     cmpApi.items.get(1)!.game_types = ['Dungeon', 'Pve'];
     cmpApi.items.get(2)!.description = 'Zwei';
     cmpApi.items.get(3)!.name = 'Name Bounce 2';
     cmpApi.items.set(5, { ...gizmo, id: 5, name: 'Temp Gizmo', game_types: ['Pve'] });
     u2 = (await runImport(created.importer)).updateId!;
 
-    // Runde 3: Dungeon wieder weg, Beschreibung erneut geändert, Name zurück, das neue Item wieder entfernt
+    // Round 3: Dungeon gone again, description changed again, name reverted, the new item removed again
     cmpApi.items.get(1)!.game_types = ['Pve'];
     cmpApi.items.get(2)!.description = 'Drei';
     cmpApi.items.get(3)!.name = 'Name Bounce';
@@ -573,7 +573,7 @@ describe('GET /api/updates/compare (drei Importrunden)', () => {
     return (await res.json()) as UpdateCompareResponse;
   };
 
-  it('1 → 3: gegenläufige Änderungen heben sich auf, vorübergehende Items fehlen', async () => {
+  it('1 -> 3: opposing changes cancel out, transient items are missing', async () => {
     const res = await compare(u1, u3);
     assert.equal(res.from.id, u1);
     assert.equal(res.to.id, u3);
@@ -581,14 +581,14 @@ describe('GET /api/updates/compare (drei Importrunden)', () => {
     assert.deepEqual(res.items.map((i) => i.id), [2]);
     const desc = res.items[0]!;
     assert.deepEqual(desc.changedFields, ['description']);
-    // Alt = Stand nach Update 1, Neu = Stand nach Update 3
+    // Old = state after update 1, New = state after update 3
     assert.deepEqual(desc.before, { description: 'Description of Mini Golem Kit.' });
     assert.deepEqual(desc.after, { description: 'Drei' });
     assert.equal(res.legacyValues, false);
     assert.equal(res.total, 1);
   });
 
-  it('1 → 2: Dungeon dazu, geänderte, neue Items; Dungeon-Änderung zuerst', async () => {
+  it('1 -> 2: Dungeon added, changed, new items; Dungeon change first', async () => {
     const res = await compare(u1, u2);
     assert.deepEqual(res.counts, { added: 1, changed: 3, removed: 0, gameTypesChanged: 1, dungeonGained: 1, dungeonLost: 0 });
     assert.deepEqual(res.items.map((i) => i.id), [1, 2, 3, 5]);
@@ -602,7 +602,7 @@ describe('GET /api/updates/compare (drei Importrunden)', () => {
     assert.deepEqual((await compare(u1, u2, '?q=temp&type=gizmo')).items.map((i) => i.id), [5]);
   });
 
-  it('2 → 3: entfernt, Dungeon weg, Beschreibung von Zwei auf Drei', async () => {
+  it('2 -> 3: removed, Dungeon gone, description from Two to Three', async () => {
     const res = await compare(u2, u3);
     assert.deepEqual(res.counts, { added: 0, changed: 3, removed: 1, gameTypesChanged: 1, dungeonGained: 0, dungeonLost: 1 });
     assert.deepEqual(res.items.map((i) => i.id), [1, 2, 3, 5]);
@@ -612,13 +612,13 @@ describe('GET /api/updates/compare (drei Importrunden)', () => {
     assert.deepEqual((await compare(u2, u3, '?focus=dungeonLost')).items.map((i) => i.id), [1]);
   });
 
-  it('Paginierung', async () => {
+  it('Pagination', async () => {
     const res = await compare(u1, u2, '?pageSize=2&page=2');
     assert.deepEqual(res.items.map((i) => i.id), [3, 5]);
     assert.equal(res.total, 4);
   });
 
-  it('Validierung: from < to, beide vorhanden und abgeschlossen', async () => {
+  it('Validation: from < to, both present and completed', async () => {
     const status = async (query: string) => (await cmpApp.request(`/api/updates/compare${query}`)).status;
     assert.equal(await status(`?from=${u3}&to=${u1}`), 400);
     assert.equal(await status(`?from=${u1}&to=${u1}`), 400);
@@ -645,7 +645,7 @@ describe('DELETE /api/updates/:id', () => {
     delDb = created.db;
     delApp = createApp(delDb, null, created.importer);
     full = (await runImport(created.importer)).updateId!;
-    empty = (await runImport(created.importer)).updateId!; // gleicher Stand: keine Änderungen
+    empty = (await runImport(created.importer)).updateId!; // same state: no changes
     delApi.items.get(2)!.description = 'Neu';
     withChanges = (await runImport(created.importer)).updateId!;
   });
@@ -656,15 +656,15 @@ describe('DELETE /api/updates/:id', () => {
   const insertUpdate = (status: string) =>
     Number(delDb.prepare(`INSERT INTO updates (started_at, status) VALUES ('2026-01-01T00:00:00Z', ?)`).run(status).lastInsertRowid);
 
-  it('deletable und deleteBlockedReason in der Liste', async () => {
+  it('deletable and deleteBlockedReason in the list', async () => {
     const byId = new Map((await list()).map((u) => [u.id, u]));
     assert.equal(byId.get(empty)!.deletable, true);
     assert.equal(byId.get(withChanges)!.deleteBlockedReason, 'hasChanges');
-    // Der Vollimport hat Änderungen und Items, die darauf verweisen.
+    // The full import has changes and items that reference them.
     assert.equal(byId.get(full)!.deletable, false);
   });
 
-  it('löscht ein fehlgeschlagenes Update', async () => {
+  it('deletes a failed update', async () => {
     const id = insertUpdate('failed');
     delDb.prepare(`INSERT INTO item_changes (update_id, item_id, kind) VALUES (?, 1, 'changed')`).run(id);
     assert.equal((await del(id)).status, 204);
@@ -672,31 +672,31 @@ describe('DELETE /api/updates/:id', () => {
     assert.equal((delDb.prepare('SELECT COUNT(*) AS n FROM item_changes WHERE update_id = ?').get(id) as { n: number }).n, 0);
   });
 
-  it('löscht ein abgeschlossenes Update ohne Änderungen', async () => {
+  it('deletes a completed update without changes', async () => {
     assert.equal((await del(empty)).status, 204);
     assert.equal((await list()).some((u) => u.id === empty), false);
   });
 
-  it('lehnt abgeschlossene Updates mit Änderungen ab (409)', async () => {
+  it('rejects completed updates with changes (409)', async () => {
     const res = await del(withChanges);
     assert.equal(res.status, 409);
-    assert.match(((await res.json()) as { error: string }).error, /Änderungen/);
+    assert.match(((await res.json()) as { error: string }).error, /changes/);
     assert.equal((await list()).some((u) => u.id === withChanges), true);
   });
 
-  it('lehnt laufende Updates ab (409)', async () => {
+  it('rejects running updates (409)', async () => {
     const id = insertUpdate('running');
     assert.equal((await del(id)).status, 409);
   });
 
-  it('lehnt ab, wenn ein Item auf das Update verweist (409)', async () => {
+  it('rejects if an item references the update (409)', async () => {
     const id = insertUpdate('failed');
     delDb.prepare('UPDATE items SET last_changed_update = ? WHERE id = 1').run(id);
     assert.equal((await del(id)).status, 409);
     delDb.prepare('UPDATE items SET last_changed_update = ? WHERE id = 1').run(full);
   });
 
-  it('404 bei unbekannter ID, 400 bei ungültiger', async () => {
+  it('404 for unknown ID, 400 for invalid', async () => {
     assert.equal((await del(99999)).status, 404);
     assert.equal((await del('abc')).status, 400);
   });

@@ -1,8 +1,8 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// Basis-Pfad der App. Lokal und im Docker-Image "/", auf GitHub Pages z. B. "/gw2_items/" (npm run build:pages).
-// Führende und abschließende Schrägstriche werden normalisiert: "gw2_items" → "/gw2_items/".
+// Base path of the app. "/" locally and in the Docker image, e.g. "/gw2_items/" on GitHub Pages (npm run build:pages).
+// Leading and trailing slashes are normalized: "gw2_items" -> "/gw2_items/".
 const trimmed = (process.env.VITE_BASE ?? '/').replace(/^\/+|\/+$/g, '');
 const base = trimmed ? `/${trimmed}/` : '/';
 
@@ -10,7 +10,7 @@ export default defineConfig({
   base,
   plugins: [react()],
   server: {
-    // In der Entwicklung leitet Vite API-Aufrufe an den Node-Server weiter.
+    // In development Vite forwards API calls to the Node server.
     proxy: { '/api': 'http://localhost:3000' },
   },
 });

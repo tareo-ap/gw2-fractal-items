@@ -1,10 +1,10 @@
-// Query-Parameter von GET /api/items und /api/updates/:id/changes einlesen und mit Defaults auffüllen.
-// Der Server liest damit die HTTP-Query, die statische Fassung im Browser denselben Query-String.
+// Parse the query parameters of GET /api/items and /api/updates/:id/changes and fill in defaults.
+// The server reads the HTTP query with it, the static version in the browser the same query string.
 
 import type { ChangeKind, ItemListQuery, Lang, UpdateChangesQuery } from './types.js';
 import { GAME_TYPES, ITEM_SORTS, RARITIES, TEST_STATUSES } from './rules.js';
 
-/** Fehler in den Eingaben, wird als HTTP 400 beantwortet. */
+/** Error in the input, answered with HTTP 400. */
 export class ValidationError extends Error {}
 
 const LANGS: readonly Lang[] = ['en', 'de'];
@@ -13,7 +13,7 @@ export const CHANGE_KIND_VALUES: readonly ChangeKind[] = ['added', 'changed', 'r
 export function oneOf<T extends string>(name: string, value: string | undefined, allowed: readonly T[]): T | undefined {
   if (value === undefined || value === '') return undefined;
   if (!(allowed as readonly string[]).includes(value)) {
-    throw new ValidationError(`${name} muss einer dieser Werte sein: ${allowed.join(', ')}`);
+    throw new ValidationError(`${name} must be one of: ${allowed.join(', ')}`);
   }
   return value as T;
 }
@@ -22,12 +22,12 @@ export function bool(name: string, value: string | undefined): boolean | undefin
   if (value === undefined || value === '') return undefined;
   if (value === 'true' || value === '1') return true;
   if (value === 'false' || value === '0') return false;
-  throw new ValidationError(`${name} muss true oder false sein`);
+  throw new ValidationError(`${name} must be true or false`);
 }
 
 export function int(name: string, value: string, min: number): number {
   const n = Number(value);
-  if (!Number.isInteger(n) || n < min) throw new ValidationError(`${name} muss eine ganze Zahl ≥ ${min} sein`);
+  if (!Number.isInteger(n) || n < min) throw new ValidationError(`${name} must be an integer ≥ ${min}`);
   return n;
 }
 
@@ -40,16 +40,16 @@ export function list<T extends string>(name: string, value: string | undefined, 
     .map((v) => oneOf(name, v, allowed)!);
 }
 
-/** Liest den Parameter lang (Default en). Wirft ValidationError. */
+/** Reads the lang parameter (default en). Throws ValidationError. */
 export function parseLang(value: string | undefined): Lang {
   return oneOf('lang', value, LANGS) ?? 'en';
 }
 
-/** ItemListQuery mit aufgefüllten Defaults; nur q, testStatus und updateId bleiben optional. */
+/** ItemListQuery with defaults filled in; only q, testStatus and updateId stay optional. */
 export type ParsedItemListQuery = Required<Omit<ItemListQuery, 'q' | 'testStatus' | 'updateId'>> &
   Pick<ItemListQuery, 'q' | 'testStatus' | 'updateId'>;
 
-/** Liest die Query-Parameter von GET /api/items und füllt Defaults auf. Wirft ValidationError. */
+/** Reads the query parameters of GET /api/items and fills in defaults. Throws ValidationError. */
 export function parseItemListQuery(params: Record<string, string | undefined>): ParsedItemListQuery {
   const q = params.q?.trim();
   return {
@@ -73,7 +73,7 @@ export function parseItemListQuery(params: Record<string, string | undefined>): 
 
 export type ParsedUpdateChangesQuery = Required<Omit<UpdateChangesQuery, 'q'>> & Pick<UpdateChangesQuery, 'q'>;
 
-/** Liest die Query-Parameter von GET /api/updates/:id/changes und füllt Defaults auf. Wirft ValidationError. */
+/** Reads the query parameters of GET /api/updates/:id/changes and fills in defaults. Throws ValidationError. */
 export function parseUpdateChangesQuery(params: Record<string, string | undefined>): ParsedUpdateChangesQuery {
   const q = params.q?.trim();
   return {

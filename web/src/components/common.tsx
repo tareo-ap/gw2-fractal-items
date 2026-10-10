@@ -12,13 +12,13 @@ export function Link({ href, className, title, children }: { href: string; class
   );
 }
 
-/** Item-Icon mit Rahmen in Seltenheitsfarbe; ohne Icon oder bei Ladefehler ein Platzhalter. */
+/** Item icon with a border in the rarity color; a placeholder if there is no icon or loading fails. */
 export function ItemIcon({ icon, rarity, name, size = 40 }: { icon: string | null; rarity: Rarity; name: string; size?: number }) {
   const [failed, setFailed] = useState(false);
   const style = { width: size, height: size };
   return (
     <span className={`item-icon ${rarityClass(rarity)}`} style={style}>
-      {/* Platzhalter liegt immer darunter: sichtbar beim Laden, ohne Icon und bei Ladefehlern. */}
+      {/* The placeholder always sits underneath: visible while loading, without an icon and on load errors. */}
       <span className="item-icon-placeholder" aria-hidden="true">
         {name.charAt(0).toUpperCase() || '?'}
       </span>
@@ -78,7 +78,7 @@ export function Loading({ text }: { text?: string }) {
   );
 }
 
-/** Zeigt gewonnene (+) und verlorene (−) game_types. */
+/** Shows gained (+) and lost (−) game_types. */
 export function GameTypeDiff({ before, after }: { before: GameType[]; after: GameType[] }) {
   const gained = after.filter((g) => !before.includes(g));
   const lost = before.filter((g) => !after.includes(g));

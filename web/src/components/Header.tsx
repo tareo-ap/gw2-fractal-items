@@ -17,7 +17,7 @@ const TABS: { view: ItemView; label: Key }[] = [
 
 const LANGS: Lang[] = ['en', 'de'];
 
-/** Umschalter EN | DE. */
+/** EN | DE switch. */
 function LangSwitch() {
   const { lang, setLang, t } = useT();
   return (
@@ -31,13 +31,13 @@ function LangSwitch() {
   );
 }
 
-/** Kopfzeile mit Tabs, Kennzahlen und Update-Button. activeView ist null auf der Detailseite. */
+/** Header with tabs, key figures and update button. activeView is null on the detail page. */
 export function Header({ filters, activeView, changesActive }: { filters: ListFilters; activeView: ItemView | null; changesActive: boolean }) {
   const { t, lang, formatDateTime, formatNumber } = useT();
   const stats = useQuery({ queryKey: ['stats'], queryFn: api.stats });
   const s = stats.data;
 
-  // Zähler am Tab "Änderungen": Einträge des neuesten abgeschlossenen Updates; beim Vollimport allein weglassen.
+  // Counter on the "Changes" tab: entries of the latest completed update; omitted for the full import alone.
   const updates = useQuery({ queryKey: ['updates'], queryFn: api.updates });
   const latest = updates.data?.find((u) => u.status === undefined || u.status === 'done');
   const changesCount = latest && updates.data!.some((u) => u.id < latest.id) ? latest.added + latest.changed + latest.removed : null;
@@ -64,7 +64,7 @@ export function Header({ filters, activeView, changesActive }: { filters: ListFi
                 <strong>{formatNumber(s.items)}</strong> Items
               </span>
               {import.meta.env.VITE_DATA_MODE === 'static' ? (
-                // Pages-Fassung: nur der Datenstand, nichts davon ist veränderbar.
+                // Pages version: only the data state, none of it can be changed.
                 <span title={t('header.staticTitle')}>
                   {t('header.staticNote', { state: s.lastUpdate ? stateName(s.lastUpdate) : t('header.noUpdate') })}
                 </span>
@@ -76,7 +76,7 @@ export function Header({ filters, activeView, changesActive }: { filters: ListFi
             </>
           )}
         </div>
-        {/* Datenbank-Export und Update gibt es nur in der lokalen Version (VITE_DATA_MODE=api). */}
+        {/* Database export and update exist only in the local version (VITE_DATA_MODE=api). */}
         {import.meta.env.VITE_DATA_MODE !== 'static' && (
           <>
             <a href="/api/export" download className="small" title={t('header.exportTitle')}>
@@ -112,7 +112,7 @@ export function Header({ filters, activeView, changesActive }: { filters: ListFi
           )}
         </Link>
       </nav>
-      {/* Deutsche Texte kommen erst mit einem Update, das lang=de lädt. */}
+      {/* German texts only arrive with an update that loads lang=de. */}
       {lang === 'de' && s && s.items > 0 && s.germanTexts === 0 && <div className="lang-hint small">{t('header.germanHint')}</div>}
     </header>
   );

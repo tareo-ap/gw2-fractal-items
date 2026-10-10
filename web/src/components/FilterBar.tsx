@@ -22,7 +22,7 @@ const TEST_FILTERS: TestFilter[] = ['untested', 'works', 'broken', 'retest'];
 export function FilterBar({ filters, onChange }: { filters: ListFilters; onChange: FilterChange }) {
   const { t } = useT();
   const extraCount = countExtraFilters(filters);
-  // Nur beim ersten Rendern entscheiden, ob der Bereich offen ist; danach steuert der Nutzer.
+  // Decide only on the first render whether the section is open; afterwards the user controls it.
   const [initiallyOpen] = useState(extraCount > 0);
   return (
     <section className="filters" aria-label={t('filter.aria')}>
@@ -119,13 +119,13 @@ export function FilterBar({ filters, onChange }: { filters: ListFilters; onChang
   );
 }
 
-/** Suchfeld mit Verzögerung: die URL wird erst 300 ms nach der letzten Eingabe aktualisiert. */
+/** Debounced search field: the URL is updated only 300 ms after the last input. */
 function SearchInput({ value, onSearch }: { value: string; onSearch: (q: string) => void }) {
   const { t } = useT();
   const [text, setText] = useState(value);
   const timer = useRef<number | undefined>(undefined);
 
-  // Wert aus der URL übernehmen (z. B. nach "Zurück"), aber nicht während getippt wird.
+  // Take the value from the URL (e.g. after "Back"), but not while typing.
   useEffect(() => {
     if (timer.current === undefined) setText(value);
   }, [value]);
@@ -170,7 +170,7 @@ function ChipGroup<T extends string>({
 }) {
   const { t } = useT();
   const toggle = (value: T) => {
-    // Reihenfolge wie in options halten, damit die URL stabil bleibt.
+    // Keep the order as in options so the URL stays stable.
     const next = selected.includes(value) ? selected.filter((v) => v !== value) : options.filter((o) => o === value || selected.includes(o));
     onChange(next);
   };
@@ -201,17 +201,17 @@ function UpdateSelect({ value, onChange }: { value: number | null; onChange: (id
   const i18n = useT();
   const { t } = i18n;
   const updates = useQuery({ queryKey: ['updates'], queryFn: api.updates });
-  // Erster Stand = Vollimport (nur für die statische Fassung nötig, siehe unten).
+  // First state = full import (only needed for the static version, see below).
   const baseline = updates.data?.length ? Math.min(...updates.data.map((u) => u.id)) : undefined;
   return (
     <label className="field field-update">
       <span className="field-label">{t('filter.update')}</span>
       <select value={value ?? ''} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)} disabled={updates.isPending}>
         <option value="">{updates.isError ? t('filter.updatesFailed') : t('filter.allUpdates')}</option>
-        {/* Gewähltes Update auch dann anzeigen, wenn es (noch) nicht in der Liste ist. */}
+        {/* Show the selected update even if it is not (yet) in the list. */}
         {value !== null && !updates.data?.some((u) => u.id === value) && <option value={value}>{t('filter.updateN', { id: value })}</option>}
         {updates.data
-          // Die statische Fassung hat zum ersten Stand (Vollimport) keine Änderungen, der Filter bliebe leer.
+          // The static version has no changes for the first state (full import), so the filter would stay empty.
           ?.filter((u) => import.meta.env.VITE_DATA_MODE !== 'static' || u.id !== baseline)
           .map((u) => (
             <option key={u.id} value={u.id}>

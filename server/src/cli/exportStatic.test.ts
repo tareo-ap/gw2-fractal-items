@@ -26,9 +26,9 @@ describe('buildStaticExport', () => {
   let api: FakeGw2Api;
   afterEach(() => api.close());
 
-  it('teilt die Details nach ID in Blöcke zu 500 Items', async () => {
+  it('splits the details by ID into blocks of 500 items', async () => {
     const count = DETAIL_BLOCK_SIZE * 2 + 101;
-    // IDs absteigend einfügen: Die Blöcke müssen trotzdem nach ID sortiert sein.
+    // Insert IDs in descending order: the blocks must still be sorted by ID.
     api = await startFakeGw2Api(Array.from({ length: count }, (_, i) => ({ ...gizmo, id: 5000 - i, name: `Gizmo ${5000 - i}` })));
     const { db, importer } = createTestImporter(api.url);
     await runImport(importer);
@@ -44,12 +44,12 @@ describe('buildStaticExport', () => {
     assert.equal(data.meta.itemCount, count);
     assert.equal(data.meta.schemaVersion, STATIC_SCHEMA_VERSION);
     assert.equal(data.meta.build, 123456);
-    // Der Vollimport allein erzeugt keine Einträge in changes.json
+    // The full import alone produces no entries in changes.json
     assert.equal(data.changes.length, 0);
     assert.equal(data.updates.length, 1);
   });
 
-  it('wählt Items aus: Kandidaten Gizmo/Consumable plus Items aus Änderungen ab dem zweiten Update', async () => {
+  it('selects items: Gizmo/Consumable candidates plus items from changes from the second update on', async () => {
     const consumable = fixtureItems().find((i) => i.id === 8778)!;
     api = await startFakeGw2Api([
       { ...gizmo, id: 1, name: 'Candidate Gizmo' },
@@ -73,7 +73,7 @@ describe('buildStaticExport', () => {
     await runImport(importer);
 
     const data = buildStaticExport(db);
-    // 5 (Dungeon verloren), 6 (entfernt), 7 (Trophy geändert), 8 (entfernt), 9 (neu) kommen aus Änderungen; 3 und 4 nie.
+    // 5 (lost Dungeon), 6 (removed), 7 (trophy changed), 8 (removed), 9 (new) come from changes; 3 and 4 never.
     assert.deepEqual(data.items.map((i) => i.id), [1, 2, 5, 6, 7, 8, 9]);
     const removed = data.items.find((i) => i.id === 6)!;
     assert.equal(removed.removed, true);
@@ -90,14 +90,14 @@ describe('buildStaticExport', () => {
     assert.equal(data.meta.lastUpdate?.id, 2);
   });
 
-  it('leere Datenbank: leerer Export', () => {
+  it('empty database: empty export', () => {
     const data = buildStaticExport(openDatabase(':memory:'));
     assert.deepEqual([data.items, data.updates, data.changes, data.detailBlocks], [[], [], [], []]);
     assert.equal(data.meta.lastUpdate, null);
     assert.equal(data.meta.build, null);
   });
 
-  it('lässt leere Werte weg und speichert den Teststatus', async () => {
+  it('omits empty values and stores the test status', async () => {
     api = await startFakeGw2Api([{ ...gizmo, id: 1, name: 'Plain', flags: [], description: undefined, details: undefined }]);
     const { db, importer } = createTestImporter(api.url);
     await runImport(importer);
@@ -120,7 +120,7 @@ describe('writeStaticExport', () => {
   });
   afterEach(() => api.close());
 
-  it('leert den Zielordner und schreibt kompaktes JSON', async () => {
+  it('empties the target folder and writes compact JSON', async () => {
     const { db, importer } = createTestImporter(api.url);
     await runImport(importer);
     const data = buildStaticExport(db);
@@ -137,7 +137,7 @@ describe('writeStaticExport', () => {
 
     for (const file of onDisk) {
       const text = fs.readFileSync(path.join(out, file), 'utf8');
-      assert.ok(!text.includes('\n') && !text.includes('  '), `${file} ist kompakt`);
+      assert.ok(!text.includes('\n') && !text.includes('  '), `${file} is compact`);
       JSON.parse(text);
     }
     assert.equal(written.totalBytes, written.files.reduce((sum, f) => sum + f.bytes, 0));
@@ -148,13 +148,13 @@ describe('writeStaticExport', () => {
     assert.equal(meta.schemaVersion, STATIC_SCHEMA_VERSION);
 
     const summary = describeWritten(data, written, out);
-    assert.match(summary.at(-1)!, /^Gesamt: 5 Dateien, /);
-    assert.ok(!summary.some((l) => l.startsWith('Warnung')));
+    assert.match(summary.at(-1)!, /^Total: 5 files, /);
+    assert.ok(!summary.some((l) => l.startsWith('Warning')));
   });
 });
 
 describe('openForExport', () => {
-  it('öffnet nur lesend', () => {
+  it('opens read-only', () => {
     const file = path.join(tmpDir(), 'items.db');
     openDatabase(file).close();
     const db = openForExport(file);
@@ -165,15 +165,15 @@ describe('openForExport', () => {
     }
   });
 
-  it('meldet fehlende und veraltete Datenbanken', () => {
+  it('reports missing and outdated databases', () => {
     const dir = tmpDir();
-    assert.throws(() => openForExport(path.join(dir, 'fehlt.db')), /nicht gefunden/);
+    assert.throws(() => openForExport(path.join(dir, 'missing.db')), /not found/);
 
     const old = path.join(dir, 'old.db');
     const raw = new DatabaseSync(old);
     raw.exec(migrations[0]!);
     raw.exec('PRAGMA user_version = 1');
     raw.close();
-    assert.throws(() => openForExport(old), /Schema 1/);
+    assert.throws(() => openForExport(old), /schema 1/);
   });
 });

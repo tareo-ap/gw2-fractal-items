@@ -39,7 +39,7 @@ export function ItemDetailPage({ id, backHref }: { id: number; backHref: string 
             {import.meta.env.VITE_DATA_MODE === 'static' ? (
               <TestInfo item={item.data} />
             ) : (
-              /* key: Formular beim Wechsel auf ein anderes Item zurücksetzen */
+              /* key: reset the form when switching to another item */
               <TestPanel key={item.data.id} item={item.data} />
             )}
             <section className="panel">
@@ -53,7 +53,7 @@ export function ItemDetailPage({ id, backHref }: { id: number; backHref: string 
   );
 }
 
-/** Kasten im Stil des Ingame-Tooltips. */
+/** Box in the style of the in-game tooltip. */
 function Tooltip({ item }: { item: ItemDetail }) {
   const { t } = useT();
   return (
@@ -118,7 +118,7 @@ function ChatLink({ code }: { code: string }) {
       await navigator.clipboard.writeText(code);
       setCopied('ok');
     } catch {
-      setCopied('fail'); // z. B. ohne HTTPS im Homelab: dann manuell markieren
+      setCopied('fail'); // e.g. without HTTPS in a home lab: then select manually
     }
     window.setTimeout(() => setCopied(null), 2000);
   };

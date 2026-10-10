@@ -2,14 +2,14 @@ import { createContext, createElement, useCallback, useContext, useEffect, useMe
 import type { Lang } from '../../../shared/types';
 import { ApiError } from './apiError';
 
-// Zwei Wörterbücher ohne Fremdbibliothek. Englisch ist Standard und gibt die Schlüssel vor;
-// Deutsch ist als Record<Key, string> typisiert, fehlt dort ein Schlüssel, bricht der Typecheck ab.
-// Platzhalter stehen als {name} im Text und werden von t() ersetzt.
-// Nicht übersetzt werden Werte aus der API, nach denen gefiltert wird (game_types, Typen, Seltenheiten, Flags)
-// und die Feldnamen im Tab "Änderungen".
+// Two dictionaries without an external library. English is the default and defines the keys;
+// German is typed as Record<Key, string>; if a key is missing there, the typecheck fails.
+// Placeholders appear as {name} in the text and are replaced by t().
+// Values from the API that are filtered on (game_types, types, rarities, flags) are not translated,
+// nor are the field names in the "Changes" tab.
 
 const en = {
-  // Kopfzeile und Tabs
+  // Header and tabs
   'header.statsUnavailable': 'Statistics unavailable',
   'header.lastUpdate': 'Last update',
   'header.updateLabel': 'Update:',
@@ -29,7 +29,7 @@ const en = {
   'tab.candidatesTitle': 'Fractal candidates',
   'tab.changesTitle': 'Entries in the latest update',
 
-  // Einstellungen und Fußzeile
+  // Settings and footer
   'settings.open': 'Settings',
   'settings.title': 'Settings',
   'settings.theme': 'Color scheme',
@@ -45,7 +45,7 @@ const en = {
   'width.full': 'Full width',
   'footer.legal': 'Guild Wars 2 © ArenaNet, LLC. Item data and icons from the official GW2 API. Not affiliated with ArenaNet.',
 
-  // Allgemein
+  // General
   'app.notFound': 'This page does not exist.',
   'app.toList': 'Back to the list',
   'common.retry': 'Try again',
@@ -54,7 +54,7 @@ const en = {
   'error.unreachable': 'Backend not reachable',
   'error.dataUnreachable': 'Data files not reachable',
 
-  // Teststatus, Änderungsarten
+  // Test status, change kinds
   'test.untested': 'Untested',
   'test.works': 'Works',
   'test.broken': 'Does not work',
@@ -65,7 +65,7 @@ const en = {
   'change.changed': 'Changed',
   'change.removed': 'Removed',
 
-  // Import-Phasen und Update-Button
+  // Import phases and update button
   'phase.idle': 'Ready',
   'phase.ids': 'Loading item IDs',
   'phase.details': 'Loading item details',
@@ -104,7 +104,7 @@ const en = {
   'update.describeRunning': 'running',
   'update.describeFailed': 'failed',
 
-  // Filter
+  // Filters
   'filter.aria': 'Search and filters',
   'filter.search': 'Search',
   'filter.searchPlaceholder': 'Name, description, ID or chat link',
@@ -136,7 +136,7 @@ const en = {
   'filter.includeRemoved': 'Show removed items',
   'filter.clear': 'clear',
 
-  // Liste
+  // List
   'list.items': '{n} items',
   'list.loading': 'Loading …',
   'list.refreshing': ' · refreshing …',
@@ -183,7 +183,7 @@ const en = {
   'history.empty': 'No changes recorded.',
   'history.fields': 'Fields: {fields}',
 
-  // Teststatus-Formular
+  // Test status form
   'testPanel.title': 'Test status',
   'testPanel.retestLabel': 'Retest:',
   'testPanel.retestText': 'The game_types have changed since the last test.',
@@ -199,7 +199,7 @@ const en = {
   'testPanel.confirmHint': 'Saving without changes confirms the status for the current game_types.',
   'testPanel.readOnly': 'Test results are maintained in the local version and published with each data update.',
 
-  // Seite "Änderungen"
+  // "Changes" page
   'focus.all': 'All',
   'focus.gameTypes': 'game_types changed',
   'focus.dungeonGained': 'Dungeon added',
@@ -254,7 +254,7 @@ const en = {
   'value.more': 'more',
   'value.less': 'less',
 
-  // Stände verwalten
+  // Manage states
   'manage.title': 'Manage states',
   'manage.hint': 'Failed updates and completed updates without changes can be deleted. States with changes stay, otherwise the history would be falsified.',
   'manage.delete': 'Delete',
@@ -520,7 +520,7 @@ const dictionaries: Record<Lang, Record<Key, string>> = { en, de };
 const LANG_KEY = 'gw2items.lang';
 const LOCALES: Record<Lang, string> = { en: 'en-GB', de: 'de-DE' };
 
-// localStorage kann gesperrt sein (privater Modus o. ä.), daher immer mit try/catch.
+// localStorage can be blocked (private mode etc.), so always use try/catch.
 function loadLang(): Lang {
   try {
     return localStorage.getItem(LANG_KEY) === 'de' ? 'de' : 'en';
@@ -533,7 +533,7 @@ function saveLang(lang: Lang) {
   try {
     localStorage.setItem(LANG_KEY, lang);
   } catch {
-    /* egal */
+    /* ignore */
   }
 }
 
@@ -543,9 +543,9 @@ export interface I18n {
   lang: Lang;
   setLang: (lang: Lang) => void;
   t: TFunction;
-  /** Zahl im Format der Sprache (en-GB: 74,300 · de-DE: 74.300). */
+  /** Number in the language's format (en-GB: 74,300 · de-DE: 74.300). */
   formatNumber: (n: number) => string;
-  /** Datum und Uhrzeit im Format der Sprache; null → "–". */
+  /** Date and time in the language's format; null -> "–". */
   formatDateTime: (iso: string | null) => string;
 }
 
@@ -571,7 +571,7 @@ function createI18n(lang: Lang, setLang: (lang: Lang) => void): I18n {
 
 const I18nContext = createContext<I18n>(createI18n('en', () => {}));
 
-/** Stellt Sprache und Übersetzung bereit, merkt sich die Wahl im Browser und setzt <html lang>. */
+/** Provides language and translation, remembers the choice in the browser and sets <html lang>. */
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>(loadLang);
   const setLang = useCallback((next: Lang) => {
@@ -589,7 +589,7 @@ export function useT(): I18n {
   return useContext(I18nContext);
 }
 
-/** Text zu einem Fehler: Netzwerkfehler (Status 0) übersetzt, Server-Meldungen bleiben wie geliefert. */
+/** Text for an error: network errors (status 0) are translated, server messages stay as delivered. */
 export function errorText(error: Error, t: TFunction): string {
   return error instanceof ApiError && error.status === 0 ? t(import.meta.env.VITE_DATA_MODE === 'static' ? 'error.dataUnreachable' : 'error.unreachable') : error.message;
 }

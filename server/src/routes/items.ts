@@ -23,30 +23,30 @@ import {
   wikiUrl,
 } from '../../../shared/rules.js';
 
-// Die Regeln selbst (Konstanten, Eingabe-Prüfung, CSV-Format) liegen in shared/, damit die statische Fassung
-// im Browser dieselben nutzt. Hier bleiben die SQL-Fassungen; andere Module importieren weiter von hier.
+// The rules themselves (constants, input validation, CSV format) live in shared/ so the static version
+// in the browser uses the same ones. The SQL versions stay here; other modules keep importing from here.
 export { GAME_TYPES, RARITIES, ValidationError, oneOf, parseItemListQuery, parseLang, toCsv, toJson, exportFilename, EXPORT_FIELDS, itemIdFromChatLink, wikiUrl };
 export type { ExportRow, ParsedItemListQuery };
 
-// "Neu testen": Es gibt ein Testergebnis, aber game_types sind heute anders als beim Test.
-// Beide Spalten enthalten sortierte JSON-Arrays (siehe normalizeGameTypes), daher reicht ein
-// String-Vergleich für den Mengenvergleich.
+// "Retest": there is a test result, but game_types differ today from when it was tested.
+// Both columns contain sorted JSON arrays (see normalizeGameTypes), so a
+// string comparison is enough for the set comparison.
 export const NEEDS_RETEST_SQL = `(t.status IS NOT NULL AND t.status <> 'untested' AND t.game_types_at_test IS NOT i.game_types)`;
 
-// Tonics: Verwandlungs-Items. Teils als Gizmo, teils als Consumable (Untertyp Generic, Food, Utility …),
-// mal mit Flag "Tonic", mal nur am Namen erkennbar. Untertyp Unlock sind die zugehörigen Rezepte.
+// Tonics: transformation items. Partly Gizmo, partly Consumable (subtype Generic, Food, Utility …),
+// sometimes with the flag "Tonic", sometimes recognizable only by name. Subtype Unlock are the matching recipes.
 export const TONIC_SQL = `(i.type IN ('Gizmo', 'Consumable')
   AND (EXISTS (SELECT 1 FROM json_each(i.flags) WHERE value = 'Tonic') OR i.name LIKE '%Tonic%')
   AND (i.subtype IS NULL OR i.subtype <> '${TONIC_EXCLUDED_SUBTYPE}'))`;
 
-// Platzhalter: leerer Name, kein Icon oder interner Name wie "((906936))" bzw. "[[913817]]". Erwartet den Alias i.
+// Placeholders: empty name, no icon, or internal name such as "((906936))" or "[[913817]]". Expects the alias i.
 export const PLACEHOLDER_SQL = `(trim(i.name) = '' OR i.icon IS NULL OR i.name GLOB '((*))' OR i.name GLOB '[[][[]*]]')`;
 
 const RARITY_RANK_SQL = `CASE i.rarity ${RARITIES.map((r, idx) => `WHEN '${r}' THEN ${idx}`).join(' ')} ELSE 99 END`;
 
-// Sprache: Bei 'de' kommen Name und Beschreibung aus item_texts (Alias d, per LEFT JOIN), sonst aus items.
-// Fehlt der deutsche Text, gilt der englische. Platzhalter-/Tonic-Prüfungen bleiben beim englischen Namen.
-/** JOIN auf die Texte der Sprache; leer bei Englisch. Erwartet den Alias i. */
+// Language: for 'de', name and description come from item_texts (alias d, via LEFT JOIN), otherwise from items.
+// If the German text is missing, the English one is used. Placeholder/tonic checks stay on the English name.
+/** JOIN on the language's texts; empty for English. Expects the alias i. */
 export const textsJoin = (lang: Lang) => (lang === 'de' ? `LEFT JOIN item_texts d ON d.item_id = i.id AND d.lang = 'de'` : '');
 export const nameSql = (lang: Lang) => (lang === 'de' ? `COALESCE(NULLIF(d.name, ''), i.name)` : 'i.name');
 const descriptionSql = (lang: Lang) => (lang === 'de' ? `CASE WHEN d.item_id IS NOT NULL THEN d.description ELSE i.description END` : 'i.description');
@@ -91,13 +91,13 @@ const selectItemSql = (lang: Lang) => `
   FROM items i ${textsJoin(lang)} LEFT JOIN item_tests t ON t.item_id = i.id`;
 
 // ---------------------------------------------------------------------------
-// Suche
+// Search
 // ---------------------------------------------------------------------------
 
 /**
- * Baut aus der Benutzereingabe eine sichere FTS5-Abfrage: Jedes Wort wird in Anführungszeichen
- * gesetzt (damit Operatoren wie AND, NEAR, "-" oder ":" nicht ausgewertet werden) und als
- * Präfix gesucht. Alle Wörter müssen vorkommen. Gibt null zurück, wenn kein Suchwort übrig bleibt.
+ * Builds a safe FTS5 query from user input: every word is put in quotes
+ * (so operators such as AND, NEAR, "-" or ":" are not evaluated) and searched as a
+ * prefix. All words must occur. Returns null if no search word is left.
  */
 export function toFtsQuery(input: string): string | null {
   const terms = input
@@ -108,10 +108,10 @@ export function toFtsQuery(input: string): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// Abfragen
+// Queries
 // ---------------------------------------------------------------------------
 
-/** WHERE-Klausel samt Parametern für die Filter der Liste (Aliase i und t). Gemeinsam für Liste und Export. */
+/** WHERE clause with parameters for the list filters (aliases i and t). Shared by list and export. */
 function buildWhere(query: ParsedItemListQuery): { whereSql: string; params: SQLInputValue[] } {
   const where: string[] = [];
   const params: SQLInputValue[] = [];
@@ -127,7 +127,7 @@ function buildWhere(query: ParsedItemListQuery): { whereSql: string; params: SQL
       const fts = toFtsQuery(query.q);
       if (fts) {
         if (query.lang === 'de') {
-          // Deutsch: Treffer im deutschen oder im englischen Index genügt (Eigennamen, Chat-Begriffe).
+          // German: a hit in the German or the English index is enough (proper names, chat terms).
           where.push('(i.id IN (SELECT rowid FROM items_fts_de WHERE items_fts_de MATCH ?) OR i.id IN (SELECT rowid FROM items_fts WHERE items_fts MATCH ?))');
           params.push(fts, fts);
         } else {
@@ -142,12 +142,12 @@ function buildWhere(query: ParsedItemListQuery): { whereSql: string; params: SQL
   if (query.view === 'consumable') where.push(`i.type = 'Consumable'`);
   if (query.view === 'tonic') where.push(TONIC_SQL);
   if (query.candidate !== 'all') where.push(`i.is_candidate = ${query.candidate === 'yes' ? 1 : 0}`);
-  // In der Tonic-Ansicht gilt hideCommon nicht: Tonics können den Untertyp Food oder Utility haben.
+  // In the tonic view hideCommon does not apply: tonics can have the subtype Food or Utility.
   if (query.hideCommon && query.view !== 'tonic') {
     where.push(`NOT (i.type = 'Consumable' AND i.subtype IS NOT NULL AND i.subtype IN (${HIDE_COMMON_SUBTYPES.map((v) => `'${v}'`).join(', ')}))`);
-    // Mastery Points und Emote Tomes sind Freischaltungen ohne Nutzen im Fraktal, aber vom Untertyp
-    // Immediate bzw. Generic. Viele Mastery Points heißen " Mastery Point" mit führendem Leerzeichen.
-    // Währungspakete wie "300 Geodes" sind Immediate und beginnen mit einer Zahl und Leerzeichen.
+    // Mastery Points and Emote Tomes are unlocks with no use in the fractals, but of subtype
+    // Immediate or Generic. Many Mastery Points are named " Mastery Point" with a leading space.
+    // Currency packs such as "300 Geodes" are Immediate and start with a number and a space.
     where.push(
       `NOT (i.type = 'Consumable' AND (trim(i.name) = 'Mastery Point' OR i.name LIKE '%Emote Tome'
         OR (COALESCE(i.subtype, '') = 'Immediate' AND i.name GLOB '[0-9]* *')))`,
@@ -197,7 +197,7 @@ export function listItems(db: DatabaseSync, query: ParsedItemListQuery): ItemLis
   return { items: rows.map(toListItem), total, page: query.page, pageSize: query.pageSize };
 }
 
-/** Alle Treffer der Filter (ohne Paginierung) in der gewählten Sortierung, für den CSV/JSON-Export. */
+/** All filter matches (without pagination) in the chosen sort order, for the CSV/JSON export. */
 export function exportItems(db: DatabaseSync, query: ParsedItemListQuery): ExportRow[] {
   const { whereSql, params } = buildWhere(query);
   const direction = query.order === 'desc' ? 'DESC' : 'ASC';
@@ -292,21 +292,21 @@ export function getItemDetail(db: DatabaseSync, id: number, lang: Lang = 'en'): 
   };
 }
 
-/** Prüft den Body von PUT /api/items/:id/test. Wirft ValidationError. */
+/** Validates the body of PUT /api/items/:id/test. Throws ValidationError. */
 export function parseItemTestUpdate(body: unknown): ItemTestUpdate {
-  if (!isObject(body)) throw new ValidationError('Body muss ein JSON-Objekt sein');
+  if (!isObject(body)) throw new ValidationError('Body must be a JSON object');
   const status = oneOf('status', typeof body.status === 'string' ? body.status : '-', TEST_STATUSES);
-  if (!status) throw new ValidationError('status fehlt');
+  if (!status) throw new ValidationError('status is missing');
   const note = body.note;
   if (note !== undefined && note !== null && typeof note !== 'string') {
-    throw new ValidationError('note muss ein Text oder null sein');
+    throw new ValidationError('note must be a string or null');
   }
-  if (typeof note === 'string' && note.length > 5000) throw new ValidationError('note ist zu lang (max. 5000 Zeichen)');
+  if (typeof note === 'string' && note.length > 5000) throw new ValidationError('note is too long (max. 5000 characters)');
   const trimmed = typeof note === 'string' ? note.trim() : null;
   return { status, note: trimmed ? trimmed : null };
 }
 
-/** Speichert das Testergebnis. Merkt sich die aktuellen game_types für die "neu testen"-Prüfung. */
+/** Stores the test result. Remembers the current game_types for the "retest" check. */
 export function saveItemTest(db: DatabaseSync, id: number, update: ItemTestUpdate): boolean {
   const result = db
     .prepare(

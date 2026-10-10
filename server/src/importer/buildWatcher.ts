@@ -5,10 +5,10 @@ import { describeSchedule, nextCheckAt, type CheckScheduleConfig } from './check
 import { ImportAlreadyRunningError, type Importer } from './importer.js';
 
 /**
- * Prüft regelmäßig die Game-Build-ID und startet einen Import, wenn sie sich seit dem letzten
- * abgeschlossenen Update geändert hat. Ohne abgeschlossenes Update passiert nichts: Der erste Vollimport bleibt manuell.
- * Prüfzeitpunkte kommen aus dem Zeitplan (nextCheckAt), direkt nach dem Start wird nicht geprüft.
- * Die Prüfungen laufen als setTimeout-Kette, damit sie sich nie überlappen. Fehler werden geloggt, nie geworfen.
+ * Regularly checks the game build ID and starts an import if it has changed since the last
+ * completed update. Without a completed update nothing happens: the first full import stays manual.
+ * Check times come from the schedule (nextCheckAt); no check happens right after startup.
+ * The checks run as a setTimeout chain so they never overlap. Errors are logged, never thrown.
  */
 export class BuildWatcher {
   private timer: NodeJS.Timeout | null = null;
@@ -49,13 +49,13 @@ export class BuildWatcher {
     };
   }
 
-  /** Eine Prüfung sofort ausführen (auch für Tests). Wirft nie. */
+  /** Run a check immediately (also for tests). Never throws. */
   async checkNow(): Promise<AutoCheckResult> {
     let result: AutoCheckResult;
     try {
       result = await this.check();
     } catch (err) {
-      console.error('Automatische Update-Prüfung fehlgeschlagen:', err);
+      console.error('Automatic update check failed:', err);
       result = 'error';
     }
     this.lastCheckAt = new Date().toISOString();
@@ -66,7 +66,7 @@ export class BuildWatcher {
   private async check(): Promise<AutoCheckResult> {
     const build = await this.client.getBuildId();
     if (build === null) {
-      console.error('Automatische Update-Prüfung: Build-ID konnte nicht gelesen werden');
+      console.error('Automatic update check: could not read build ID');
       return 'error';
     }
     this.lastSeenBuild = build;
@@ -84,7 +84,7 @@ export class BuildWatcher {
       if (err instanceof ImportAlreadyRunningError) return 'running';
       throw err;
     }
-    console.log(`Neue Game-Build ${build} (zuletzt ${baseline.build_id}): Update gestartet`);
+    console.log(`New game build ${build} (last ${baseline.build_id}): update started`);
     return 'started';
   }
 
@@ -92,11 +92,11 @@ export class BuildWatcher {
     const at = nextCheckAt(after, this.schedule);
     this.nextCheckAt = at.toISOString();
     this.timer = setTimeout(() => {
-      // Timer können minimal zu früh feuern: ab dem geplanten Zeitpunkt weiterplanen, sonst gäbe es einen Doppel-Check.
+      // Timers can fire slightly early: keep scheduling from the planned time, otherwise there would be a double check.
       void this.checkNow().finally(() => {
         if (!this.stopped) this.scheduleNext(new Date(Math.max(Date.now(), at.getTime())));
       });
     }, Math.max(0, at.getTime() - Date.now()));
-    this.timer.unref(); // hält den Prozess nicht am Leben
+    this.timer.unref(); // does not keep the process alive
   }
 }

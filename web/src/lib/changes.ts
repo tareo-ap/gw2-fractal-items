@@ -1,13 +1,13 @@
 import type { ChangeFocus, ChangeKind, ItemView } from '../../../shared/types';
 import { PAGE_SIZE, VIEWS } from './filters';
 
-// Filter der Änderungsseite /updates/:id. Wie in filters.ts stehen sie in der URL, Standardwerte fehlen dort.
+// Filters of the changes page /updates/:id. As in filters.ts they live in the URL; default values are omitted there.
 
 export const CHANGE_KINDS: ChangeKind[] = ['changed', 'added', 'removed'];
 export const FOCUSES: ChangeFocus[] = ['all', 'gameTypes', 'dungeonGained', 'dungeonLost'];
 
 export interface ChangesFilters {
-  kind: ChangeKind[]; // leer = alle Arten
+  kind: ChangeKind[]; // empty = all kinds
   focus: ChangeFocus;
   type: ItemView;
   q: string;
@@ -53,13 +53,13 @@ export function changesUrl(updateId: number, f: ChangesFilters = DEFAULT_CHANGES
   return qs ? `/updates/${updateId}?${qs}` : `/updates/${updateId}`;
 }
 
-/** Vergleich zweier Stände: /updates/compare?from=A&to=B plus Filter. */
+/** Comparison of two states: /updates/compare?from=A&to=B plus filters. */
 export function compareUrl(from: number, to: number, f: ChangesFilters = DEFAULT_CHANGES_FILTERS): string {
   const p = changesToParams(f);
   return `/updates/compare?from=${from}&to=${to}${p.size ? `&${p}` : ''}`;
 }
 
-/** Query-String für GET /api/updates/:id/changes und /api/updates/compare (dort kommen from und to dazu). */
+/** Query string for GET /api/updates/:id/changes and /api/updates/compare (which add from and to). */
 export function toChangesApiQuery(f: ChangesFilters): string {
   const p = changesToParams(f);
   p.set('hidePlaceholders', String(f.hidePlaceholders));

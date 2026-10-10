@@ -1,11 +1,11 @@
-// Datenbankschema als nummerierte Migrationen.
-// Neue Änderungen immer als neuen Eintrag anhängen, bestehende nie verändern.
-// Welche Migrationen gelaufen sind, merkt sich SQLite in PRAGMA user_version.
+// Database schema as numbered migrations.
+// Always append new changes as a new entry, never modify existing ones.
+// SQLite tracks which migrations have run in PRAGMA user_version.
 
 export const migrations: string[] = [
-  // 1: Grundschema laut PRD
+  // 1: base schema
   `
-  -- Ein Eintrag pro Update-Lauf (auch der erste Vollimport ist ein Update).
+  -- One entry per update run (the first full import is an update too).
   CREATE TABLE updates (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     started_at  TEXT    NOT NULL,
@@ -18,23 +18,23 @@ export const migrations: string[] = [
     error       TEXT
   );
 
-  -- Aktueller Stand jedes Items. raw_json enthält die komplette API-Antwort,
-  -- die übrigen Spalten sind daraus abgeleitet, damit man danach filtern kann.
+  -- Current state of each item. raw_json holds the complete API response,
+  -- the other columns are derived from it so they can be filtered on.
   CREATE TABLE items (
     id                  INTEGER PRIMARY KEY,
     name                TEXT    NOT NULL,
     description         TEXT,
     type                TEXT    NOT NULL,
-    subtype             TEXT,             -- details.type, z. B. Food, Utility
+    subtype             TEXT,             -- details.type, e.g. Food, Utility
     rarity              TEXT    NOT NULL,
     level               INTEGER NOT NULL,
     icon                TEXT,
     chat_link           TEXT,
-    game_types          TEXT    NOT NULL, -- JSON-Array
-    flags               TEXT    NOT NULL, -- JSON-Array
-    is_candidate        INTEGER NOT NULL, -- 1, wenn game_types "Dungeon" enthält
+    game_types          TEXT    NOT NULL, -- JSON array
+    flags               TEXT    NOT NULL, -- JSON array
+    is_candidate        INTEGER NOT NULL, -- 1 if game_types contains "Dungeon"
     raw_json            TEXT    NOT NULL,
-    hash                TEXT    NOT NULL, -- Hash über raw_json, für den Vergleich beim Update
+    hash                TEXT    NOT NULL, -- Hash of raw_json, for comparison on update
     first_seen_update   INTEGER NOT NULL REFERENCES updates(id),
     last_changed_update INTEGER NOT NULL REFERENCES updates(id),
     removed             INTEGER NOT NULL DEFAULT 0
@@ -42,35 +42,35 @@ export const migrations: string[] = [
   CREATE INDEX items_type_candidate ON items(type, is_candidate);
   CREATE INDEX items_last_changed ON items(last_changed_update);
 
-  -- Was sich an einem Item in einem Update geändert hat.
+  -- What changed on an item in an update.
   CREATE TABLE item_changes (
     update_id         INTEGER NOT NULL REFERENCES updates(id),
     item_id           INTEGER NOT NULL,
     kind              TEXT    NOT NULL, -- added | changed | removed
-    changed_fields    TEXT,             -- JSON-Array der geänderten Top-Level-Felder
+    changed_fields    TEXT,             -- JSON array of the changed top-level fields
     game_types_before TEXT,
     game_types_after  TEXT,
     PRIMARY KEY (update_id, item_id)
   );
   CREATE INDEX item_changes_item ON item_changes(item_id);
 
-  -- Ergebnis eigener Tests im Spiel.
+  -- Result of own in-game tests.
   CREATE TABLE item_tests (
     item_id            INTEGER PRIMARY KEY,
     status             TEXT NOT NULL DEFAULT 'untested', -- untested | works | broken
     note               TEXT,
     tested_at          TEXT,
-    game_types_at_test TEXT -- Stand beim Test, um "neu testen" zu erkennen
+    game_types_at_test TEXT -- State at test time, to detect "retest"
   );
 
-  -- Volltextsuche über Name und Beschreibung. Wird beim Import mitgepflegt.
+  -- Full-text search over name and description. Maintained during import.
   CREATE VIRTUAL TABLE items_fts USING fts5(name, description, content='items', content_rowid='id');
   `,
-  // 2: Volltextindex per Trigger synchron halten, zusätzliche Indizes für die Filter
+  // 2: keep the full-text index in sync via triggers, additional indexes for the filters
   `
-  -- items_fts ist eine "external content"-Tabelle: Sie speichert nur den Index, die Texte
-  -- liegen in items. Beim Löschen/Ändern muss FTS5 die alten Werte über das spezielle
-  -- 'delete'-Kommando bekommen, sonst bleibt der Index inkonsistent.
+  -- items_fts is an "external content" table: it only stores the index, the texts
+  -- live in items. On delete/update FTS5 must receive the old values via the special
+  -- 'delete' command, otherwise the index becomes inconsistent.
   CREATE TRIGGER items_fts_insert AFTER INSERT ON items BEGIN
     INSERT INTO items_fts(rowid, name, description) VALUES (new.id, new.name, new.description);
   END;
@@ -81,20 +81,20 @@ export const migrations: string[] = [
     INSERT INTO items_fts(items_fts, rowid, name, description) VALUES ('delete', old.id, old.name, old.description);
     INSERT INTO items_fts(rowid, name, description) VALUES (new.id, new.name, new.description);
   END;
-  -- Falls schon Daten ohne Trigger geschrieben wurden: Index einmal neu aufbauen.
+  -- If data was already written without triggers: rebuild the index once.
   INSERT INTO items_fts(items_fts) VALUES ('rebuild');
 
   CREATE INDEX items_chat_link ON items(chat_link);
   CREATE INDEX item_changes_update ON item_changes(update_id, kind);
   `,
-  // 3: alte und neue Werte der geänderten Top-Level-Felder (JSON-Objekte) für die Ansicht "Änderungen"
+  // 3: old and new values of the changed top-level fields (JSON objects) for the "Changes" view
   `
   ALTER TABLE item_changes ADD COLUMN values_before TEXT;
   ALTER TABLE item_changes ADD COLUMN values_after TEXT;
   `,
-  // 4: übersetzte Namen und Beschreibungen (bisher nur lang=de), getrennt vom englischen Stand in items
+  // 4: translated names and descriptions (so far only lang=de), separate from the English state in items
   `
-  -- Hash, Diff und item_changes kennen diese Tabelle nicht: Reine Übersetzungsänderungen gelten nicht als Änderung.
+  -- Hash, diff and item_changes do not know this table: pure translation changes do not count as a change.
   CREATE TABLE item_texts (
     item_id     INTEGER NOT NULL,
     lang        TEXT    NOT NULL, -- de
@@ -103,7 +103,7 @@ export const migrations: string[] = [
     PRIMARY KEY (item_id, lang)
   );
 
-  -- Volltextindex für die deutschen Texte (eigener Inhalt, rowid = item_id). Der Importer pflegt ihn mit.
+  -- Full-text index for the German texts (own content, rowid = item_id). The importer maintains it.
   CREATE VIRTUAL TABLE items_fts_de USING fts5(name, description);
   `,
 ];

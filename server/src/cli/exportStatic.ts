@@ -19,16 +19,16 @@ import { migrations } from '../db/schema.js';
 import { NEEDS_RETEST_SQL } from '../routes/items.js';
 import { listUpdates } from '../routes/updates.js';
 
-// Exportiert die Datenbank als JSON-Dateien für die statische Fassung auf GitHub Pages (siehe docs/PRD.md,
-// Meilenstein 7). Aufruf: npm run export:static [-- datei.db]. Ausgabe: site-data/ im Repo-Root (wird vorher geleert).
+// Exports the database as JSON files for the static version on GitHub Pages.
+// Usage: npm run export:static [-- file.db]. Output: site-data/ in the repo root (emptied beforehand).
 
-/** Ordner im Repo-Root, der committet und beim Pages-Build nach web/dist/data kopiert wird. */
+/** Folder in the repo root that is committed and copied to web/dist/data during the Pages build. */
 export const DEFAULT_OUT_DIR = path.resolve(import.meta.dirname, '../../../site-data');
 
-/** Ab dieser Größe (unkomprimiert) warnt das Skript. */
+/** The script warns from this size (uncompressed). */
 export const SIZE_WARNING_BYTES = 15 * 1024 * 1024;
 
-/** Gesamter Inhalt des Exports, bevor er in Dateien geschrieben wird. */
+/** Entire content of the export before it is written to files. */
 export interface StaticExport {
   meta: StaticMeta;
   items: StaticItem[];
@@ -76,17 +76,17 @@ interface ChangeRowSql {
 }
 
 /**
- * Liest die Daten für die statische Fassung. Veröffentlicht werden
- * - alle nicht entfernten Fractal-Kandidaten vom Typ Gizmo oder Consumable und
- * - alle Items, die in einer Änderung ab dem zweiten abgeschlossenen Update vorkommen (auch entfernte),
- *   damit z. B. "Dungeon weg" sichtbar bleibt.
- * Die Änderungen des ersten abgeschlossenen Updates (Vollimport, alles "neu") gehören nicht dazu.
+* Reads the data for the static version. Published are
+* - all non-removed fractal candidates of type Gizmo or Consumable, and
+* - all items that appear in a change from the second completed update on (including removed ones),
+*   so that e.g. "Dungeon gone" stays visible.
+* The changes of the first completed update (full import, everything "new") are not included.
  */
 export function buildStaticExport(db: DatabaseSync, now: Date = new Date()): StaticExport {
   const updates: StaticUpdate[] = listUpdates(db)
     .filter((u) => u.status === 'done')
     .map(({ deletable: _deletable, deleteBlockedReason: _reason, ...rest }) => rest);
-  // listUpdates liefert die neuesten zuerst, der Vollimport ist der letzte.
+  // listUpdates returns the newest first; the full import is the last one.
   const baselineId = updates.length > 0 ? updates[updates.length - 1]!.id : -1;
 
   const itemRows = db
@@ -163,7 +163,7 @@ function toStaticItem(row: ItemRow): StaticItem {
     if (row.de_name) item.de.name = row.de_name;
     if (row.de_description !== null) item.de.description = row.de_description;
   }
-  // Der Chat-Link folgt fast immer aus der ID; nur Abweichungen (und fehlende, als "") werden gespeichert.
+  // The chat link almost always follows from the ID; only deviations (and missing ones, as "") are stored.
   if (row.chat_link !== chatLinkForId(row.id)) item.chatLink = row.chat_link ?? '';
   if (row.test_status !== null) {
     item.test = { status: row.test_status as TestStatus };
@@ -175,7 +175,7 @@ function toStaticItem(row: ItemRow): StaticItem {
   return item;
 }
 
-/** Die API-Antwort ohne die Felder, die schon in items.json stehen. */
+/** The API response without the fields already present in items.json. */
 function restOfRaw(rawJson: string): Record<string, unknown> {
   const raw = JSON.parse(rawJson) as Record<string, unknown>;
   for (const field of DETAIL_OMITTED_FIELDS) delete raw[field];
@@ -189,7 +189,7 @@ function toStaticChange(row: ChangeRowSql): StaticChange {
   if (row.game_types_after) change.gameTypesAfter = JSON.parse(row.game_types_after) as GameType[];
   if (row.values_before) change.valuesBefore = JSON.parse(row.values_before) as Record<string, unknown>;
   if (row.values_after) change.valuesAfter = JSON.parse(row.values_after) as Record<string, unknown>;
-  // Neue und entfernte Items zeigt die Änderungsseite mit dem Stand aus der API-Antwort.
+  // The changes page shows new and removed items with the state from the API response.
   if (row.kind !== 'changed') change.summary = summarize(JSON.parse(row.raw_json) as Record<string, unknown>);
   return change;
 }
@@ -199,7 +199,7 @@ export interface WrittenFiles {
   totalBytes: number;
 }
 
-/** Leert outDir und schreibt alle Dateien als kompaktes JSON (ohne Einrückung). */
+/** Empties outDir and writes all files as compact JSON (no indentation). */
 export function writeStaticExport(data: StaticExport, outDir: string): WrittenFiles {
   fs.rmSync(outDir, { recursive: true, force: true });
   fs.mkdirSync(path.join(outDir, 'details'), { recursive: true });
@@ -218,17 +218,17 @@ export function writeStaticExport(data: StaticExport, outDir: string): WrittenFi
   return { files, totalBytes: files.reduce((sum, f) => sum + f.bytes, 0) };
 }
 
-/** Öffnet die Datenbank nur lesend (ein laufender Server stört nicht) und prüft das Schema. */
+/** Opens the database read-only (a running server does not interfere) and checks the schema. */
 export function openForExport(dbPath: string): DatabaseSync {
-  if (!fs.existsSync(dbPath)) throw new Error(`Datenbank nicht gefunden: ${dbPath}`);
+  if (!fs.existsSync(dbPath)) throw new Error(`Database not found: ${dbPath}`);
   const db = new DatabaseSync(dbPath, { readOnly: true });
   const { user_version: version } = db.prepare('PRAGMA user_version').get() as { user_version: number };
   if (version !== migrations.length) {
     db.close();
     throw new Error(
       version < migrations.length
-        ? `Die Datenbank hat das Schema ${version}, benötigt wird ${migrations.length}. Bitte einmal den Server starten, damit sie migriert wird.`
-        : `Die Datenbank stammt von einer neueren Version (Schema ${version}, bekannt: ${migrations.length}). Bitte die App zuerst aktualisieren.`,
+        ? `The database has schema ${version}, ${migrations.length} is required. Start the server once so it gets migrated.`
+        : `The database comes from a newer version (schema ${version}, known: ${migrations.length}). Please update the app first.`,
     );
   }
   return db;
@@ -239,23 +239,23 @@ const formatBytes = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 
 export function describeWritten(data: StaticExport, written: WrittenFiles, outDir: string): string[] {
   const details = written.files.filter((f) => f.path.startsWith('details/'));
   const lines = [
-    `Export fertig: ${data.items.length} Items, ${data.updates.length} Stände, ${data.changes.length} Änderungen in ${outDir}`,
+    `Export done: ${data.items.length} items, ${data.updates.length} states, ${data.changes.length} changes in ${outDir}`,
     ...written.files.filter((f) => !f.path.startsWith('details/')).map((f) => `  ${f.path}: ${formatBytes(f.bytes)}`),
-    `  details/ (${details.length} Dateien): ${formatBytes(details.reduce((sum, f) => sum + f.bytes, 0))}`,
-    `Gesamt: ${written.files.length} Dateien, ${formatBytes(written.totalBytes)} (unkomprimiert)`,
+    `  details/ (${details.length} files): ${formatBytes(details.reduce((sum, f) => sum + f.bytes, 0))}`,
+    `Total: ${written.files.length} files, ${formatBytes(written.totalBytes)} (uncompressed)`,
   ];
-  if (written.totalBytes > SIZE_WARNING_BYTES) lines.push(`Warnung: größer als ${formatBytes(SIZE_WARNING_BYTES)} (Ziel).`);
+  if (written.totalBytes > SIZE_WARNING_BYTES) lines.push(`Warning: larger than ${formatBytes(SIZE_WARNING_BYTES)} (target).`);
   return lines;
 }
 
 function main(): void {
-  // npm startet das Skript im Ordner server/; relative Pfade gelten ab dem Ordner, in dem npm aufgerufen wurde.
+  // npm starts the script in the server/ folder; relative paths are resolved from the folder where npm was invoked.
   const arg = process.argv[2];
   const dbPath = arg ? path.resolve(process.env.INIT_CWD ?? process.cwd(), arg) : config.dbPath;
   try {
     const db = openForExport(dbPath);
     try {
-      console.log(`Lese ${dbPath} (nur lesend)`);
+      console.log(`Reading ${dbPath} (read-only)`);
       const data = buildStaticExport(db);
       const written = writeStaticExport(data, DEFAULT_OUT_DIR);
       for (const line of describeWritten(data, written, DEFAULT_OUT_DIR)) console.log(line);
@@ -263,10 +263,10 @@ function main(): void {
       db.close();
     }
   } catch (err) {
-    console.error(`Export fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`);
+    console.error(`Export failed: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
   }
 }
 
-// Nur ausführen, wenn direkt gestartet (nicht beim Import in Tests).
+// Only run when started directly (not when imported in tests).
 if (process.argv[1] && import.meta.filename === process.argv[1]) main();

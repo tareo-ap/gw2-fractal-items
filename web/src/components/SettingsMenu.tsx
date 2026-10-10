@@ -4,7 +4,7 @@ import { ACCENTS, DEFAULT_ACCENT, THEMES, WIDTHS, useSettings } from '../lib/set
 
 const ACCENT_CHOICES = [{ id: DEFAULT_ACCENT.id, color: DEFAULT_ACCENT.color }, ...ACCENTS];
 
-/** Zahnrad im Header: Popover mit Farbschema, Akzentfarbe und Inhaltsbreite. Schließt per Klick außerhalb und Escape. */
+/** Gear in the header: popover with color scheme, accent color and content width. Closes on outside click and Escape. */
 export function SettingsMenu() {
   const { t } = useT();
   const { settings, update } = useSettings();

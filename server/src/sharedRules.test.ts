@@ -12,9 +12,9 @@ import {
 import { searchPhrases, tokenize } from '../../shared/staticQuery.js';
 import { chatLinkFor } from './test/fixtures.js';
 
-// Regeln aus shared/, die der Browser statt SQL auswertet. Die Übereinstimmung mit dem Server prüft staticConsistency.test.ts.
+// Rules from shared/ that the browser evaluates instead of SQL. staticConsistency.test.ts checks that they match the server.
 
-describe('Regeln', () => {
+describe('Rules', () => {
   const item = (name: string, extra: Partial<{ type: string; subtype: string | null; icon: string | null; flags: string[] }> = {}) => ({
     name,
     type: 'Consumable',
@@ -24,7 +24,7 @@ describe('Regeln', () => {
     ...extra,
   });
 
-  it('Platzhalter: leerer Name (nur Leerzeichen zählen), kein Icon, ((…)) und [[…]]', () => {
+  it('Placeholders: empty name (whitespace counts), no icon, ((…)) and [[…]]', () => {
     assert.equal(isPlaceholder(item('')), true);
     assert.equal(isPlaceholder(item('   ')), true);
     assert.equal(isPlaceholder(item('\tName')), false);
@@ -37,7 +37,7 @@ describe('Regeln', () => {
     assert.equal(sqlTrim(' \t x  '), '\t x');
   });
 
-  it('Tonics: Flag oder Name, nur Gizmo/Consumable, nicht Unlock', () => {
+  it('Tonics: flag or name, Gizmo/Consumable only, not Unlock', () => {
     assert.equal(isTonic(item('Feisty Feline Tonic', { type: 'Gizmo' })), true);
     assert.equal(isTonic(item('Kit', { flags: ['Tonic'] })), true);
     assert.equal(isTonic(item('TONIC water')), true);
@@ -46,7 +46,7 @@ describe('Regeln', () => {
     assert.equal(isTonic(item('Plain')), false);
   });
 
-  it('hideCommon: Untertypen, Mastery Points, Emote Tomes, Währungspakete', () => {
+  it('hideCommon: subtypes, Mastery Points, Emote Tomes, currency packs', () => {
     for (const subtype of ['Food', 'Utility', 'Unlock', 'Transmutation', 'Currency']) {
       assert.equal(isCommonConsumable(item('X', { subtype })), true, subtype);
     }
@@ -62,36 +62,36 @@ describe('Regeln', () => {
     assert.equal(isCommonConsumable(item('300 Geodes')), false);
   });
 
-  it('Chat-Link: Hin- und Rückweg wie im Spiel', () => {
+  it('Chat link: round trip as in the game', () => {
     for (const id of [1, 255, 8778, 70000, 913817]) {
       assert.equal(chatLinkForId(id), chatLinkFor(id));
       assert.equal(itemIdFromChatLink(chatLinkFor(id)), id);
     }
     assert.equal(itemIdFromChatLink('[&AAAA]'), null);
-    assert.equal(itemIdFromChatLink('kein link'), null);
+    assert.equal(itemIdFromChatLink('not a link'), null);
   });
 });
 
-describe('Sortierung und Suche', () => {
-  it('compareNoCase: ASCII ohne Beachtung der Schreibweise, sonst Codepoints', () => {
+describe('Sorting and search', () => {
+  it('compareNoCase: ASCII case-insensitive, otherwise code points', () => {
     assert.ok(compareNoCase('apple', 'Banana') < 0);
     assert.equal(compareNoCase('ABC', 'abc'), 0);
     assert.ok(compareNoCase('Zebra', 'zebra2') < 0);
-    // SQLite NOCASE faltet nur ASCII: "Ä" bleibt vor "ä" (Codepoint), beide hinter "z"
+    // SQLite NOCASE only folds ASCII: "Ä" stays before "ä" (code point), both after "z"
     assert.ok(compareNoCase('z', 'Ä') < 0);
     assert.ok(compareNoCase('Ä', 'ä') < 0);
-    // Außerhalb der BMP (Surrogate) nach U+FFFF
+    // Outside the BMP (surrogates) after U+FFFF
     assert.ok(compareNoCase('�', '\u{1F600}') < 0);
   });
 
-  it('tokenize: Wörter wie unicode61 (Groß-/Kleinschreibung und Akzente egal)', () => {
+  it('tokenize: words like unicode61 (case and accents do not matter)', () => {
     assert.deepEqual(tokenize("Belcher's Bluff-Kit 2x"), ['belcher', 's', 'bluff', 'kit', '2x']);
     assert.deepEqual(tokenize('Süßer Käse'), ['sußer', 'kase']);
     assert.deepEqual(tokenize('<c=@flavor>Text</c>'), ['c', 'flavor', 'text', 'c']);
     assert.deepEqual(tokenize('---'), []);
   });
 
-  it('searchPhrases: Anführungszeichen entfallen, Zeichen ohne Buchstaben/Ziffern werden ignoriert', () => {
+  it('searchPhrases: quotes are dropped, characters without letters/digits are ignored', () => {
     assert.deepEqual(searchPhrases('Mini  Golem'), [['mini'], ['golem']]);
     assert.deepEqual(searchPhrases('"golem" OR -NEAR( name:*'), [['golem'], ['or'], ['near'], ['name']]);
     assert.deepEqual(searchPhrases('--- *'), []);

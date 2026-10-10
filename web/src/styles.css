@@ -1,5 +1,5 @@
-/* Dunkles Theme (Standard), angelehnt an die GW2-Oberfläche. Das helle Set steht weiter unten.
-   Akzentfarbe (--accent, --accent-text) und Inhaltsbreite (--content-width) setzt lib/settings.ts am html-Element. */
+/* Dark theme (default), modeled on the GW2 interface. The light set is further down.
+   Accent color (--accent, --accent-text) and content width (--content-width) are set by lib/settings.ts on the html element. */
 :root {
   --bg: #121214;
   --surface: #1c1c20;
@@ -9,7 +9,7 @@
   --muted: #9a968c;
   --accent: #d9b45a;
   --accent-text: #1a1408;
-  /* Akzent als Text-/Linienfarbe auf der Fläche; im hellen Theme abgedunkelt */
+  /* Accent as text/line color on the surface; darkened in the light theme */
   --accent-ink: var(--accent);
   --content-width: 1200px;
   --error: #e0605a;
@@ -25,7 +25,7 @@
   --dungeon-border: #8c6d22;
   --dungeon-bg: #3a2e10;
 
-  /* Seltenheitsfarben wie im Spiel, für Itemnamen und Icon-Rahmen. */
+  /* Rarity colors as in the game, for item names and icon borders. */
   --rarity-junk: #aaaaaa;
   --rarity-basic: #ffffff;
   --rarity-fine: #62a4da;
@@ -34,10 +34,10 @@
   --rarity-exotic: #ffa405;
   --rarity-ascended: #fb3e8d;
   --rarity-legendary: #4c139d;
-  /* Das dunkle Legendary-Lila ist auf Schwarz kaum lesbar; für Text aufgehellt. */
+  /* The dark Legendary purple is barely readable on black; lightened for text. */
   --rarity-legendary-text: color-mix(in srgb, var(--rarity-legendary) 55%, white);
 
-  /* GW2-Markup in Beschreibungen */
+  /* GW2 markup in descriptions */
   --gw2-flavor: #9bd3ff;
   --gw2-abilitytype: #ffec8b;
   --gw2-reminder: #b0b0b0;
@@ -51,7 +51,7 @@
   color: var(--text);
 }
 
-/* Helles Theme: <html data-theme="light"> */
+/* Light theme: <html data-theme="light"> */
 :root[data-theme='light'] {
   --bg: #f4f2ee;
   --surface: #ffffff;
@@ -73,7 +73,7 @@
   --dungeon-border: #c9a24a;
   --dungeon-bg: #fbefc9;
 
-  /* Seltenheitsfarben für hellen Hintergrund abgedunkelt */
+  /* Rarity colors darkened for a light background */
   --rarity-junk: #6b6b6b;
   --rarity-basic: #2b2b2b;
   --rarity-fine: #2468a8;
@@ -105,7 +105,7 @@ h2 { font-size: 1rem; color: var(--accent-ink); margin-bottom: 10px; }
 .success { color: var(--success); }
 .small { font-size: 0.85rem; }
 
-/* Seltenheit: setzt --rc, das Name und Icon-Rahmen nutzen. */
+/* Rarity: sets --rc, used by the name and icon border. */
 .rarity-junk { --rc: var(--rarity-junk); }
 .rarity-basic { --rc: var(--rarity-basic); }
 .rarity-fine { --rc: var(--rarity-fine); }
@@ -117,7 +117,7 @@ h2 { font-size: 1rem; color: var(--accent-ink); margin-bottom: 10px; }
 .item-name { color: var(--rc-text, var(--rc, var(--text))); font-weight: 600; }
 a.item-name:hover { text-decoration: underline; }
 
-/* ---------- Buttons und Formularelemente ---------- */
+/* ---------- Buttons and form elements ---------- */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   min-height: 34px; padding: 6px 12px;
@@ -155,7 +155,7 @@ textarea { width: 100%; resize: vertical; }
 .segmented button.active { background: var(--surface-2); color: var(--accent-ink); }
 .lang-switch button { padding: 4px 9px; font-size: 0.85rem; font-weight: 600; }
 
-/* ---------- Kopfzeile ---------- */
+/* ---------- Header ---------- */
 .app-header { border-bottom: 1px solid var(--border); background: var(--surface); }
 .header-top {
   display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px;
@@ -175,7 +175,7 @@ textarea { width: 100%; resize: vertical; }
 .progress-fill.indeterminate { animation: slide 1.2s ease-in-out infinite; }
 @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
 
-/* Tabs brechen bei wenig Platz in eine zweite Zeile um, statt seitlich zu scrollen. */
+/* Tabs wrap to a second line when space is tight instead of scrolling sideways. */
 .tabs { display: flex; flex-wrap: wrap; gap: 0 4px; max-width: var(--content-width); margin: 0 auto; padding: 0 24px; }
 .tab {
   display: inline-flex; align-items: center; gap: 8px;
@@ -189,7 +189,7 @@ textarea { width: 100%; resize: vertical; }
 }
 .tab .tab-count { margin-left: 0; }
 
-/* ---------- Inhalt ---------- */
+/* ---------- Content ---------- */
 .content { padding: 20px 24px 40px; max-width: var(--content-width); margin: 0 auto; }
 
 .loading { display: flex; align-items: center; gap: 10px; color: var(--muted); padding: 24px 0; }
@@ -207,7 +207,7 @@ textarea { width: 100%; resize: vertical; }
 }
 .empty { color: var(--muted); padding: 32px 0; text-align: center; }
 
-/* ---------- Filter ---------- */
+/* ---------- Filters ---------- */
 .filters {
   background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
   padding: 12px 14px; margin-bottom: 12px;
@@ -233,7 +233,7 @@ textarea { width: 100%; resize: vertical; }
 .chip.selected { border-color: var(--rc, var(--accent)); background: color-mix(in srgb, var(--rc, var(--accent)) 18%, var(--bg)); }
 .chip-clear { color: var(--muted); border-style: dashed; }
 
-/* ---------- Ergebnisliste ---------- */
+/* ---------- Result list ---------- */
 .result-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 8px 0 10px; }
 .results.stale { opacity: 0.6; transition: opacity 0.2s; }
 
@@ -266,7 +266,7 @@ textarea { width: 100%; resize: vertical; }
 .item-table .col-icon { width: 52px; padding-right: 0; }
 .item-table .col-level { width: 60px; }
 
-/* Entfernte Items ausgegraut */
+/* Removed items grayed out */
 tr.removed, li.removed, .tooltip.removed { opacity: 0.45; filter: grayscale(0.7); }
 tr.removed .item-name, li.removed .item-name { text-decoration: line-through; }
 
@@ -282,13 +282,13 @@ tr.removed .item-name, li.removed .item-name { text-decoration: line-through; }
 
 .pagination { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; margin-top: 16px; }
 
-/* ---------- Detailansicht ---------- */
+/* ---------- Detail view ---------- */
 .back-link { display: inline-block; margin-bottom: 14px; }
 .detail-layout { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 20px; align-items: start; }
 .detail-main, .detail-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
 
-/* Ingame-Tooltip: fast schwarzer Kasten mit dünnem Rahmen */
+/* In-game tooltip: almost black box with a thin border */
 .tooltip {
   background: linear-gradient(180deg, var(--tooltip-top) 0%, var(--tooltip-bg) 100%);
   border: 1px solid var(--tooltip-border); border-radius: 4px;
@@ -310,7 +310,7 @@ tr.removed .item-name, li.removed .item-name { text-decoration: line-through; }
   user-select: all; overflow-wrap: anywhere;
 }
 
-/* GW2-Markup in Beschreibungen (<c=@…>) */
+/* GW2 markup in descriptions (<c=@…>) */
 .gw2-c-flavor { color: var(--gw2-flavor); font-style: italic; }
 .gw2-c-abilitytype { color: var(--gw2-abilitytype); }
 .gw2-c-reminder { color: var(--gw2-reminder); font-style: italic; }
@@ -349,8 +349,8 @@ tr.removed .item-name, li.removed .item-name { text-decoration: line-through; }
 .change-changed { color: var(--rarity-fine); }
 .change-removed { color: var(--error); }
 
-/* ---------- Änderungen eines Updates ---------- */
-/* Titel über die volle Breite, darunter "Von" und "Bis" nebeneinander (schmal: untereinander). */
+/* ---------- Changes of an update ---------- */
+/* Title across the full width, below it "From" and "To" side by side (narrow: stacked). */
 .update-head { display: grid; grid-template-columns: 1fr 1fr; align-items: end; gap: 12px; margin-bottom: 12px; }
 .update-head > :first-child { grid-column: 1 / -1; }
 .update-head h2 { margin-bottom: 4px; }
@@ -368,7 +368,7 @@ tr.removed .item-name, li.removed .item-name { text-decoration: line-through; }
 .item-table tr.dungeon-change { background: color-mix(in srgb, var(--warning) 7%, transparent); }
 .item-table tr.dungeon-change td:first-child { box-shadow: inset 3px 0 0 var(--warning); }
 
-/* Tabelle Alt/Neu: pro Item ein tbody, pro geändertem Feld eine Zeile */
+/* Old/New table: one tbody per item, one row per changed field */
 .changes-table tbody { border-bottom: 1px solid var(--border); }
 .changes-table tbody:last-child { border-bottom: 0; }
 .changes-table td { vertical-align: top; }
@@ -386,7 +386,7 @@ tr.removed .item-name, li.removed .item-name { text-decoration: line-through; }
 .link-button { background: none; border: 0; padding: 0; font: inherit; color: var(--accent-ink); cursor: pointer; }
 .link-button:hover { text-decoration: underline; }
 @media (max-width: 700px) {
-  /* Schmal: Alt und Neu untereinander, Item-Zelle über den Feldern */
+  /* Narrow: old and new stacked, item cell above the fields */
   .changes-table thead { display: none; }
   .changes-table tbody, .changes-table tr, .changes-table td { display: block; width: auto; }
   .changes-table .item-cell { width: auto; border-right: 0; }
@@ -394,7 +394,7 @@ tr.removed .item-name, li.removed .item-name { text-decoration: line-through; }
   .changes-table .field-row td { border-bottom: 0; padding-top: 2px; padding-bottom: 2px; }
 }
 
-/* ---------- Schmale Bildschirme ---------- */
+/* ---------- Narrow screens ---------- */
 @media (max-width: 800px) {
   .detail-layout { grid-template-columns: minmax(0, 1fr); }
 }
@@ -419,7 +419,7 @@ tr.removed .item-name, li.removed .item-name { text-decoration: line-through; }
   .tooltip-props dd { margin-bottom: 6px; }
 }
 
-/* ---------- Einstellungen, Fußzeile, Stände verwalten ---------- */
+/* ---------- Settings, footer, manage states ---------- */
 .settings { position: relative; }
 .settings-panel {
   position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; width: 300px; max-width: calc(100vw - 24px);

@@ -7,7 +7,7 @@ import { GameTypeDiff, TestBadge } from './common';
 
 const STATUSES: TestStatus[] = ['untested', 'works', 'broken'];
 
-/** Teststatus mit Notiz setzen (PUT /api/items/:id/test). */
+/** Set the test status with a note (PUT /api/items/:id/test). */
 export function TestPanel({ item }: { item: ItemDetail }) {
   const { t, formatDateTime } = useT();
   const queryClient = useQueryClient();
@@ -92,7 +92,7 @@ export function TestPanel({ item }: { item: ItemDetail }) {
   );
 }
 
-/** Teststatus nur anzeigen (statische Fassung): Status, Notiz und Datum, ohne Formular. */
+/** Display the test status only (static version): status, note and date, without a form. */
 export function TestInfo({ item }: { item: ItemDetail }) {
   const { t, formatDateTime } = useT();
   return (

@@ -2,9 +2,9 @@ import { createHash } from 'node:crypto';
 import type { Gw2Item } from '../gw2/client.js';
 
 /**
- * JSON mit rekursiv sortierten Objekt-Keys. Die API garantiert keine feste Key-Reihenfolge,
- * ohne Sortierung würde dasselbe Item sonst unterschiedliche Hashes bekommen.
- * Reihenfolgen in Arrays bleiben erhalten (die können inhaltlich relevant sein).
+ * JSON with recursively sorted object keys. The API does not guarantee a fixed key order,
+ * without sorting the same item could get different hashes.
+ * Array order is preserved (it can be relevant).
  */
 export function stableStringify(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
@@ -22,13 +22,13 @@ export function hashItem(item: Gw2Item): string {
   return createHash('sha256').update(stableStringify(item)).digest('hex');
 }
 
-/** Top-Level-Felder, die sich zwischen alter und neuer API-Antwort unterscheiden (sortiert). */
+/** Top-level fields that differ between the old and new API response (sorted). */
 export function changedFields(before: Record<string, unknown>, after: Record<string, unknown>): string[] {
   const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
   return [...keys].filter((key) => stableStringify(before[key]) !== stableStringify(after[key])).sort();
 }
 
-/** Bisheriger Stand eines Items in der DB, soweit für den Vergleich nötig. */
+/** Previous state of an item in the DB, as far as needed for the comparison. */
 export interface StoredItem {
   hash: string;
   rawJson: string;
@@ -44,16 +44,16 @@ export type ItemDiff =
       changedFields: string[];
       gameTypesBefore: string[];
       gameTypesAfter: string[];
-      /** Nur die geänderten Top-Level-Felder mit ihrem alten bzw. neuen Wert (fehlendes Feld = nicht vorhanden). */
+      /** Only the changed top-level fields with their old and new value (missing field = not present). */
       valuesBefore: Record<string, unknown>;
       valuesAfter: Record<string, unknown>;
     };
 
 /**
- * Vergleicht ein frisch geladenes Item mit dem gespeicherten Stand.
- * - kein gespeicherter Stand → added
- * - war als entfernt markiert und ist wieder da → ebenfalls added
- * - Hash unterschiedlich → changed, mit Liste der geänderten Top-Level-Felder
+ * Compares a freshly loaded item with the stored state.
+ * - no stored state -> added
+ * - was marked as removed and is back -> also added
+ * - hash differs -> changed, with a list of the changed top-level fields
  */
 export function diffItem(stored: StoredItem | undefined, item: Gw2Item, hash: string): ItemDiff {
   const gameTypesAfter = normalizeGameTypes(item.game_types);
@@ -74,8 +74,8 @@ export function diffItem(stored: StoredItem | undefined, item: Gw2Item, hash: st
 }
 
 /**
- * game_types sortiert und ohne Duplikate. So gespeichert lassen sich zwei Stände
- * per einfachem String-Vergleich als Menge vergleichen (wichtig für "neu testen").
+ * game_types sorted and without duplicates. Stored this way, two states can be
+ * compared as sets with a plain string comparison (important for "retest").
  */
 export function normalizeGameTypes(gameTypes: unknown): string[] {
   if (!Array.isArray(gameTypes)) return [];

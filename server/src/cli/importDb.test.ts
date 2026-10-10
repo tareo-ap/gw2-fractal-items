@@ -25,7 +25,7 @@ function makeDb(file: string, itemCount: number): void {
 }
 
 describe('importDatabase', () => {
-  it('ersetzt die DB, legt ein Backup an und entfernt WAL-Reste', async () => {
+  it('replaces the DB, creates a backup and removes WAL leftovers', async () => {
     const source = path.join(dir, 'export.db');
     const targetDir = path.join(dir, 'data');
     const target = path.join(targetDir, 'gw2-items.db');
@@ -44,29 +44,29 @@ describe('importDatabase', () => {
     backup.close();
   });
 
-  it('bricht ab, wenn der Server läuft', async () => {
+  it('aborts if the server is running', async () => {
     const source = path.join(dir, 'export2.db');
     makeDb(source, 1);
     await assert.rejects(
       importDatabase({ sourcePath: source, dbPath: path.join(dir, 'x.db'), isServerRunning: async () => true }),
-      /Server zuerst beenden/,
+      /Stop the server first/,
     );
   });
 
-  it('lehnt Dateien ab, die keine SQLite-Datenbank sind', async () => {
+  it('rejects files that are not SQLite databases', async () => {
     const bad = path.join(dir, 'bad.db');
-    fs.writeFileSync(bad, 'das ist keine Datenbank, nur etwas Text der lang genug ist fuer einen Header');
+    fs.writeFileSync(bad, 'this is not a database, just some text long enough for a header');
     const target = path.join(dir, 'unchanged.db');
     await assert.rejects(importDatabase({ sourcePath: bad, dbPath: target }), ImportDbError);
     assert.ok(!fs.existsSync(target));
-    await assert.rejects(importDatabase({ sourcePath: path.join(dir, 'fehlt.db'), dbPath: target }), /nicht gefunden/);
+    await assert.rejects(importDatabase({ sourcePath: path.join(dir, 'missing.db'), dbPath: target }), /not found/);
   });
 
-  it('lehnt SQLite-Dateien ohne passende Tabellen ab', async () => {
+  it('rejects SQLite files without matching tables', async () => {
     const other = path.join(dir, 'other.db');
     const db = new DatabaseSync(other);
     db.exec('CREATE TABLE foo (a)');
     db.close();
-    await assert.rejects(importDatabase({ sourcePath: other, dbPath: path.join(dir, 'y.db') }), /keine Tabelle/);
+    await assert.rejects(importDatabase({ sourcePath: other, dbPath: path.join(dir, 'y.db') }), /no table/);
   });
 });

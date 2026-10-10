@@ -7,7 +7,7 @@ data/
 .DS_Store
 Thumbs.db
 
-# Alte Exporte, nur lokal (nicht veröffentlichen)
+# Old exports, local only (do not publish)
 sources/
-# Projektdokumentation, nur lokal bzw. im privaten Docs-Repo (nicht veröffentlichen)
+# Project documentation, local only (do not publish)
 docs/

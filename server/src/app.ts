@@ -34,7 +34,7 @@ import {
 } from './routes/items.js';
 import { compareUpdates, deleteUpdate, getUpdate, getUpdateChanges, listUpdates, parseUpdateChangesQuery, toUpdateSummary, type UpdateRow } from './routes/updates.js';
 
-// Baut die Hono-App. Getrennt von index.ts, damit sie sich ohne laufenden Server testen lässt.
+// Builds the Hono app. Kept separate from index.ts so it can be tested without a running server.
 export function createApp(db: DatabaseSync, webDist: string | null, importer: Importer, watcher?: BuildWatcher): Hono {
   const app = new Hono();
 
@@ -63,11 +63,11 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
 
   app.get('/api/items', (c) => c.json<ItemListResponse>(listItems(db, parseItemListQuery(c.req.query()))));
 
-  // Muss vor /api/items/:id stehen. Exportiert alle Treffer der Filter, page/pageSize werden ignoriert.
+  // Must come before /api/items/:id. Exports all filter matches, page/pageSize are ignored.
   app.get('/api/items/export', (c) => {
     const params = c.req.query();
     const format = oneOf('format', params.format, ['csv', 'json'] as const);
-    if (!format) throw new ValidationError('format muss einer dieser Werte sein: csv, json');
+    if (!format) throw new ValidationError('format must be one of: csv, json');
     const query = parseItemListQuery(params);
     const rows = exportItems(db, query);
     const filename = exportFilename(query.view, format);
@@ -78,16 +78,16 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
 
   app.get('/api/items/:id', (c) => {
     const item = getItemDetail(db, parseId(c.req.param('id')), parseLang(c.req.query('lang')));
-    return item ? c.json<ItemDetail>(item) : c.json({ error: 'Item nicht gefunden' }, 404);
+    return item ? c.json<ItemDetail>(item) : c.json({ error: 'Item not found' }, 404);
   });
 
   app.put('/api/items/:id/test', async (c) => {
     const id = parseId(c.req.param('id'));
     const lang = parseLang(c.req.query('lang'));
     const body: unknown = await c.req.json().catch(() => {
-      throw new ValidationError('Body ist kein gültiges JSON');
+      throw new ValidationError('Body is not valid JSON');
     });
-    if (!saveItemTest(db, id, parseItemTestUpdate(body))) return c.json({ error: 'Item nicht gefunden' }, 404);
+    if (!saveItemTest(db, id, parseItemTestUpdate(body))) return c.json({ error: 'Item not found' }, 404);
     return c.json<ItemDetail>(getItemDetail(db, id, lang)!);
   });
 
@@ -97,16 +97,16 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
 
   app.get('/api/updates/status', (c) => c.json<ImportStatus>(importer.getStatus()));
 
-  // Stand nach Update A gegen Stand nach Update B (A < B, beide abgeschlossen).
+  // State after update A versus state after update B (A < B, both completed).
   app.get('/api/updates/compare', (c) => {
     const from = parseId(c.req.query('from') ?? '', 'Update (from)');
     const to = parseId(c.req.query('to') ?? '', 'Update (to)');
-    if (from >= to) throw new ValidationError('from muss kleiner als to sein');
+    if (from >= to) throw new ValidationError('from must be less than to');
     const query = parseUpdateChangesQuery(c.req.query());
     const fromUpdate = getUpdate(db, from);
     const toUpdate = getUpdate(db, to);
-    if (!fromUpdate || !toUpdate) return c.json({ error: 'Update nicht gefunden' }, 404);
-    if (fromUpdate.status !== 'done' || toUpdate.status !== 'done') throw new ValidationError('Beide Updates müssen abgeschlossen sein');
+    if (!fromUpdate || !toUpdate) return c.json({ error: 'Update not found' }, 404);
+    if (fromUpdate.status !== 'done' || toUpdate.status !== 'done') throw new ValidationError('Both updates must be completed');
     return c.json<UpdateCompareResponse>(compareUpdates(db, fromUpdate, toUpdate, query));
   });
 
@@ -114,7 +114,7 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
     const id = parseId(c.req.param('id'), 'Update');
     const query = parseUpdateChangesQuery(c.req.query());
     const update = getUpdate(db, id);
-    return update ? c.json<UpdateChangesResponse>(getUpdateChanges(db, update, query)) : c.json({ error: 'Update nicht gefunden' }, 404);
+    return update ? c.json<UpdateChangesResponse>(getUpdateChanges(db, update, query)) : c.json({ error: 'Update not found' }, 404);
   });
 
   app.post('/api/updates', (c) => {
@@ -126,7 +126,7 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
     }
   });
 
-  // Löscht einen Stand (nur fehlgeschlagene oder leere, siehe deleteUpdate). Laufende Imports schreiben in ihre Zeile: 409.
+  // Deletes a state (only failed or empty ones, see deleteUpdate). Running imports write to their row: 409.
   app.delete('/api/updates/:id', (c) => {
     const result = deleteUpdate(db, parseId(c.req.param('id'), 'Update'));
     return result.ok ? c.body(null, 204) : c.json({ error: result.error }, result.status);
@@ -134,11 +134,11 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
 
   // --- Export --------------------------------------------------------------
 
-  // Konsistente Kopie der Datenbank als Download. VACUUM INTO funktioniert auch während eines Imports.
+  // Consistent copy of the database as a download. VACUUM INTO also works during an import.
   app.get('/api/export', (c) => {
     const tmpFile = path.join(os.tmpdir(), `gw2-items-export-${crypto.randomUUID()}.db`);
     try {
-      // VACUUM INTO nimmt keine Parameter; einfache Anführungszeichen im Pfad verdoppeln.
+      // VACUUM INTO takes no parameters; double single quotes in the path.
       db.exec(`VACUUM INTO '${tmpFile.replace(/'/g, "''")}'`);
       const data = fs.readFileSync(tmpFile);
       return c.body(data, 200, {
@@ -156,13 +156,13 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
   app.onError((err, c) => {
     if (err instanceof ValidationError) return c.json({ error: err.message }, 400);
     console.error(err);
-    return c.json({ error: 'Interner Fehler' }, 500);
+    return c.json({ error: 'Internal error' }, 500);
   });
 
   app.notFound((c) => (c.req.path.startsWith('/api/') ? c.json({ error: 'Not found' }, 404) : c.text('Not found', 404)));
 
-  // In Produktion liefert der Server auch das gebaute Frontend aus.
-  // Unbekannte Pfade bekommen index.html, damit clientseitiges Routing funktioniert.
+  // In production the server also serves the built frontend.
+  // Unknown paths get index.html so client-side routing works.
   if (webDist) {
     const indexHtml = fs.readFileSync(`${webDist}/index.html`, 'utf8');
     app.use('/*', serveStatic({ root: webDist }));
@@ -174,6 +174,6 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
 
 function parseId(value: string, what = 'Item'): number {
   const id = Number(value);
-  if (!Number.isInteger(id) || id < 1) throw new ValidationError(`Ungültige ${what}-ID`);
+  if (!Number.isInteger(id) || id < 1) throw new ValidationError(`Invalid ${what} ID`);
   return id;
 }

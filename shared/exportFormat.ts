@@ -1,9 +1,9 @@
-// Format des Listen-Exports (CSV/JSON). Der Server liefert ihn über /api/items/export,
-// die statische Fassung erzeugt dieselben Dateien im Browser.
+// Format of the list export (CSV/JSON). The server delivers it via /api/items/export,
+// the static version generates the same files in the browser.
 
 import type { GameType, TestStatus } from './types.js';
 
-/** Eine Zeile des Exports (Feldnamen wie in der CSV-Kopfzeile). */
+/** One row of the export (field names as in the CSV header). */
 export interface ExportRow {
   id: number;
   name: string;
@@ -30,8 +30,8 @@ export const EXPORT_FIELDS: readonly (keyof ExportRow)[] = [
 ];
 
 /**
- * CSV für deutsches Excel: Semikolon, CRLF, UTF-8 mit BOM. Arrays werden mit "|" verbunden.
- * Texte, die mit =, +, -, @ (oder Tab/CR) beginnen, bekommen ein ' vorangestellt (Formel-Injection).
+ * CSV for German Excel: semicolon, CRLF, UTF-8 with BOM. Arrays are joined with "|".
+ * Texts starting with =, +, -, @ (or tab/CR) get a ' prepended (formula injection).
  */
 export function toCsv(rows: ExportRow[]): string {
   const cell = (value: ExportRow[keyof ExportRow]): string => {
@@ -43,10 +43,10 @@ export function toCsv(rows: ExportRow[]): string {
   return `﻿${lines.join('\r\n')}\r\n`;
 }
 
-/** Dateiname des Downloads, z. B. gw2-items-gizmo-2026-10-10.csv */
+/** File name of the download, e.g. gw2-items-gizmo-2026-10-10.csv */
 export function exportFilename(view: string, format: 'csv' | 'json', now: Date = new Date()): string {
   return `gw2-items-${view}-${now.toISOString().slice(0, 10)}.${format}`;
 }
 
-/** Inhalt der JSON-Datei. */
+/** Content of the JSON file. */
 export const toJson = (rows: ExportRow[]): string => JSON.stringify(rows, null, 2);

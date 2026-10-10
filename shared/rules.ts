@@ -1,6 +1,6 @@
-// Regeln und Konstanten, die Server (SQL) und Browser (statische Fassung) gemeinsam nutzen.
-// Laufzeitcode ohne Node- oder Browser-Abhängigkeiten: Der Server baut daraus seine SQL-Bedingungen,
-// die statische Fassung wertet dieselben Regeln in JavaScript aus.
+// Rules and constants shared by the server (SQL) and the browser (static version).
+// Runtime code without Node or browser dependencies: the server builds its SQL conditions from it,
+// the static version evaluates the same rules in JavaScript.
 
 import type { GameType, Lang, Rarity, TestStatus } from './types.js';
 
@@ -9,16 +9,16 @@ export const GAME_TYPES: readonly GameType[] = ['Activity', 'Dungeon', 'Pve', 'P
 export const TEST_STATUSES: readonly TestStatus[] = ['untested', 'works', 'broken'];
 export const ITEM_SORTS = ['name', 'id', 'rarity', 'level', 'lastChanged'] as const;
 
-/** Consumables dieser Untertypen blendet hideCommon aus (Food, Utility, Unlock, Transmutation, Currency). */
+/** hideCommon hides consumables of these subtypes (Food, Utility, Unlock, Transmutation, Currency). */
 export const HIDE_COMMON_SUBTYPES = ['Food', 'Utility', 'Unlock', 'Transmutation', 'Currency'] as const;
 
-/** Untertyp, dessen Items nie als Tonic gelten (Rezepte). */
+/** Subtype whose items never count as tonics (recipes). */
 export const TONIC_EXCLUDED_SUBTYPE = 'Unlock';
 
-/** Präfix aller Icon-URLs; die statische Fassung speichert nur den Rest. */
+/** Prefix of all icon URLs; the static version stores only the rest. */
 export const ICON_PREFIX = 'https://render.guildwars2.com/file/';
 
-/** Das Feld, nach dem Platzhalter, Tonics usw. beurteilt werden (englischer Stand). */
+/** The field by which placeholders, tonics etc. are judged (English state). */
 export interface RuleItem {
   name: string;
   type: string;
@@ -28,20 +28,20 @@ export interface RuleItem {
 }
 
 /**
- * Wie SQLite lower(): Nur ASCII-Großbuchstaben werden umgewandelt. LIKE und COLLATE NOCASE
- * kennen ebenfalls nur ASCII, deshalb muss der Browser genauso vergleichen.
+ * Like SQLite lower(): only ASCII uppercase letters are converted. LIKE and COLLATE NOCASE
+ * also only know ASCII, so the browser must compare the same way.
  */
 export const asciiLower = (text: string): string => text.replace(/[A-Z]+/g, (m) => m.toLowerCase());
 
-/** Wie SQLite trim(): entfernt nur Leerzeichen (kein Tab, kein Zeilenumbruch). */
+/** Like SQLite trim(): removes spaces only (no tab, no line break). */
 export const sqlTrim = (text: string): string => text.replace(/^ +| +$/g, '');
 
-/** Fractal-Kandidat: game_types enthält Dungeon. */
+/** Fractal candidate: game_types contains Dungeon. */
 export const hasDungeon = (gameTypes: readonly string[] | null | undefined): boolean => !!gameTypes && gameTypes.includes('Dungeon');
 
 /**
- * Tonics: Verwandlungs-Items. Teils als Gizmo, teils als Consumable, mal mit Flag "Tonic",
- * mal nur am Namen erkennbar. Untertyp Unlock sind die zugehörigen Rezepte.
+ * Tonics: transformation items. Partly Gizmo, partly Consumable, sometimes with the flag "Tonic",
+ * sometimes recognizable only by name. Subtype Unlock are the matching recipes.
  */
 export function isTonic(item: Pick<RuleItem, 'name' | 'type' | 'subtype' | 'flags'>): boolean {
   return (
@@ -51,15 +51,15 @@ export function isTonic(item: Pick<RuleItem, 'name' | 'type' | 'subtype' | 'flag
   );
 }
 
-/** Platzhalter: leerer Name, kein Icon oder interner Name wie "((906936))" bzw. "[[913817]]". */
+/** Placeholders: empty name, no icon, or internal name such as "((906936))" or "[[913817]]". */
 export function isPlaceholder(item: Pick<RuleItem, 'name' | 'icon'>): boolean {
   return sqlTrim(item.name) === '' || item.icon === null || /^\(\(.*\)\)$/s.test(item.name) || /^\[\[.*\]\]$/s.test(item.name);
 }
 
 /**
- * Das blendet hideCommon aus: Consumables der Untertypen aus HIDE_COMMON_SUBTYPES sowie Mastery Points
- * (Name teils mit führendem Leerzeichen), Emote Tomes und Währungspakete wie "300 Geodes"
- * (Untertyp Immediate, Name beginnt mit Zahl und Leerzeichen).
+ * hideCommon hides these: consumables of the subtypes in HIDE_COMMON_SUBTYPES as well as Mastery Points
+ * (name sometimes with a leading space), Emote Tomes and currency packs such as "300 Geodes"
+ * (subtype Immediate, name starts with a number and a space).
  */
 export function isCommonConsumable(item: Pick<RuleItem, 'name' | 'type' | 'subtype'>): boolean {
   if (item.type !== 'Consumable') return false;
@@ -71,11 +71,11 @@ export function isCommonConsumable(item: Pick<RuleItem, 'name' | 'type' | 'subty
   );
 }
 
-/** Der Filter hideCommon wirkt nur in den Ansichten Consumables und Alle. */
+/** The hideCommon filter only applies in the Consumables and All views. */
 export const hideCommonApplies = (view: string): boolean => view === 'consumable' || view === 'all';
 
 // ---------------------------------------------------------------------------
-// Wiki-Link und Chat-Link
+// Wiki link and chat link
 // ---------------------------------------------------------------------------
 
 export const wikiUrl = (lang: Lang, name: string): string =>
@@ -84,9 +84,9 @@ export const wikiUrl = (lang: Lang, name: string): string =>
     : `https://wiki.guildwars2.com/wiki/Special:Search/${encodeURIComponent(name)}`;
 
 /**
- * Item-ID aus einem GW2-Chat-Link wie [&AgEAWgAA]. Aufbau (Base64): Byte 0 = Typ (2 = Item),
- * Byte 1 = Anzahl, Byte 2–4 = Item-ID (little endian). Ingame kopierte Links können sich vom
- * chat_link der API unterscheiden (z. B. andere Anzahl), deshalb wird die ID ausgewertet.
+ * Item ID from a GW2 chat link such as [&AgEAWgAA]. Layout (Base64): byte 0 = type (2 = item),
+ * byte 1 = quantity, bytes 2–4 = item ID (little endian). Links copied in-game can differ from the
+ * API's chat_link (e.g. different quantity), so the ID is evaluated.
  */
 export function itemIdFromChatLink(link: string): number | null {
   const match = /^\[&([A-Za-z0-9+/=]+)\]$/.exec(link);
@@ -101,20 +101,20 @@ export function itemIdFromChatLink(link: string): number | null {
   return binary.charCodeAt(2) | (binary.charCodeAt(3) << 8) | (binary.charCodeAt(4) << 16);
 }
 
-/** Chat-Link eines Items, so wie ihn das Spiel erzeugt (Typ 2, Anzahl 1). */
+/** Chat link of an item as the game generates it (type 2, quantity 1). */
 export function chatLinkForId(id: number): string {
   const bytes = [0x02, 0x01, id & 0xff, (id >> 8) & 0xff, (id >> 16) & 0xff, 0x00];
   return `[&${btoa(String.fromCharCode(...bytes))}]`;
 }
 
 // ---------------------------------------------------------------------------
-// JSON mit stabiler Key-Reihenfolge
+// JSON with stable key order
 // ---------------------------------------------------------------------------
 
 /**
- * JSON mit rekursiv sortierten Objekt-Keys. Die API garantiert keine feste Key-Reihenfolge,
- * ohne Sortierung würde dasselbe Item sonst unterschiedliche Hashes bekommen.
- * Reihenfolgen in Arrays bleiben erhalten (die können inhaltlich relevant sein).
+ * JSON with recursively sorted object keys. The API does not guarantee a fixed key order,
+ * without sorting the same item could get different hashes.
+ * Array order is preserved (it can be relevant).
  */
 export function stableStringify(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
@@ -129,13 +129,13 @@ export function stableStringify(value: unknown): string {
 }
 
 // ---------------------------------------------------------------------------
-// Sortierung wie SQLite
+// Sorting like SQLite
 // ---------------------------------------------------------------------------
 
 /**
- * Vergleich wie `ORDER BY text COLLATE NOCASE` in SQLite: ASCII-Groß-/Kleinschreibung egal,
- * sonst Byte-Reihenfolge von UTF-8 (= Reihenfolge der Codepoints). JavaScript vergleicht Strings nach
- * UTF-16-Einheiten; das weicht nur bei Zeichen außerhalb der BMP gegenüber U+E000–U+FFFF ab.
+ * Comparison like `ORDER BY text COLLATE NOCASE` in SQLite: ASCII case-insensitive,
+ * otherwise UTF-8 byte order (= code point order). JavaScript compares strings by
+ * UTF-16 code units; this differs only for characters outside the BMP versus U+E000–U+FFFF.
  */
 export function compareNoCase(a: string, b: string): number {
   return compareCodePoints(asciiLower(a), asciiLower(b));
@@ -150,7 +150,7 @@ export function compareCodePoints(a: string, b: string): number {
     if (ca === cb) continue;
     const surrogateA = ca >= 0xd800 && ca <= 0xdfff;
     const surrogateB = cb >= 0xd800 && cb <= 0xdfff;
-    if (surrogateA !== surrogateB) return surrogateA ? 1 : -1; // Zeichen außerhalb der BMP sind größer
+    if (surrogateA !== surrogateB) return surrogateA ? 1 : -1; // characters outside the BMP are greater
     return ca < cb ? -1 : 1;
   }
   return a.length < b.length ? -1 : a.length > b.length ? 1 : 0;
