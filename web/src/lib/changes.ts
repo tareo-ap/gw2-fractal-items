@@ -53,7 +53,13 @@ export function changesUrl(updateId: number, f: ChangesFilters = DEFAULT_CHANGES
   return qs ? `/updates/${updateId}?${qs}` : `/updates/${updateId}`;
 }
 
-/** Query-String für GET /api/updates/:id/changes. */
+/** Vergleich zweier Stände: /updates/compare?from=A&to=B plus Filter. */
+export function compareUrl(from: number, to: number, f: ChangesFilters = DEFAULT_CHANGES_FILTERS): string {
+  const p = changesToParams(f);
+  return `/updates/compare?from=${from}&to=${to}${p.size ? `&${p}` : ''}`;
+}
+
+/** Query-String für GET /api/updates/:id/changes und /api/updates/compare (dort kommen from und to dazu). */
 export function toChangesApiQuery(f: ChangesFilters): string {
   const p = changesToParams(f);
   p.set('hidePlaceholders', String(f.hidePlaceholders));

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import type { Hono } from 'hono';
-import type { ImportStatus, ItemDetail, ItemListResponse, UpdateChangesResponse, UpdateDetail } from '../../shared/types.js';
+import type { ImportStatus, ItemDetail, ItemListResponse, UpdateChangesResponse, UpdateCompareResponse, UpdateDetail } from '../../shared/types.js';
 import { createApp } from './app.js';
 import { openDatabase } from './db/index.js';
 import { migrations } from './db/schema.js';
@@ -527,5 +527,106 @@ describe('Migration 3 (values_before/values_after)', () => {
       db.close();
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('GET /api/updates/compare (drei Importrunden)', () => {
+  let cmpApi: FakeGw2Api;
+  let cmpDb: DatabaseSync;
+  let cmpApp: Hono;
+  let u1: number;
+  let u2: number;
+  let u3: number;
+
+  before(async () => {
+    const gizmo = fixtureItems()[0]!;
+    cmpApi = await startFakeGw2Api([
+      { ...gizmo, id: 1, name: 'Dungeon Flip', game_types: ['Pve'] },
+      { ...gizmo, id: 2, name: 'Desc Gizmo', game_types: ['Dungeon', 'Pve'] },
+      { ...gizmo, id: 3, name: 'Name Bounce', game_types: ['Pve'] },
+      { ...gizmo, id: 4, name: 'Stable Gizmo', game_types: ['Pve'] },
+    ]);
+    const created = createTestImporter(cmpApi.url);
+    cmpDb = created.db;
+    cmpApp = createApp(cmpDb, null, created.importer);
+    u1 = (await runImport(created.importer)).updateId!;
+
+    // Runde 2: Dungeon dazu, Beschreibung und Name geändert, ein Item neu
+    cmpApi.items.get(1)!.game_types = ['Dungeon', 'Pve'];
+    cmpApi.items.get(2)!.description = 'Zwei';
+    cmpApi.items.get(3)!.name = 'Name Bounce 2';
+    cmpApi.items.set(5, { ...gizmo, id: 5, name: 'Temp Gizmo', game_types: ['Pve'] });
+    u2 = (await runImport(created.importer)).updateId!;
+
+    // Runde 3: Dungeon wieder weg, Beschreibung erneut geändert, Name zurück, das neue Item wieder entfernt
+    cmpApi.items.get(1)!.game_types = ['Pve'];
+    cmpApi.items.get(2)!.description = 'Drei';
+    cmpApi.items.get(3)!.name = 'Name Bounce';
+    cmpApi.items.delete(5);
+    u3 = (await runImport(created.importer)).updateId!;
+  });
+  after(() => cmpApi.close());
+
+  const compare = async (from: number, to: number, query = '') => {
+    const res = await cmpApp.request(`/api/updates/compare?from=${from}&to=${to}${query.replace("?", "&")}`);
+    assert.equal(res.status, 200, `${from}->${to}${query} → ${res.status}`);
+    return (await res.json()) as UpdateCompareResponse;
+  };
+
+  it('1 → 3: gegenläufige Änderungen heben sich auf, vorübergehende Items fehlen', async () => {
+    const res = await compare(u1, u3);
+    assert.equal(res.from.id, u1);
+    assert.equal(res.to.id, u3);
+    assert.deepEqual(res.counts, { added: 0, changed: 1, removed: 0, gameTypesChanged: 0, dungeonGained: 0, dungeonLost: 0 });
+    assert.deepEqual(res.items.map((i) => i.id), [2]);
+    const desc = res.items[0]!;
+    assert.deepEqual(desc.changedFields, ['description']);
+    // Alt = Stand nach Update 1, Neu = Stand nach Update 3
+    assert.deepEqual(desc.before, { description: 'Description of Mini Golem Kit.' });
+    assert.deepEqual(desc.after, { description: 'Drei' });
+    assert.equal(res.legacyValues, false);
+    assert.equal(res.total, 1);
+  });
+
+  it('1 → 2: Dungeon dazu, geänderte, neue Items; Dungeon-Änderung zuerst', async () => {
+    const res = await compare(u1, u2);
+    assert.deepEqual(res.counts, { added: 1, changed: 3, removed: 0, gameTypesChanged: 1, dungeonGained: 1, dungeonLost: 0 });
+    assert.deepEqual(res.items.map((i) => i.id), [1, 2, 3, 5]);
+    assert.deepEqual(res.items[0]!.gameTypesBefore, ['Pve']);
+    assert.deepEqual(res.items[0]!.gameTypesAfter, ['Dungeon', 'Pve']);
+    assert.deepEqual(res.items[0]!.changedFields, ['game_types']);
+    assert.equal(res.items[3]!.before, null);
+    assert.equal(res.items[3]!.after?.name, 'Temp Gizmo');
+    assert.deepEqual((await compare(u1, u2, '?focus=dungeonGained')).items.map((i) => i.id), [1]);
+    assert.deepEqual((await compare(u1, u2, '?kind=added')).items.map((i) => i.id), [5]);
+    assert.deepEqual((await compare(u1, u2, '?q=temp&type=gizmo')).items.map((i) => i.id), [5]);
+  });
+
+  it('2 → 3: entfernt, Dungeon weg, Beschreibung von Zwei auf Drei', async () => {
+    const res = await compare(u2, u3);
+    assert.deepEqual(res.counts, { added: 0, changed: 3, removed: 1, gameTypesChanged: 1, dungeonGained: 0, dungeonLost: 1 });
+    assert.deepEqual(res.items.map((i) => i.id), [1, 2, 3, 5]);
+    assert.equal(res.items[3]!.kind, 'removed');
+    assert.equal(res.items[3]!.after, null);
+    assert.deepEqual(res.items[1]!.before, { description: 'Zwei' });
+    assert.deepEqual((await compare(u2, u3, '?focus=dungeonLost')).items.map((i) => i.id), [1]);
+  });
+
+  it('Paginierung', async () => {
+    const res = await compare(u1, u2, '?pageSize=2&page=2');
+    assert.deepEqual(res.items.map((i) => i.id), [3, 5]);
+    assert.equal(res.total, 4);
+  });
+
+  it('Validierung: from < to, beide vorhanden und abgeschlossen', async () => {
+    const status = async (query: string) => (await cmpApp.request(`/api/updates/compare${query}`)).status;
+    assert.equal(await status(`?from=${u3}&to=${u1}`), 400);
+    assert.equal(await status(`?from=${u1}&to=${u1}`), 400);
+    assert.equal(await status(`?from=${u1}`), 400);
+    assert.equal(await status('?from=abc&to=2'), 400);
+    assert.equal(await status(`?from=${u1}&to=${u3}&focus=foo`), 400);
+    assert.equal(await status(`?from=${u1}&to=9999`), 404);
+    cmpDb.exec(`INSERT INTO updates (started_at, status) VALUES ('2026-01-01T00:00:00Z', 'failed')`);
+    assert.equal(await status(`?from=${u1}&to=${u3 + 1}`), 400);
   });
 });

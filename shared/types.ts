@@ -186,6 +186,8 @@ export interface UpdateChangeEntry extends Omit<ItemChange, 'updateId' | 'update
    */
   before: Record<string, unknown> | null;
   after: Record<string, unknown> | null;
+  /** Nur bei compare: geänderte Felder, deren alter Wert nicht gespeichert ist (Update vor Migration 3). */
+  unknownFields?: string[];
 }
 
 export interface UpdateChangesResponse {
@@ -195,4 +197,11 @@ export interface UpdateChangesResponse {
   total: number;
   page: number;
   pageSize: number;
+  legacyValues: boolean; // mindestens eine Änderung ohne gespeicherte alte Werte (vor Migration 3)
+}
+
+/** GET /api/updates/compare?from=A&to=B: Stand nach Update A gegen Stand nach Update B (A < B). Gleiche Filter wie /changes. */
+export interface UpdateCompareResponse extends Omit<UpdateChangesResponse, 'update'> {
+  from: UpdateDetail;
+  to: UpdateDetail;
 }

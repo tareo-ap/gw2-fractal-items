@@ -12,6 +12,7 @@ import type {
   ItemListResponse,
   StatsResponse,
   UpdateChangesResponse,
+  UpdateCompareResponse,
   UpdateDetail,
 } from '../../shared/types.js';
 import { ImportAlreadyRunningError, type Importer } from './importer/importer.js';
@@ -27,7 +28,7 @@ import {
   toCsv,
   ValidationError,
 } from './routes/items.js';
-import { getUpdate, getUpdateChanges, listUpdates, parseUpdateChangesQuery, toUpdateSummary, type UpdateRow } from './routes/updates.js';
+import { compareUpdates, getUpdate, getUpdateChanges, listUpdates, parseUpdateChangesQuery, toUpdateSummary, type UpdateRow } from './routes/updates.js';
 
 // Baut die Hono-App. Getrennt von index.ts, damit sie sich ohne laufenden Server testen lässt.
 export function createApp(db: DatabaseSync, webDist: string | null, importer: Importer): Hono {
@@ -88,6 +89,19 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
   app.get('/api/updates', (c) => c.json<UpdateDetail[]>(listUpdates(db)));
 
   app.get('/api/updates/status', (c) => c.json<ImportStatus>(importer.getStatus()));
+
+  // Stand nach Update A gegen Stand nach Update B (A < B, beide abgeschlossen).
+  app.get('/api/updates/compare', (c) => {
+    const from = parseId(c.req.query('from') ?? '', 'Update (from)');
+    const to = parseId(c.req.query('to') ?? '', 'Update (to)');
+    if (from >= to) throw new ValidationError('from muss kleiner als to sein');
+    const query = parseUpdateChangesQuery(c.req.query());
+    const fromUpdate = getUpdate(db, from);
+    const toUpdate = getUpdate(db, to);
+    if (!fromUpdate || !toUpdate) return c.json({ error: 'Update nicht gefunden' }, 404);
+    if (fromUpdate.status !== 'done' || toUpdate.status !== 'done') throw new ValidationError('Beide Updates müssen abgeschlossen sein');
+    return c.json<UpdateCompareResponse>(compareUpdates(db, fromUpdate, toUpdate, query));
+  });
 
   app.get('/api/updates/:id/changes', (c) => {
     const id = parseId(c.req.param('id'), 'Update');

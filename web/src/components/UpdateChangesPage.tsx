@@ -1,8 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import type { ChangeFocus, ChangeKind, ItemView, UpdateChangeEntry } from '../../../shared/types';
+import type { ChangeFocus, ChangeKind, ItemView, UpdateChangeEntry, UpdateCompareResponse, UpdateDetail } from '../../../shared/types';
 import { api, ApiError } from '../api';
-import { CHANGE_KINDS, changesUrl, parseChangesFilters, toChangesApiQuery, type ChangesFilters } from '../lib/changes';
+import { CHANGE_KINDS, changesUrl, compareUrl, parseChangesFilters, toChangesApiQuery, type ChangesFilters } from '../lib/changes';
 import { CHANGE_LABELS, describeUpdate, formatDateTime, formatNumber, rarityClass } from '../lib/format';
 import { PAGE_SIZE } from '../lib/filters';
 import { navigate } from '../lib/router';
@@ -48,26 +48,59 @@ function same<T>(a: T[], b: T[]): boolean {
   return a.length === b.length && a.every((v, i) => v === b[i]);
 }
 
-/** Änderungen eines Updates: Zähler als Filter-Kacheln, Filterleiste und Liste. */
-export function UpdateChangesPage({ id, params }: { id: number; params: URLSearchParams }) {
+/** "/updates/compare?from=A&to=B": liest die beiden Update-IDs aus der URL. */
+export function CompareRoute({ params }: { params: URLSearchParams }) {
+  const from = Number(params.get('from'));
+  const to = Number(params.get('to'));
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || from >= to) {
+    return (
+      <div className="empty">
+        <p>Ungültiger Vergleich: from muss kleiner als to sein.</p>
+        <Link href="/updates">Zum neuesten Update</Link>
+      </div>
+    );
+  }
+  return <UpdateChangesPage source={{ from, to }} params={params} />;
+}
+
+type Source = { id: number } | { from: number; to: number };
+type Page = Omit<UpdateCompareResponse, 'from' | 'to'> & { from: UpdateDetail | null; to: UpdateDetail };
+
+const isDone = (u: { status?: string }) => u.status === undefined || u.status === 'done';
+
+/**
+ * Änderungen: entweder eines Updates (/updates/:id, gegen den Vorgänger) oder zweier frei gewählter Stände
+ * (/updates/compare). Zähler als Filter-Kacheln, Filterleiste und Liste.
+ */
+export function UpdateChangesPage({ source, params }: { source: Source; params: URLSearchParams }) {
   const filters = parseChangesFilters(params);
   const query = toChangesApiQuery(filters);
   const changes = useQuery({
-    queryKey: ['updateChanges', id, query],
-    queryFn: () => api.updateChanges(id, query),
+    queryKey: ['updateChanges', source, query],
+    queryFn: async (): Promise<Page> => {
+      if ('from' in source) return api.compareUpdates(source.from, source.to, query);
+      const { update, ...rest } = await api.updateChanges(source.id, query);
+      return { ...rest, from: null, to: update };
+    },
     placeholderData: keepPreviousData, // alte Seite stehen lassen, bis die neue da ist
   });
   const updates = useQuery({ queryKey: ['updates'], queryFn: api.updates });
+  const toId = 'from' in source ? source.to : source.id;
+
+  // Vorgänger für /updates/:id: das letzte abgeschlossene Update davor.
+  const predecessor = 'from' in source ? undefined : updates.data?.find((u) => u.id < source.id && isDone(u));
+  const fromId = 'from' in source ? source.from : predecessor?.id;
+  const pageUrl = (f: ChangesFilters) => ('from' in source ? compareUrl(source.from, source.to, f) : changesUrl(source.id, f));
 
   // Jede Filteränderung springt auf Seite 1, außer beim Blättern selbst (patch.page).
   const change = (patch: Partial<ChangesFilters>, options: { replace?: boolean } = {}) =>
-    navigate(changesUrl(id, { ...filters, page: 1, ...patch }), options);
+    navigate(pageUrl({ ...filters, page: 1, ...patch }), options);
 
   if (changes.isError && !changes.data) {
     const notFound = changes.error instanceof ApiError && changes.error.status === 404;
     return notFound ? (
       <div className="empty">
-        <p>Dieses Update gibt es nicht.</p>
+        <p>Dieses Update gibt es nicht oder der Vergleich ist ungültig.</p>
         <Link href="/updates">Zum neuesten Update</Link>
       </div>
     ) : (
@@ -77,9 +110,11 @@ export function UpdateChangesPage({ id, params }: { id: number; params: URLSearc
   if (!changes.data) return <Loading text="Lade Änderungen …" />;
 
   const data = changes.data;
-  const { update, counts } = data;
+  const { to: update, counts } = data;
   // Das älteste Update ist der Vollimport: Dort ist alles neu, ein Vergleich lohnt erst ab dem zweiten.
-  const isFirst = updates.data !== undefined && updates.data.every((u) => u.id >= update.id);
+  const isFirst = !('from' in source) && updates.data !== undefined && updates.data.every((u) => u.id >= update.id);
+  const fromUpdate = data.from ?? predecessor ?? null;
+  const doneUpdates = (updates.data ?? []).filter(isDone);
 
   const kindTile = (kind: ChangeKind, count: number, className: string) => ({
     label: CHANGE_LABELS[kind],
@@ -112,26 +147,50 @@ export function UpdateChangesPage({ id, params }: { id: number; params: URLSearc
     <>
       <div className="panel update-head">
         <div>
-          <h2>Änderungen im Update #{update.id}</h2>
+          <h2>{'from' in source ? `Vergleich: Stand nach Update #${source.from} mit Stand nach Update #${update.id}` : `Änderungen im Update #${update.id}`}</h2>
           <div className="small muted">
             {formatDateTime(update.startedAt)} · Build {update.buildId ?? 'unbekannt'} ·{' '}
             {update.status === 'done' ? 'abgeschlossen' : update.status === 'running' ? 'läuft noch' : 'fehlgeschlagen'}
           </div>
         </div>
         <label className="field field-update">
-          <span className="field-label">Update</span>
-          <select value={update.id} onChange={(e) => navigate(changesUrl(Number(e.target.value), { ...filters, page: 1 }))}>
-            {updates.data && !updates.data.some((u) => u.id === update.id) && <option value={update.id}>Update #{update.id}</option>}
-            {(updates.data ?? [update]).map((u) => (
+          <span className="field-label">Von (Stand nach)</span>
+          <select
+            value={fromId ?? ''}
+            disabled={fromId === undefined}
+            onChange={(e) => navigate(compareUrl(Number(e.target.value), toId, { ...filters, page: 1 }))}
+          >
+            {fromId === undefined && <option value="">–</option>}
+            {doneUpdates.filter((u) => u.id < toId).map((u) => (
               <option key={u.id} value={u.id}>
                 {describeUpdate(u)}
               </option>
             ))}
           </select>
         </label>
+        <label className="field field-update">
+          <span className="field-label">Bis (Stand nach)</span>
+          <select
+            value={toId}
+            disabled={fromId === undefined}
+            onChange={(e) => navigate(compareUrl(fromId!, Number(e.target.value), { ...filters, page: 1 }))}
+          >
+            {doneUpdates.filter((u) => u.id > (fromId ?? 0) || u.id === toId).map((u) => (
+              <option key={u.id} value={u.id}>
+                {describeUpdate(u)}
+              </option>
+            ))}
+            {!doneUpdates.some((u) => u.id === toId) && <option value={toId}>Update #{toId}</option>}
+          </select>
+        </label>
       </div>
 
       {update.status === 'failed' && <div className="warning">Dieses Update ist fehlgeschlagen{update.error ? `: ${update.error}` : ''}.</div>}
+      {data.legacyValues && (
+        <div className="warning">
+          In diesem {'from' in source ? 'Bereich' : 'Update'} liegen Änderungen aus der Zeit vor der Speicherung alter Werte. Dort sind die alten Werte teils nicht gespeichert.
+        </div>
+      )}
       {isFirst && (
         <div className="warning">
           Das ist das erste Update (Vollimport), deshalb sind alle Items „Neu“. Ein Vergleich ist erst ab dem zweiten Update sinnvoll.
@@ -140,7 +199,7 @@ export function UpdateChangesPage({ id, params }: { id: number; params: URLSearc
 
       <div className="count-tiles">
         {tiles.map((tile) => (
-          <Link key={tile.label} href={changesUrl(id, { ...filters, ...tile.patch, page: 1 })} className={tile.active ? 'count-tile active' : 'count-tile'}>
+          <Link key={tile.label} href={pageUrl({ ...filters, ...tile.patch, page: 1 })} className={tile.active ? 'count-tile active' : 'count-tile'}>
             <span className={`count-tile-value ${tile.count > 0 ? tile.className : 'muted'}`}>{formatNumber(tile.count)}</span>
             <span className="small muted">{tile.label}</span>
           </Link>
@@ -189,7 +248,7 @@ export function UpdateChangesPage({ id, params }: { id: number; params: URLSearc
             <span className="field-label">Suche</span>
             <input
               type="search"
-              key={`${id}-${filters.q}`}
+              key={`${toId}-${filters.q}`}
               defaultValue={filters.q}
               onChange={(e) => change({ q: e.target.value }, { replace: true })}
               placeholder="Name oder ID"
@@ -213,7 +272,11 @@ export function UpdateChangesPage({ id, params }: { id: number; params: URLSearc
         <p className="empty">Keine Änderungen für diese Filter.</p>
       ) : (
         <div className={changes.isPlaceholderData ? 'results stale' : 'results'}>
-          <ChangesTable items={data.items} />
+          <ChangesTable
+            items={data.items}
+            oldLabel={fromUpdate ? `Stand nach #${fromUpdate.id} (${formatDateTime(fromUpdate.startedAt)})` : 'Alt (vor dem Import)'}
+            newLabel={`Stand nach #${update.id} (${formatDateTime(update.startedAt)})`}
+          />
         </div>
       )}
       <Pagination page={filters.page} total={data.total} pageSize={data.pageSize || PAGE_SIZE} onPage={(page) => change({ page })} />
@@ -262,6 +325,10 @@ function buildRows(item: UpdateChangeEntry): FieldRowData[] {
 
   const names = kind === 'changed' ? item.changedFields : Object.keys((kind === 'added' ? item.after : item.before) ?? {});
   for (const name of names.filter((n) => n !== 'game_types')) {
+    if (item.unknownFields?.includes(name)) {
+      rows.push({ name, message: NOT_STORED });
+      continue;
+    }
     const before = item.before?.[name];
     const after = item.after?.[name];
     rows.push({
@@ -273,26 +340,26 @@ function buildRows(item: UpdateChangeEntry): FieldRowData[] {
   return rows;
 }
 
-function ChangesTable({ items }: { items: UpdateChangeEntry[] }) {
+function ChangesTable({ items, oldLabel, newLabel }: { items: UpdateChangeEntry[]; oldLabel: string; newLabel: string }) {
   return (
     <table className="item-table changes-table">
       <thead>
         <tr>
           <th>Item</th>
           <th>Feld</th>
-          <th>Alt</th>
-          <th>Neu</th>
+          <th>{oldLabel}</th>
+          <th>{newLabel}</th>
         </tr>
       </thead>
       {items.map((item) => (
-        <ChangeRows key={`${item.id}-${item.kind}`} item={item} />
+        <ChangeRows key={`${item.id}-${item.kind}`} item={item} oldLabel={oldLabel} newLabel={newLabel} />
       ))}
     </table>
   );
 }
 
 /** Ein Eintrag als eigener tbody: Item-Zelle mit rowspan, dazu eine Zeile pro geändertem Feld. */
-function ChangeRows({ item }: { item: UpdateChangeEntry }) {
+function ChangeRows({ item, oldLabel, newLabel }: { item: UpdateChangeEntry; oldLabel: string; newLabel: string }) {
   const dungeonChanged = (item.gameTypesBefore?.includes('Dungeon') ?? false) !== (item.gameTypesAfter?.includes('Dungeon') ?? false);
   const classes = [item.kind === 'changed' && dungeonChanged ? 'dungeon-change' : '', item.removed ? 'removed' : ''].filter(Boolean).join(' ');
   const rows = buildRows(item);
@@ -337,10 +404,10 @@ function ChangeRows({ item }: { item: UpdateChangeEntry }) {
             </td>
           ) : (
             <>
-              <td className="value-cell" data-label="Alt">
+              <td className="value-cell" data-label={oldLabel}>
                 {row.before}
               </td>
-              <td className="value-cell" data-label="Neu">
+              <td className="value-cell" data-label={newLabel}>
                 {row.after}
               </td>
             </>

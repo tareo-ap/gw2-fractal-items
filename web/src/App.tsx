@@ -5,7 +5,7 @@ import { Header } from './components/Header';
 import { ItemListPage } from './components/ItemListPage';
 import { ItemDetailPage } from './components/ItemDetailPage';
 import type { FilterChange } from './components/FilterBar';
-import { UpdateChangesPage, UpdatesRedirect } from './components/UpdateChangesPage';
+import { CompareRoute, UpdateChangesPage, UpdatesRedirect } from './components/UpdateChangesPage';
 import { Link } from './components/common';
 
 // Routen: "/" = Liste (Filter in den Query-Parametern), "/items/:id" = Detailansicht,
@@ -14,6 +14,7 @@ export function App() {
   const { path, params } = useLocation();
   const detailMatch = /^\/items\/(\d+)\/?$/.exec(path);
   const updateMatch = /^\/updates\/(\d+)\/?$/.exec(path);
+  const compareMatch = /^\/updates\/compare\/?$/.test(path);
   const isUpdatesRoot = /^\/updates\/?$/.test(path);
   const isList = path === '/';
 
@@ -30,13 +31,14 @@ export function App() {
 
   return (
     <div className="app">
-      <Header filters={filters} activeView={isList ? filters.view : null} changesActive={!!updateMatch || isUpdatesRoot} />
+      <Header filters={filters} activeView={isList ? filters.view : null} changesActive={!!updateMatch || compareMatch || isUpdatesRoot} />
       <main className="content">
         {isList && <ItemListPage filters={filters} onChange={changeFilters} />}
         {detailMatch && <ItemDetailPage id={Number(detailMatch[1])} backHref={listUrl(filters)} />}
-        {updateMatch && <UpdateChangesPage id={Number(updateMatch[1])} params={params} />}
+        {updateMatch && <UpdateChangesPage source={{ id: Number(updateMatch[1]) }} params={params} />}
+        {compareMatch && <CompareRoute params={params} />}
         {isUpdatesRoot && <UpdatesRedirect />}
-        {!isList && !detailMatch && !updateMatch && !isUpdatesRoot && (
+        {!isList && !detailMatch && !updateMatch && !compareMatch && !isUpdatesRoot && (
           <div className="empty">
             <p>Diese Seite gibt es nicht.</p>
             <Link href="/">Zur Liste</Link>
