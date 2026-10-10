@@ -8,19 +8,23 @@ export function rarityClass(rarity: Rarity | string): string {
 }
 
 /** Kurzbeschreibung eines Updates für das Dropdown, z. B. "10.10.2026, 14:03 · 12 neu · 30 geändert". */
-export function describeUpdate(u: UpdateListEntry, { t, formatDateTime }: Pick<I18n, 't' | 'formatDateTime'>): string {
-  const parts = [
-    formatDateTime(u.startedAt),
-    t('update.describeNew', { n: u.added }),
-    t('update.describeChanged', { n: u.changed }),
-    t('update.describeRemoved', { n: u.removed }),
-  ];
-  if (u.dungeonGained !== undefined || u.dungeonLost !== undefined) {
-    parts.push(`Dungeon +${u.dungeonGained ?? 0} / −${u.dungeonLost ?? 0}`);
-  }
-  if (u.status === 'running') parts.push(t('update.describeRunning'));
-  if (u.status === 'failed') parts.push(t('update.describeFailed'));
-  return parts.join(' · ');
+/** Zeitpunkt in UTC als "YYYY-MM-DD_HH:MM", unabhängig von Sprache und Zeitzone des Browsers. */
+export function utcStamp(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return `${date.toISOString().slice(0, 10)}_${date.toISOString().slice(11, 16)}`;
+}
+
+/** Name eines Stands: "<YYYY-MM-DD>_<HH:MM UTC>_<Game-Build>", z. B. "2026-10-10_11:23_208039". */
+export function stateName(u: { startedAt: string; buildId: number | null }): string {
+  return `${utcStamp(u.startedAt)}_${u.buildId ?? '?'}`;
+}
+
+/** Eintrag im Auswahlfeld: Name des Stands, bei laufenden oder fehlgeschlagenen Updates mit Hinweis. */
+export function describeUpdate(u: UpdateListEntry, { t }: Pick<I18n, 't'>): string {
+  if (u.status === 'running') return `${stateName(u)} · ${t('update.describeRunning')}`;
+  if (u.status === 'failed') return `${stateName(u)} · ${t('update.describeFailed')}`;
+  return stateName(u);
 }
 
 /** Händlerwert in Kupfer → "1g 2s 3c". */

@@ -4,6 +4,7 @@ import { api } from '../api';
 import { useT, type Key } from '../lib/i18n';
 import { listUrl, type ListFilters } from '../lib/filters';
 import { Link } from './common';
+import { stateName } from '../lib/format';
 import { UpdateButton } from './UpdateButton';
 
 const TABS: { view: ItemView; label: Key }[] = [
@@ -62,7 +63,7 @@ export function Header({ filters, activeView, changesActive }: { filters: ListFi
                 <strong>{formatNumber(s.items)}</strong> Items
               </span>
               <span title={t('header.lastUpdate')}>
-                {t('header.updateLabel')} <strong>{s.lastUpdate ? formatDateTime(s.lastUpdate.startedAt) : t('header.noUpdate')}</strong>
+                {t('header.updateLabel')} <strong>{s.lastUpdate ? `${stateName(s.lastUpdate)} UTC` : t('header.noUpdate')}</strong>
               </span>
             </>
           )}

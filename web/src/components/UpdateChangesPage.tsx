@@ -3,7 +3,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type { ChangeFocus, ChangeKind, ItemView, UpdateChangeEntry, UpdateCompareResponse, UpdateDetail } from '../../../shared/types';
 import { api, ApiError } from '../api';
 import { CHANGE_KINDS, changesUrl, compareUrl, parseChangesFilters, toChangesApiQuery, type ChangesFilters } from '../lib/changes';
-import { describeUpdate, rarityClass } from '../lib/format';
+import { describeUpdate, rarityClass, stateName } from '../lib/format';
 import { errorText, useT, type TFunction } from '../lib/i18n';
 import { PAGE_SIZE } from '../lib/filters';
 import { navigate } from '../lib/router';
@@ -143,7 +143,7 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
         <div>
           <h2>{'from' in source ? t('changes.titleCompare', { from: source.from, to: update.id }) : t('changes.titleUpdate', { id: update.id })}</h2>
           <div className="small muted">
-            {formatDateTime(update.startedAt)} · {t('changes.build', { build: update.buildId ?? t('changes.unknownBuild') })} ·{' '}
+            {t('changes.stateName', { name: stateName(update) })} · {t('changes.build', { build: update.buildId ?? t('changes.unknownBuild') })} ·{' '}
             {update.status === 'done' ? t('changes.statusDone') : update.status === 'running' ? t('changes.statusRunning') : t('changes.statusFailed')}
           </div>
         </div>
@@ -271,8 +271,8 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
         <div className={changes.isPlaceholderData ? 'results stale' : 'results'}>
           <ChangesTable
             items={data.items}
-            oldLabel={fromUpdate ? t('changes.stateAfter', { id: fromUpdate.id, date: formatDateTime(fromUpdate.startedAt) }) : t('changes.beforeImport')}
-            newLabel={t('changes.stateAfter', { id: update.id, date: formatDateTime(update.startedAt) })}
+            oldLabel={fromUpdate ? t('changes.stateAfter', { id: fromUpdate.id, date: stateName(fromUpdate) }) : t('changes.beforeImport')}
+            newLabel={t('changes.stateAfter', { id: update.id, date: stateName(update) })}
           />
         </div>
       )}

@@ -51,7 +51,13 @@ export function UpdateButton() {
 
   return (
     <div className="update-box">
-      <button type="button" className="btn btn-primary" onClick={() => start.mutate()} disabled={running || start.isPending}>
+      <button
+        type="button"
+        className="btn btn-primary"
+        onClick={() => start.mutate()}
+        disabled={running || start.isPending}
+        title={t('update.tooltip')}
+      >
         {running ? t('update.running') : t('update.button')}
       </button>
       {running && data && (

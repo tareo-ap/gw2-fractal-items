@@ -1,10 +1,11 @@
 import type { ItemChange } from '../../../shared/types';
 import { useT } from '../lib/i18n';
 import { GameTypeDiff, Link } from './common';
+import { utcStamp } from '../lib/format';
 
 /** Änderungsverlauf eines Items, neueste zuerst; game_types-Änderungen hervorgehoben. */
 export function HistoryList({ history }: { history: ItemChange[] }) {
-  const { t, formatDateTime } = useT();
+  const { t } = useT();
   if (history.length === 0) return <p className="small muted">{t('history.empty')}</p>;
   return (
     <ol className="history">
@@ -17,7 +18,7 @@ export function HistoryList({ history }: { history: ItemChange[] }) {
             <div className="history-head">
               <span className={`badge change-${change.kind}`}>{t(`change.${change.kind}`)}</span>
               <Link href={`/updates/${change.updateId}`} className="small">
-                {formatDateTime(change.updateStartedAt)}
+                {utcStamp(change.updateStartedAt)} UTC
               </Link>
             </div>
             {gameTypesChanged && (change.gameTypesBefore || change.gameTypesAfter) && (
