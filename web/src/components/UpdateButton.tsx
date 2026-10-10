@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api';
 import { PHASE_LABELS, formatNumber } from '../lib/format';
+import { Link } from './common';
 
 // Button "Aktualisieren": startet einen Import und pollt den Status, solange er läuft.
 export function UpdateButton() {
@@ -62,6 +63,11 @@ export function UpdateButton() {
             <div className={percent === null ? 'progress-fill indeterminate' : 'progress-fill'} style={{ width: `${percent ?? 30}%` }} />
           </div>
         </div>
+      )}
+      {!running && data?.phase === 'done' && data.updateId !== null && (
+        <Link href={`/updates/${data.updateId}`} className="small">
+          Änderungen ansehen
+        </Link>
       )}
       {!running && data?.phase === 'failed' && <span className="error small">Letztes Update fehlgeschlagen: {data.error ?? 'unbekannter Fehler'}</span>}
       {message && <span className="small muted">{message}</span>}

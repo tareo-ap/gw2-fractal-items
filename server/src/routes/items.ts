@@ -30,6 +30,9 @@ export const TONIC_SQL = `(i.type IN ('Gizmo', 'Consumable')
   AND (EXISTS (SELECT 1 FROM json_each(i.flags) WHERE value = 'Tonic') OR i.name LIKE '%Tonic%')
   AND (i.subtype IS NULL OR i.subtype <> 'Unlock'))`;
 
+// Platzhalter: leerer Name, kein Icon oder interner Name wie "((906936))" bzw. "[[913817]]". Erwartet den Alias i.
+export const PLACEHOLDER_SQL = `(trim(i.name) = '' OR i.icon IS NULL OR i.name GLOB '((*))' OR i.name GLOB '[[][[]*]]')`;
+
 const RARITY_RANK_SQL = `CASE i.rarity ${RARITIES.map((r, idx) => `WHEN '${r}' THEN ${idx}`).join(' ')} ELSE 99 END`;
 
 const SORT_SQL: Record<(typeof SORTS)[number], string> = {
@@ -99,7 +102,7 @@ export function parseItemListQuery(params: Record<string, string | undefined>): 
   };
 }
 
-function oneOf<T extends string>(name: string, value: string | undefined, allowed: readonly T[]): T | undefined {
+export function oneOf<T extends string>(name: string, value: string | undefined, allowed: readonly T[]): T | undefined {
   if (value === undefined || value === '') return undefined;
   if (!(allowed as readonly string[]).includes(value)) {
     throw new ValidationError(`${name} muss einer dieser Werte sein: ${allowed.join(', ')}`);
@@ -107,20 +110,20 @@ function oneOf<T extends string>(name: string, value: string | undefined, allowe
   return value as T;
 }
 
-function bool(name: string, value: string | undefined): boolean | undefined {
+export function bool(name: string, value: string | undefined): boolean | undefined {
   if (value === undefined || value === '') return undefined;
   if (value === 'true' || value === '1') return true;
   if (value === 'false' || value === '0') return false;
   throw new ValidationError(`${name} muss true oder false sein`);
 }
 
-function int(name: string, value: string, min: number): number {
+export function int(name: string, value: string, min: number): number {
   const n = Number(value);
   if (!Number.isInteger(n) || n < min) throw new ValidationError(`${name} muss eine ganze Zahl ≥ ${min} sein`);
   return n;
 }
 
-function list<T extends string>(name: string, value: string | undefined, allowed: readonly T[]): T[] {
+export function list<T extends string>(name: string, value: string | undefined, allowed: readonly T[]): T[] {
   if (!value) return [];
   return value
     .split(',')
@@ -198,10 +201,7 @@ export function listItems(db: DatabaseSync, query: ParsedItemListQuery): ItemLis
         OR (i.subtype = 'Immediate' AND i.name GLOB '[0-9]* *')))`,
     );
   }
-  // Platzhalter: leerer Name, kein Icon oder interner Name wie "((906936))" bzw. "[[913817]]".
-  if (query.hidePlaceholders) {
-    where.push(`NOT (trim(i.name) = '' OR i.icon IS NULL OR i.name GLOB '((*))' OR i.name GLOB '[[][[]*]]')`);
-  }
+  if (query.hidePlaceholders) where.push(`NOT ${PLACEHOLDER_SQL}`);
   if (query.rarity.length > 0) {
     where.push(`i.rarity IN (${query.rarity.map(() => '?').join(', ')})`);
     params.push(...query.rarity);

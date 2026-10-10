@@ -15,7 +15,7 @@ export function HistoryList({ history }: { history: ItemChange[] }) {
           <li key={`${change.updateId}-${change.kind}`} className={dungeonChanged ? 'history-entry dungeon-change' : 'history-entry'}>
             <div className="history-head">
               <span className={`badge change-${change.kind}`}>{CHANGE_LABELS[change.kind]}</span>
-              <Link href={`/?view=all&candidate=all&includeRemoved=true&updateId=${change.updateId}`} className="small">
+              <Link href={`/updates/${change.updateId}`} className="small">
                 {formatDateTime(change.updateStartedAt)}
               </Link>
             </div>

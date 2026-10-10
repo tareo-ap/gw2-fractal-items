@@ -11,6 +11,7 @@ import type {
   ItemDetail,
   ItemListResponse,
   StatsResponse,
+  UpdateChangesResponse,
   UpdateDetail,
 } from '../../shared/types.js';
 import { ImportAlreadyRunningError, type Importer } from './importer/importer.js';
@@ -23,7 +24,7 @@ import {
   saveItemTest,
   ValidationError,
 } from './routes/items.js';
-import { listUpdates, toUpdateSummary, type UpdateRow } from './routes/updates.js';
+import { getUpdate, getUpdateChanges, listUpdates, parseUpdateChangesQuery, toUpdateSummary, type UpdateRow } from './routes/updates.js';
 
 // Baut die Hono-App. Getrennt von index.ts, damit sie sich ohne laufenden Server testen lässt.
 export function createApp(db: DatabaseSync, webDist: string | null, importer: Importer): Hono {
@@ -71,6 +72,13 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
   app.get('/api/updates', (c) => c.json<UpdateDetail[]>(listUpdates(db)));
 
   app.get('/api/updates/status', (c) => c.json<ImportStatus>(importer.getStatus()));
+
+  app.get('/api/updates/:id/changes', (c) => {
+    const id = parseId(c.req.param('id'), 'Update');
+    const query = parseUpdateChangesQuery(c.req.query());
+    const update = getUpdate(db, id);
+    return update ? c.json<UpdateChangesResponse>(getUpdateChanges(db, update, query)) : c.json({ error: 'Update nicht gefunden' }, 404);
+  });
 
   app.post('/api/updates', (c) => {
     try {
@@ -121,8 +129,8 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
   return app;
 }
 
-function parseId(value: string): number {
+function parseId(value: string, what = 'Item'): number {
   const id = Number(value);
-  if (!Number.isInteger(id) || id < 1) throw new ValidationError('Ungültige Item-ID');
+  if (!Number.isInteger(id) || id < 1) throw new ValidationError(`Ungültige ${what}-ID`);
   return id;
 }

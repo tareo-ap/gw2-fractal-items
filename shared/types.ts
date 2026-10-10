@@ -138,3 +138,61 @@ export interface ImportStatus {
   startedAt: string | null;
   error: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Änderungsseite: GET /api/updates/:id/changes
+// ---------------------------------------------------------------------------
+
+/** Fokus auf game_types: alle, nur game_types-Änderungen, Dungeon dazugekommen oder weggefallen (nur kind=changed). */
+export type ChangeFocus = 'all' | 'gameTypes' | 'dungeonGained' | 'dungeonLost';
+
+/**
+ * Query-Parameter (alle optional). kind als kommagetrennte Liste, z. B. kind=added,changed.
+ */
+export interface UpdateChangesQuery {
+  kind?: ChangeKind[]; // Default: alle
+  focus?: ChangeFocus; // Default 'all'
+  type?: ItemView; // Default 'all'
+  q?: string; // Name enthält (ohne Groß-/Kleinschreibung) oder exakte Item-ID
+  hidePlaceholders?: boolean; // Default true
+  page?: number; // ab 1, Default 1
+  pageSize?: number; // Default 50, max 200
+}
+
+/** Zähler für das gesamte Update, unabhängig von den Filtern. */
+export interface UpdateChangeCounts {
+  added: number;
+  changed: number;
+  removed: number;
+  gameTypesChanged: number; // kind=changed und game_types unterscheiden sich
+  dungeonGained: number;
+  dungeonLost: number;
+}
+
+export interface UpdateChangeEntry extends Omit<ItemChange, 'updateId' | 'updateStartedAt'> {
+  id: number;
+  name: string;
+  type: ItemType;
+  subtype: string | null;
+  rarity: Rarity;
+  icon: string | null;
+  removed: boolean; // Item ist heute (nicht nur in diesem Update) entfernt
+  isCandidate: boolean;
+  /**
+   * Alte und neue Werte pro Top-Level-Feld der API-Antwort.
+   * changed: nur die geänderten Felder; null, wenn das Update vor Einführung der Spalten importiert wurde.
+   * added: before = null, after = name, game_types, flags, description, rarity, details.type.
+   * removed: before = dieselben Felder (letzter bekannter Stand), after = null.
+   */
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+}
+
+export interface UpdateChangesResponse {
+  update: UpdateDetail;
+  counts: UpdateChangeCounts;
+  items: UpdateChangeEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+}

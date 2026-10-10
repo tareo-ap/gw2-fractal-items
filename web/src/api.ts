@@ -4,6 +4,7 @@ import type {
   ItemListResponse,
   ItemTestUpdate,
   StatsResponse,
+  UpdateChangesResponse,
   UpdateDetail,
   UpdateSummary,
 } from '../../shared/types';
@@ -57,6 +58,8 @@ export const api = {
   item: (id: number) => request<ItemDetail>('GET', `/api/items/${id}`),
   setTest: (id: number, update: ItemTestUpdate) => request<unknown>('PUT', `/api/items/${id}/test`, update),
   updates: () => request<UpdateListEntry[]>('GET', '/api/updates'),
+  updateChanges: (id: number, queryString: string) =>
+    request<UpdateChangesResponse>('GET', `/api/updates/${id}/changes?${queryString}`),
   importStatus: () => request<ImportStatus>('GET', '/api/updates/status'),
   startUpdate: () => request<unknown>('POST', '/api/updates'),
 };

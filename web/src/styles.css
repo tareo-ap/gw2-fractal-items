@@ -284,6 +284,48 @@ tr.removed .item-name, li.removed .item-name { text-decoration: line-through; }
 .change-changed { color: var(--rarity-fine); }
 .change-removed { color: var(--error); }
 
+/* ---------- Änderungen eines Updates ---------- */
+.update-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 12px; margin-bottom: 12px; }
+.update-head h2 { margin-bottom: 4px; }
+.update-head .field-update { flex: 0 1 460px; }
+.count-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.count-tile {
+  display: flex; flex-direction: column; gap: 2px; padding: 10px 14px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--text);
+}
+.count-tile:hover { text-decoration: none; border-color: var(--accent); }
+.count-tile.active { border-color: var(--accent); background: var(--surface-2); }
+.count-tile-value { font-size: 1.6rem; font-weight: 700; line-height: 1.2; }
+.changes-search { margin-top: 10px; }
+.item-table tr.dungeon-change { background: color-mix(in srgb, var(--warning) 7%, transparent); }
+.item-table tr.dungeon-change td:first-child { box-shadow: inset 3px 0 0 var(--warning); }
+
+/* Tabelle Alt/Neu: pro Item ein tbody, pro geändertem Feld eine Zeile */
+.changes-table tbody { border-bottom: 1px solid var(--border); }
+.changes-table tbody:last-child { border-bottom: 0; }
+.changes-table td { vertical-align: top; }
+.changes-table tbody tr:hover { background: transparent; }
+.changes-table tbody.dungeon-change { background: color-mix(in srgb, var(--warning) 7%, transparent); box-shadow: inset 3px 0 0 var(--warning); }
+.changes-table tbody.removed { opacity: 0.45; filter: grayscale(0.7); }
+.changes-table .item-cell { width: 280px; border-right: 1px solid var(--border); }
+.changes-table .item-cell-body { display: flex; gap: 10px; align-items: flex-start; }
+.changes-table .field-name { width: 130px; }
+.changes-table .field-row td { border-bottom: 1px dashed var(--border); }
+.changes-table .value-cell { overflow-wrap: anywhere; }
+.changes-table .gt-diff { margin-top: 4px; }
+.kv { margin: 0; font-size: 0.85rem; }
+.kv dd { display: inline; margin: 0; }
+.link-button { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; }
+.link-button:hover { text-decoration: underline; }
+@media (max-width: 700px) {
+  /* Schmal: Alt und Neu untereinander, Item-Zelle über den Feldern */
+  .changes-table thead { display: none; }
+  .changes-table tbody, .changes-table tr, .changes-table td { display: block; width: auto; }
+  .changes-table .item-cell { width: auto; border-right: 0; }
+  .changes-table .value-cell::before { content: attr(data-label) ': '; color: var(--muted); font-size: 0.75rem; text-transform: uppercase; }
+  .changes-table .field-row td { border-bottom: 0; padding-top: 2px; padding-bottom: 2px; }
+}
+
 /* ---------- Schmale Bildschirme ---------- */
 @media (max-width: 800px) {
   .detail-layout { grid-template-columns: minmax(0, 1fr); }

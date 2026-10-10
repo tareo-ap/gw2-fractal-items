@@ -14,9 +14,14 @@ const TABS: { view: ItemView; label: string }[] = [
 ];
 
 /** Kopfzeile mit Tabs, Kennzahlen und Update-Button. activeView ist null auf der Detailseite. */
-export function Header({ filters, activeView }: { filters: ListFilters; activeView: ItemView | null }) {
+export function Header({ filters, activeView, changesActive }: { filters: ListFilters; activeView: ItemView | null; changesActive: boolean }) {
   const stats = useQuery({ queryKey: ['stats'], queryFn: api.stats });
   const s = stats.data;
+
+  // Zähler am Tab "Änderungen": Einträge des neuesten abgeschlossenen Updates; beim Vollimport allein weglassen.
+  const updates = useQuery({ queryKey: ['updates'], queryFn: api.updates });
+  const latest = updates.data?.find((u) => u.status === undefined || u.status === 'done');
+  const changesCount = latest && updates.data!.some((u) => u.id < latest.id) ? latest.added + latest.changed + latest.removed : null;
 
   const tabCount = (view: ItemView): number | null => {
     if (!s) return null;
@@ -65,6 +70,14 @@ export function Header({ filters, activeView }: { filters: ListFilters; activeVi
             </Link>
           );
         })}
+        <Link href="/updates" className={changesActive ? 'tab active' : 'tab'}>
+          Änderungen
+          {changesCount !== null && (
+            <span className="tab-count" title="Einträge im neuesten Update">
+              {formatNumber(changesCount)}
+            </span>
+          )}
+        </Link>
       </nav>
     </header>
   );

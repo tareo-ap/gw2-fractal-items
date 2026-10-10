@@ -87,4 +87,9 @@ export const migrations: string[] = [
   CREATE INDEX items_chat_link ON items(chat_link);
   CREATE INDEX item_changes_update ON item_changes(update_id, kind);
   `,
+  // 3: alte und neue Werte der geänderten Top-Level-Felder (JSON-Objekte) für die Ansicht "Änderungen"
+  `
+  ALTER TABLE item_changes ADD COLUMN values_before TEXT;
+  ALTER TABLE item_changes ADD COLUMN values_after TEXT;
+  `,
 ];

@@ -149,8 +149,9 @@ export function writeItems(db: DatabaseSync, updateId: number, items: Gw2Item[],
       last_changed_update = :update_id, removed = 0
     WHERE id = :id`);
   const insertChange = db.prepare(`
-    INSERT INTO item_changes (update_id, item_id, kind, changed_fields, game_types_before, game_types_after)
-    VALUES (?, ?, ?, ?, ?, ?)`);
+    INSERT INTO item_changes (update_id, item_id, kind, changed_fields, game_types_before, game_types_after,
+                              values_before, values_after)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
 
   for (let i = 0; i < items.length; i += WRITE_BLOCK_SIZE) {
     const block = items.slice(i, i + WRITE_BLOCK_SIZE);
@@ -176,7 +177,7 @@ export function writeItems(db: DatabaseSync, updateId: number, items: Gw2Item[],
 
         if (diff.kind === 'added') {
           counts.added++;
-          insertChange.run(updateId, item.id, 'added', null, null, JSON.stringify(diff.gameTypesAfter));
+          insertChange.run(updateId, item.id, 'added', null, null, JSON.stringify(diff.gameTypesAfter), null, null);
         } else {
           counts.changed++;
           insertChange.run(
@@ -186,6 +187,8 @@ export function writeItems(db: DatabaseSync, updateId: number, items: Gw2Item[],
             JSON.stringify(diff.changedFields),
             JSON.stringify(diff.gameTypesBefore),
             JSON.stringify(diff.gameTypesAfter),
+            JSON.stringify(diff.valuesBefore),
+            JSON.stringify(diff.valuesAfter),
           );
         }
       }
@@ -202,7 +205,7 @@ export function writeItems(db: DatabaseSync, updateId: number, items: Gw2Item[],
     for (const { id, game_types } of active) {
       if (liveIds.has(id)) continue;
       markRemoved.run(updateId, id);
-      insertChange.run(updateId, id, 'removed', null, game_types, null);
+      insertChange.run(updateId, id, 'removed', null, game_types, null, null, null);
       counts.removed++;
     }
   });

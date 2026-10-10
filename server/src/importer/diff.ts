@@ -39,7 +39,15 @@ export interface StoredItem {
 export type ItemDiff =
   | { kind: 'unchanged' }
   | { kind: 'added'; gameTypesAfter: string[] }
-  | { kind: 'changed'; changedFields: string[]; gameTypesBefore: string[]; gameTypesAfter: string[] };
+  | {
+      kind: 'changed';
+      changedFields: string[];
+      gameTypesBefore: string[];
+      gameTypesAfter: string[];
+      /** Nur die geänderten Top-Level-Felder mit ihrem alten bzw. neuen Wert (fehlendes Feld = nicht vorhanden). */
+      valuesBefore: Record<string, unknown>;
+      valuesAfter: Record<string, unknown>;
+    };
 
 /**
  * Vergleicht ein frisch geladenes Item mit dem gespeicherten Stand.
@@ -52,11 +60,16 @@ export function diffItem(stored: StoredItem | undefined, item: Gw2Item, hash: st
   if (!stored || stored.removed) return { kind: 'added', gameTypesAfter };
   if (stored.hash === hash) return { kind: 'unchanged' };
   const before = JSON.parse(stored.rawJson) as Record<string, unknown>;
+  const fields = changedFields(before, item);
+  const pick = (source: Record<string, unknown>) =>
+    Object.fromEntries(fields.filter((field) => source[field] !== undefined).map((field) => [field, source[field]]));
   return {
     kind: 'changed',
-    changedFields: changedFields(before, item),
+    changedFields: fields,
     gameTypesBefore: stored.gameTypes,
     gameTypesAfter,
+    valuesBefore: pick(before),
+    valuesAfter: pick(item),
   };
 }
 

@@ -1,10 +1,16 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
-import type { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync } from 'node:sqlite';
 import type { Hono } from 'hono';
-import type { ImportStatus, ItemDetail, ItemListResponse, UpdateDetail } from '../../shared/types.js';
+import type { ImportStatus, ItemDetail, ItemListResponse, UpdateChangesResponse, UpdateDetail } from '../../shared/types.js';
 import { createApp } from './app.js';
-import type { Importer } from './importer/importer.js';
+import { openDatabase } from './db/index.js';
+import { migrations } from './db/schema.js';
+import { Gw2Client } from './gw2/client.js';
+import { Importer } from './importer/importer.js';
 import { startFakeGw2Api, type FakeGw2Api } from './test/fakeGw2Api.js';
 import { chatLinkFor, createTestImporter, fixtureItems, runImport } from './test/fixtures.js';
 
@@ -283,5 +289,180 @@ describe('Teststatus und Updates', () => {
     const stats = await getJson<{ items: number; candidates: { gizmo: number; consumable: number; tonic: number } }>('/api/stats');
     assert.equal(stats.items, 6);
     assert.deepEqual(stats.candidates, { gizmo: 0, consumable: 3, tonic: 0 });
+  });
+});
+
+describe('GET /api/updates/:id/changes (zweite Importrunde)', () => {
+  let chApi: FakeGw2Api;
+  let chApp: Hono;
+  let firstId: number;
+  let secondId: number;
+
+  before(async () => {
+    const gizmo = fixtureItems()[0]!;
+    const potion = fixtureItems().find((i) => i.id === 8778)!;
+    chApi = await startFakeGw2Api([
+      { ...gizmo, id: 1, name: 'Stable Gizmo', game_types: ['Dungeon', 'Pve'] },
+      { ...gizmo, id: 2, name: 'Lost Gizmo', game_types: ['Dungeon', 'Pve', 'Wvw'] },
+      { ...gizmo, id: 3, name: 'Gained Gizmo', game_types: ['Pve'] },
+      { ...gizmo, id: 4, name: 'Removed Gizmo', game_types: ['Dungeon', 'Pve'] },
+      { ...gizmo, id: 5, name: 'Desc Gizmo', game_types: ['Dungeon', 'Pve'] },
+      { ...gizmo, id: 6, name: 'Reorder Gizmo', game_types: ['Pve', 'Dungeon'] },
+      { ...potion, id: 7, name: 'Lost Potion', game_types: ['Dungeon', 'Pve'] },
+      potion,
+    ]);
+    const { db: chDb, importer: chImporter } = createTestImporter(chApi.url);
+    chApp = createApp(chDb, null, chImporter);
+    firstId = (await runImport(chImporter)).updateId!;
+
+    chApi.items.get(2)!.game_types = ['Pve', 'Wvw'];
+    chApi.items.get(3)!.game_types = ['Dungeon', 'Pve'];
+    chApi.items.delete(4);
+    chApi.items.get(5)!.description = 'Neue Beschreibung';
+    chApi.items.get(6)!.game_types = ['Dungeon', 'Pve'];
+    chApi.items.get(7)!.game_types = ['Pve'];
+    chApi.items.set(9, { ...gizmo, id: 9, name: 'New Gizmo', game_types: ['Dungeon'] });
+    chApi.items.set(10, { ...gizmo, id: 10, name: '((123456))', game_types: ['Dungeon'] });
+    chApi.buildId = 123457;
+    secondId = (await runImport(chImporter)).updateId!;
+  });
+  after(() => chApi.close());
+
+  const changes = (id: number, query = '') => chApp.request(`/api/updates/${id}/changes${query}`);
+  const load = async (query = '', id = secondId) => {
+    const res = await changes(id, query);
+    assert.equal(res.status, 200, `${query} → ${res.status}`);
+    return (await res.json()) as UpdateChangesResponse;
+  };
+  const changeIds = async (query: string) => (await load(query)).items.map((i) => i.id);
+
+  it('Zähler gelten für das ganze Update und sind ungefiltert', async () => {
+    const res = await load('?kind=removed&type=consumable');
+    assert.equal(res.update.id, secondId);
+    assert.equal(res.update.buildId, 123457);
+    assert.deepEqual(res.counts, { added: 2, changed: 5, removed: 1, gameTypesChanged: 3, dungeonGained: 1, dungeonLost: 2 });
+    // Umsortierte game_types (Item 6) zählen nicht als game_types-Änderung
+    assert.equal(res.update.dungeonLost, 2);
+  });
+
+  it('erstes Update: alles neu', async () => {
+    const res = await load('?hidePlaceholders=false', firstId);
+    assert.equal(res.counts.added, 8);
+    assert.equal(res.counts.changed, 0);
+    assert.equal(res.total, 8);
+  });
+
+  it('Sortierung: Dungeon-Änderungen zuerst, dann geändert, neu, entfernt, jeweils nach Name', async () => {
+    // Platzhalter (10) standardmäßig ausgeblendet
+    assert.deepEqual(await changeIds(''), [3, 2, 7, 5, 6, 9, 4]);
+    assert.deepEqual(await changeIds('?hidePlaceholders=false'), [3, 2, 7, 5, 6, 10, 9, 4]);
+  });
+
+  it('focus=dungeonLost / dungeonGained / gameTypes', async () => {
+    const lost = await load('?focus=dungeonLost');
+    assert.deepEqual(lost.items.map((i) => i.id), [2, 7]);
+    assert.deepEqual(lost.items[0]!.gameTypesBefore, ['Dungeon', 'Pve', 'Wvw']);
+    assert.deepEqual(lost.items[0]!.gameTypesAfter, ['Pve', 'Wvw']);
+    assert.deepEqual(lost.items[0]!.changedFields, ['game_types']);
+    assert.deepEqual(lost.items[0]!.before, { game_types: ['Dungeon', 'Pve', 'Wvw'] });
+    assert.deepEqual(lost.items[0]!.after, { game_types: ['Pve', 'Wvw'] });
+    assert.equal(lost.items[0]!.isCandidate, false);
+
+    const gained = await load('?focus=dungeonGained');
+    assert.deepEqual(gained.items.map((i) => i.id), [3]);
+    assert.deepEqual(gained.items[0]!.gameTypesBefore, ['Pve']);
+    assert.deepEqual(gained.items[0]!.gameTypesAfter, ['Dungeon', 'Pve']);
+    assert.equal(gained.items[0]!.isCandidate, true);
+
+    assert.deepEqual(await changeIds('?focus=gameTypes'), [3, 2, 7]);
+  });
+
+  it('kind=added / removed / mehrere', async () => {
+    const added = await load('?kind=added&hidePlaceholders=false');
+    assert.deepEqual(added.items.map((i) => i.id), [10, 9]);
+    assert.equal(added.items[1]!.gameTypesBefore, null);
+    assert.deepEqual(added.items[1]!.gameTypesAfter, ['Dungeon']);
+    assert.equal(added.items[1]!.before, null);
+    assert.equal(added.items[1]!.after?.name, 'New Gizmo');
+    assert.deepEqual(added.items[1]!.after?.game_types, ['Dungeon']);
+    assert.equal(added.items[1]!.after?.['details.type'], 'Default');
+    assert.equal(added.items[1]!.after?.id, undefined);
+
+    const removed = await load('?kind=removed');
+    assert.deepEqual(removed.items.map((i) => i.id), [4]);
+    assert.equal(removed.items[0]!.removed, true);
+    assert.deepEqual(removed.items[0]!.gameTypesBefore, ['Dungeon', 'Pve']);
+    assert.equal(removed.items[0]!.gameTypesAfter, null);
+    assert.equal(removed.items[0]!.after, null);
+    assert.equal(removed.items[0]!.before?.name, 'Removed Gizmo');
+
+    assert.deepEqual(await changeIds('?kind=added,removed'), [9, 4]);
+    // focus gilt nur für geänderte Items
+    assert.deepEqual(await changeIds('?kind=added&focus=dungeonLost'), []);
+    assert.deepEqual(await changeIds('?kind=changed&focus=all'), [3, 2, 7, 5, 6]);
+  });
+
+  it('before/after: nur geänderte Felder, hier die Beschreibung', async () => {
+    const desc = (await load('?q=Desc')).items[0]!;
+    assert.deepEqual(desc.changedFields, ['description']);
+    assert.deepEqual(desc.before, { description: 'Description of Mini Golem Kit.' });
+    assert.deepEqual(desc.after, { description: 'Neue Beschreibung' });
+  });
+
+  it('type-Filter, Suche und Paginierung', async () => {
+    assert.deepEqual(await changeIds('?type=consumable'), [7]);
+    assert.deepEqual(await changeIds('?type=gizmo&kind=changed'), [3, 2, 5, 6]);
+    assert.deepEqual(await changeIds('?type=tonic'), []);
+    assert.deepEqual(await changeIds('?q=GIZMO&kind=added'), [9]);
+    assert.deepEqual(await changeIds('?q=5'), [5]);
+    assert.deepEqual(await changeIds('?q=%25'), []);
+    assert.deepEqual(await changeIds('?q=_ost'), []);
+
+    const page2 = await load('?pageSize=3&page=2');
+    assert.deepEqual(page2.items.map((i) => i.id), [5, 6, 9]);
+    assert.equal(page2.total, 7);
+    assert.equal(page2.pageSize, 3);
+    assert.equal((await load('?pageSize=1000')).pageSize, 200);
+  });
+
+  it('404 bei unbekanntem Update, 400 bei ungültigen Werten', async () => {
+    assert.equal((await changes(9999)).status, 404);
+    assert.equal((await changes('abc' as unknown as number)).status, 400);
+    for (const query of ['?kind=foo', '?focus=foo', '?type=foo', '?page=0', '?pageSize=x', '?hidePlaceholders=maybe']) {
+      assert.equal((await changes(secondId, query)).status, 400, query);
+    }
+  });
+});
+
+describe('Migration 3 (values_before/values_after)', () => {
+  it('alte DB ohne die Spalten wird migriert, alte Einträge liefern before/after = null', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gw2-items-mig-'));
+    const file = path.join(dir, 'old.db');
+    const old = new DatabaseSync(file);
+    old.exec(migrations[0]!);
+    old.exec(migrations[1]!);
+    old.exec('PRAGMA user_version = 2');
+    old.exec(`INSERT INTO updates (id, started_at, status, build_id, added, changed, removed) VALUES (1, '2026-01-01T00:00:00Z', 'done', 1, 0, 1, 0)`);
+    old.exec(`INSERT INTO items (id, name, type, rarity, level, game_types, flags, is_candidate, raw_json, hash, first_seen_update, last_changed_update)
+      VALUES (1, 'Alt', 'Gizmo', 'Rare', 0, '["Pve"]', '[]', 0, '{}', 'h', 1, 1)`);
+    old.exec(`INSERT INTO item_changes (update_id, item_id, kind, changed_fields, game_types_before, game_types_after)
+      VALUES (1, 1, 'changed', '["game_types"]', '["Dungeon","Pve"]', '["Pve"]')`);
+    old.close();
+
+    const db = openDatabase(file);
+    try {
+      const client = new Gw2Client({ baseUrl: 'http://127.0.0.1:1', minIntervalMs: 0, retryBaseDelayMs: 1 });
+      const migrated = createApp(db, null, new Importer(db, client));
+      const res = await migrated.request('/api/updates/1/changes?hidePlaceholders=false');
+      assert.equal(res.status, 200);
+      const body = (await res.json()) as UpdateChangesResponse;
+      assert.equal(body.items.length, 1);
+      assert.equal(body.items[0]!.before, null);
+      assert.equal(body.items[0]!.after, null);
+      assert.deepEqual(body.items[0]!.gameTypesBefore, ['Dungeon', 'Pve']);
+    } finally {
+      db.close();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

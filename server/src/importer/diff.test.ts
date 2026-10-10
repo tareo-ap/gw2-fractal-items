@@ -57,6 +57,8 @@ describe('diffItem', () => {
       changedFields: ['description', 'game_types'],
       gameTypesBefore: ['Dungeon', 'Pve'],
       gameTypesAfter: ['Pve'],
+      valuesBefore: { game_types: ['Pve', 'Dungeon'] },
+      valuesAfter: { description: 'neu', game_types: ['Pve'] },
     });
   });
 });
