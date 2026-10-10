@@ -47,6 +47,7 @@ export function App() {
           </div>
         )}
       </main>
+      <footer className="app-footer small muted">{t('footer.legal')}</footer>
     </div>
   );
 }

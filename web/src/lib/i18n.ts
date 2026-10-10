@@ -27,6 +27,22 @@ const en = {
   'tab.candidatesTitle': 'Fractal candidates',
   'tab.changesTitle': 'Entries in the latest update',
 
+  // Einstellungen und Fußzeile
+  'settings.open': 'Settings',
+  'settings.title': 'Settings',
+  'settings.theme': 'Color scheme',
+  'theme.dark': 'Dark',
+  'theme.light': 'Light',
+  'theme.system': 'System',
+  'settings.accent': 'Accent color',
+  'accent.default': 'Default (gold)',
+  'settings.width': 'Content width',
+  'width.normal': 'Normal',
+  'width.wide': 'Wide',
+  'width.wider': 'Very wide',
+  'width.full': 'Full width',
+  'footer.legal': 'Guild Wars 2 © ArenaNet, LLC. Item data and icons from the official GW2 API. Not affiliated with ArenaNet.',
+
   // Allgemein
   'app.notFound': 'This page does not exist.',
   'app.toList': 'Back to the list',
@@ -215,6 +231,17 @@ const en = {
   'changes.noFieldChange': 'No field change recorded.',
   'value.more': 'more',
   'value.less': 'less',
+
+  // Stände verwalten
+  'manage.title': 'Manage states',
+  'manage.hint': 'Failed updates and completed updates without changes can be deleted. States with changes stay, otherwise the history would be falsified.',
+  'manage.delete': 'Delete',
+  'manage.confirm': 'Delete state {name}? This cannot be undone.',
+  'manage.error': 'Could not delete the state: {error}',
+  'manage.noChanges': 'no changes',
+  'manage.blocked.running': 'Still running',
+  'manage.blocked.hasChanges': 'Contains changes; deleting would falsify the history',
+  'manage.blocked.referenced': 'Items still refer to this state; deleting would falsify the history',
 } as const;
 
 export type Key = keyof typeof en;
@@ -236,6 +263,21 @@ const de: Record<Key, string> = {
   'tab.changes': 'Änderungen',
   'tab.candidatesTitle': 'Fractal-Kandidaten',
   'tab.changesTitle': 'Einträge im neuesten Update',
+
+  'settings.open': 'Einstellungen',
+  'settings.title': 'Einstellungen',
+  'settings.theme': 'Farbschema',
+  'theme.dark': 'Dunkel',
+  'theme.light': 'Hell',
+  'theme.system': 'System',
+  'settings.accent': 'Akzentfarbe',
+  'accent.default': 'Standard (Gold)',
+  'settings.width': 'Inhaltsbreite',
+  'width.normal': 'Normal',
+  'width.wide': 'Breit',
+  'width.wider': 'Sehr breit',
+  'width.full': 'Volle Breite',
+  'footer.legal': 'Guild Wars 2 © ArenaNet, LLC. Itemdaten und Icons stammen aus der offiziellen GW2-API. Keine Verbindung zu ArenaNet.',
 
   'app.notFound': 'Diese Seite gibt es nicht.',
   'app.toList': 'Zur Liste',
@@ -417,6 +459,16 @@ const de: Record<Key, string> = {
   'changes.noFieldChange': 'Keine Feldänderung erfasst.',
   'value.more': 'mehr',
   'value.less': 'weniger',
+
+  'manage.title': 'Stände verwalten',
+  'manage.hint': 'Fehlgeschlagene Updates und abgeschlossene ohne Änderungen lassen sich löschen. Stände mit Änderungen bleiben, sonst würde der Verlauf verfälscht.',
+  'manage.delete': 'Löschen',
+  'manage.confirm': 'Stand {name} löschen? Das lässt sich nicht rückgängig machen.',
+  'manage.error': 'Stand konnte nicht gelöscht werden: {error}',
+  'manage.noChanges': 'keine Änderungen',
+  'manage.blocked.running': 'Läuft noch',
+  'manage.blocked.hasChanges': 'Enthält Änderungen; Löschen würde den Verlauf verfälschen',
+  'manage.blocked.referenced': 'Items verweisen noch auf diesen Stand; Löschen würde den Verlauf verfälschen',
 };
 
 const dictionaries: Record<Lang, Record<Key, string>> = { en, de };

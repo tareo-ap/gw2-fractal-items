@@ -29,7 +29,7 @@ import {
   toCsv,
   ValidationError,
 } from './routes/items.js';
-import { compareUpdates, getUpdate, getUpdateChanges, listUpdates, parseUpdateChangesQuery, toUpdateSummary, type UpdateRow } from './routes/updates.js';
+import { compareUpdates, deleteUpdate, getUpdate, getUpdateChanges, listUpdates, parseUpdateChangesQuery, toUpdateSummary, type UpdateRow } from './routes/updates.js';
 
 // Baut die Hono-App. Getrennt von index.ts, damit sie sich ohne laufenden Server testen lässt.
 export function createApp(db: DatabaseSync, webDist: string | null, importer: Importer): Hono {
@@ -120,6 +120,12 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
       if (err instanceof ImportAlreadyRunningError) return c.json({ error: err.message, status: importer.getStatus() }, 409);
       throw err;
     }
+  });
+
+  // Löscht einen Stand (nur fehlgeschlagene oder leere, siehe deleteUpdate). Laufende Imports schreiben in ihre Zeile: 409.
+  app.delete('/api/updates/:id', (c) => {
+    const result = deleteUpdate(db, parseId(c.req.param('id'), 'Update'));
+    return result.ok ? c.body(null, 204) : c.json({ error: result.error }, result.status);
   });
 
   // --- Export --------------------------------------------------------------

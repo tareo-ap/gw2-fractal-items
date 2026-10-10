@@ -39,14 +39,28 @@ const DUNGEON_LOST_SQL = `c.kind = 'changed' AND ${HAS_DUNGEON('game_types_befor
 const GAME_TYPES_CHANGED_SQL = `c.kind = 'changed' AND EXISTS (SELECT 1 FROM json_each(c.changed_fields) WHERE value = 'game_types')
   AND c.game_types_before IS NOT c.game_types_after`;
 
-type UpdateRowWithDungeon = UpdateRow & { dungeon_gained: number; dungeon_lost: number };
+type UpdateRowWithDungeon = UpdateRow & { dungeon_gained: number; dungeon_lost: number; change_rows: number; item_refs: number };
+
+/**
+ * Löschregel für Stände: fehlgeschlagene immer, abgeschlossene nur ohne Änderungen, laufende nie.
+ * Verweist noch ein Item oder ein item_changes-Eintrag auf den Stand, bleibt er, sonst würde der Verlauf verfälscht.
+ */
+function deleteState(row: UpdateRowWithDungeon): Pick<UpdateDetail, 'deletable' | 'deleteBlockedReason'> {
+  const blocked = (reason: NonNullable<UpdateDetail['deleteBlockedReason']>) => ({ deletable: false, deleteBlockedReason: reason });
+  if (row.status === 'running') return blocked('running');
+  if (row.status === 'done' && (row.added !== 0 || row.changed !== 0 || row.removed !== 0 || row.change_rows > 0)) return blocked('hasChanges');
+  if (row.item_refs > 0) return blocked('referenced');
+  return { deletable: true, deleteBlockedReason: null };
+}
 
 function selectUpdates(db: DatabaseSync, id?: number): UpdateDetail[] {
   const rows = db
     .prepare(
       `SELECT u.*,
          (SELECT COUNT(*) FROM item_changes c WHERE c.update_id = u.id AND ${DUNGEON_GAINED_SQL}) AS dungeon_gained,
-         (SELECT COUNT(*) FROM item_changes c WHERE c.update_id = u.id AND ${DUNGEON_LOST_SQL}) AS dungeon_lost
+         (SELECT COUNT(*) FROM item_changes c WHERE c.update_id = u.id AND ${DUNGEON_LOST_SQL}) AS dungeon_lost,
+         (SELECT COUNT(*) FROM item_changes c WHERE c.update_id = u.id) AS change_rows,
+         (SELECT COUNT(*) FROM items i WHERE i.first_seen_update = u.id OR i.last_changed_update = u.id) AS item_refs
        FROM updates u
        ${id === undefined ? '' : 'WHERE u.id = ?'}
        ORDER BY u.id DESC`,
@@ -59,6 +73,7 @@ function selectUpdates(db: DatabaseSync, id?: number): UpdateDetail[] {
     error: row.error,
     dungeonGained: row.dungeon_gained,
     dungeonLost: row.dungeon_lost,
+    ...deleteState(row),
   }));
 }
 
@@ -68,6 +83,37 @@ export function listUpdates(db: DatabaseSync): UpdateDetail[] {
 
 export function getUpdate(db: DatabaseSync, id: number): UpdateDetail | null {
   return selectUpdates(db, id)[0] ?? null;
+}
+
+export type DeleteUpdateResult = { ok: true } | { ok: false; status: 404 | 409; error: string };
+
+const BLOCKED_MESSAGES = {
+  running: 'Der Stand läuft noch und kann nicht gelöscht werden',
+  hasChanges: 'Der Stand enthält Änderungen; Löschen würde den Verlauf verfälschen',
+  referenced: 'Items verweisen noch auf diesen Stand; Löschen würde den Verlauf verfälschen',
+} as const;
+
+/** Löscht einen Stand samt seinen item_changes in einer Transaktion, sofern die Regel (deleteState) es erlaubt. */
+export function deleteUpdate(db: DatabaseSync, id: number): DeleteUpdateResult {
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const update = getUpdate(db, id);
+    if (!update) {
+      db.exec('ROLLBACK');
+      return { ok: false, status: 404, error: 'Update nicht gefunden' };
+    }
+    if (!update.deletable) {
+      db.exec('ROLLBACK');
+      return { ok: false, status: 409, error: BLOCKED_MESSAGES[update.deleteBlockedReason!] };
+    }
+    db.prepare('DELETE FROM item_changes WHERE update_id = ?').run(id);
+    db.prepare('DELETE FROM updates WHERE id = ?').run(id);
+    db.exec('COMMIT');
+    return { ok: true };
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -630,3 +630,74 @@ describe('GET /api/updates/compare (drei Importrunden)', () => {
     assert.equal(await status(`?from=${u1}&to=${u3 + 1}`), 400);
   });
 });
+
+describe('DELETE /api/updates/:id', () => {
+  let delApi: FakeGw2Api;
+  let delDb: DatabaseSync;
+  let delApp: Hono;
+  let full: number;
+  let empty: number;
+  let withChanges: number;
+
+  before(async () => {
+    delApi = await startFakeGw2Api(fixtureItems());
+    const created = createTestImporter(delApi.url);
+    delDb = created.db;
+    delApp = createApp(delDb, null, created.importer);
+    full = (await runImport(created.importer)).updateId!;
+    empty = (await runImport(created.importer)).updateId!; // gleicher Stand: keine Änderungen
+    delApi.items.get(2)!.description = 'Neu';
+    withChanges = (await runImport(created.importer)).updateId!;
+  });
+  after(() => delApi.close());
+
+  const list = async () => (await (await delApp.request('/api/updates')).json()) as UpdateDetail[];
+  const del = (id: number | string) => delApp.request(`/api/updates/${id}`, { method: 'DELETE' });
+  const insertUpdate = (status: string) =>
+    Number(delDb.prepare(`INSERT INTO updates (started_at, status) VALUES ('2026-01-01T00:00:00Z', ?)`).run(status).lastInsertRowid);
+
+  it('deletable und deleteBlockedReason in der Liste', async () => {
+    const byId = new Map((await list()).map((u) => [u.id, u]));
+    assert.equal(byId.get(empty)!.deletable, true);
+    assert.equal(byId.get(withChanges)!.deleteBlockedReason, 'hasChanges');
+    // Der Vollimport hat Änderungen und Items, die darauf verweisen.
+    assert.equal(byId.get(full)!.deletable, false);
+  });
+
+  it('löscht ein fehlgeschlagenes Update', async () => {
+    const id = insertUpdate('failed');
+    delDb.prepare(`INSERT INTO item_changes (update_id, item_id, kind) VALUES (?, 1, 'changed')`).run(id);
+    assert.equal((await del(id)).status, 204);
+    assert.equal((await list()).some((u) => u.id === id), false);
+    assert.equal((delDb.prepare('SELECT COUNT(*) AS n FROM item_changes WHERE update_id = ?').get(id) as { n: number }).n, 0);
+  });
+
+  it('löscht ein abgeschlossenes Update ohne Änderungen', async () => {
+    assert.equal((await del(empty)).status, 204);
+    assert.equal((await list()).some((u) => u.id === empty), false);
+  });
+
+  it('lehnt abgeschlossene Updates mit Änderungen ab (409)', async () => {
+    const res = await del(withChanges);
+    assert.equal(res.status, 409);
+    assert.match(((await res.json()) as { error: string }).error, /Änderungen/);
+    assert.equal((await list()).some((u) => u.id === withChanges), true);
+  });
+
+  it('lehnt laufende Updates ab (409)', async () => {
+    const id = insertUpdate('running');
+    assert.equal((await del(id)).status, 409);
+  });
+
+  it('lehnt ab, wenn ein Item auf das Update verweist (409)', async () => {
+    const id = insertUpdate('failed');
+    delDb.prepare('UPDATE items SET last_changed_update = ? WHERE id = 1').run(id);
+    assert.equal((await del(id)).status, 409);
+    delDb.prepare('UPDATE items SET last_changed_update = ? WHERE id = 1').run(full);
+  });
+
+  it('404 bei unbekannter ID, 400 bei ungültiger', async () => {
+    assert.equal((await del(99999)).status, 404);
+    assert.equal((await del('abc')).status, 400);
+  });
+});

@@ -25,7 +25,7 @@ export class ApiError extends Error {
  * Eintrag aus GET /api/updates. Laut Vertrag UpdateSummary; liefert der Server
  * zusätzlich die Felder aus UpdateDetail, zeigt die UI sie an.
  */
-export type UpdateListEntry = UpdateSummary & Partial<Pick<UpdateDetail, 'status' | 'dungeonGained' | 'dungeonLost'>>;
+export type UpdateListEntry = UpdateSummary & Partial<Pick<UpdateDetail, 'status' | 'dungeonGained' | 'dungeonLost' | 'deletable' | 'deleteBlockedReason'>>;
 
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
   let res: Response;
@@ -65,5 +65,6 @@ export const api = {
   compareUpdates: (from: number, to: number, queryString: string, lang: Lang) =>
     request<UpdateCompareResponse>('GET', `/api/updates/compare?from=${from}&to=${to}&${queryString}&lang=${lang}`),
   importStatus: () => request<ImportStatus>('GET', '/api/updates/status'),
+  deleteUpdate: (id: number) => request<void>('DELETE', `/api/updates/${id}`),
   startUpdate: () => request<unknown>('POST', '/api/updates'),
 };

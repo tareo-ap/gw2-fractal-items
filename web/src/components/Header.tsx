@@ -6,6 +6,7 @@ import { listUrl, type ListFilters } from '../lib/filters';
 import { Link } from './common';
 import { stateName } from '../lib/format';
 import { UpdateButton } from './UpdateButton';
+import { SettingsMenu } from './SettingsMenu';
 
 const TABS: { view: ItemView; label: Key }[] = [
   { view: 'gizmo', label: 'tab.gizmo' },
@@ -73,6 +74,7 @@ export function Header({ filters, activeView, changesActive }: { filters: ListFi
         </a>
         <UpdateButton />
         <LangSwitch />
+        <SettingsMenu />
       </div>
       <nav className="tabs" aria-label={t('tabs.aria')}>
         {TABS.map((tab) => {

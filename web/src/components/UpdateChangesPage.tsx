@@ -1,10 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ChangeFocus, ChangeKind, ItemView, UpdateChangeEntry, UpdateCompareResponse, UpdateDetail } from '../../../shared/types';
-import { api, ApiError } from '../api';
+import { api, ApiError, type UpdateListEntry } from '../api';
 import { CHANGE_KINDS, changesUrl, compareUrl, parseChangesFilters, toChangesApiQuery, type ChangesFilters } from '../lib/changes';
 import { describeUpdate, rarityClass, stateName } from '../lib/format';
-import { errorText, useT, type TFunction } from '../lib/i18n';
+import { errorText, useT, type Key, type TFunction } from '../lib/i18n';
 import { PAGE_SIZE } from '../lib/filters';
 import { navigate } from '../lib/router';
 import { ErrorBox, GameTypeBadges, GameTypeDiff, ItemIcon, Link, Loading } from './common';
@@ -29,11 +29,87 @@ export function UpdatesRedirect() {
   }
   if (updates.isPending || latest) return <Loading text={t('changes.loadingUpdates')} />;
   return (
-    <div className="empty">
-      <p>{t('changes.noUpdate')}</p>
-    </div>
+    <>
+      <div className="empty">
+        <p>{t('changes.noUpdate')}</p>
+      </div>
+      <ManageStates updates={updates.data ?? []} shownIds={[]} />
+    </>
   );
 }
+
+/**
+ * Bereich "Stände verwalten": alle Update-Läufe mit Löschen-Button. Ob ein Stand löschbar ist, entscheidet der Server
+ * (deletable / deleteBlockedReason); nicht löschbare haben einen deaktivierten Button mit dem Grund als Tooltip.
+ * shownIds: Stände, die gerade angezeigt werden; wird einer gelöscht, geht es zurück auf /updates.
+ */
+function ManageStates({ updates, shownIds }: { updates: UpdateListEntry[]; shownIds: number[] }) {
+  const i18n = useT();
+  const { t } = i18n;
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+
+  const remove = useMutation({
+    mutationFn: api.deleteUpdate,
+    onMutate: () => setError(null),
+    onSuccess: (_data, id) => {
+      for (const key of ['updates', 'stats', 'updateChanges', 'items', 'item']) {
+        void queryClient.invalidateQueries({ queryKey: [key] });
+      }
+      if (shownIds.includes(id)) navigate('/updates', { replace: true });
+    },
+    onError: (err: Error) => setError(t('manage.error', { error: errorText(err, t) })),
+  });
+
+  if (updates.length === 0) return null;
+  const confirmDelete = (u: UpdateListEntry) => {
+    if (window.confirm(t('manage.confirm', { name: stateName(u) }))) remove.mutate(u.id);
+  };
+
+  return (
+    <details className="manage-states">
+      <summary>{t('manage.title')}</summary>
+      <p className="small muted">{t('manage.hint')}</p>
+      {error && <div className="error small" role="alert">{error}</div>}
+      <ul className="state-list">
+        {updates.map((u) => {
+          const blocked = u.deleteBlockedReason ? t(`manage.blocked.${u.deleteBlockedReason}` as Key) : undefined;
+          const failed = u.status === 'failed';
+          const empty = u.added + u.changed + u.removed === 0;
+          return (
+            <li key={u.id} className="state-row">
+              <span className="state-name">
+                {u.status === 'running' || failed ? describeUpdate(u, i18n) : <Link href={changesUrl(u.id)}>{stateName(u)}</Link>}
+                <span className="small muted"> · #{u.id}</span>
+              </span>
+              <span className="small muted">
+                {u.status === 'running' ? t('changes.statusRunning') : failed ? t('changes.statusFailed') : t('changes.statusDone')}
+                {!failed && u.status !== 'running' && (
+                  <>
+                    {' · '}
+                    {empty
+                      ? t('manage.noChanges')
+                      : `${t('update.describeNew', { n: i18n.formatNumber(u.added) })}, ${t('update.describeChanged', { n: i18n.formatNumber(u.changed) })}, ${t('update.describeRemoved', { n: i18n.formatNumber(u.removed) })}`}
+                  </>
+                )}
+              </span>
+              <button
+                type="button"
+                className="btn btn-small btn-danger"
+                disabled={!u.deletable || remove.isPending}
+                title={blocked}
+                onClick={() => confirmDelete(u)}
+              >
+                {t('manage.delete')}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </details>
+  );
+}
+
 
 function same<T>(a: T[], b: T[]): boolean {
   return a.length === b.length && a.every((v, i) => v === b[i]);
@@ -277,6 +353,7 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
         </div>
       )}
       <Pagination page={filters.page} total={data.total} pageSize={data.pageSize || PAGE_SIZE} onPage={(page) => change({ page })} />
+      <ManageStates updates={updates.data ?? []} shownIds={'from' in source ? [source.from, source.to] : [source.id]} />
     </>
   );
 }

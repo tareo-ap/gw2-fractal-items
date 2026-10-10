@@ -132,6 +132,10 @@ export interface UpdateDetail extends UpdateSummary {
   error: string | null;
   dungeonGained: number;
   dungeonLost: number;
+  /** Darf der Stand gelöscht werden? Dieselbe Regel nutzt der Server bei DELETE /api/updates/:id. */
+  deletable: boolean;
+  /** Grund, wenn nicht löschbar: läuft noch, enthält Änderungen (abgeschlossen) oder Items verweisen darauf. */
+  deleteBlockedReason: 'running' | 'hasChanges' | 'referenced' | null;
 }
 
 /** GET /api/updates/status: Fortschritt des laufenden Imports. POST /api/updates startet einen. */
