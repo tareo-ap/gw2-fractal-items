@@ -102,10 +102,15 @@ describe('Platzhalter-Filter', () => {
 
   before(async () => {
     const base = fixtureItems()[0]!;
+    const consumable = fixtureItems().find((i) => i.id === 8778)!;
     phApi = await startFakeGw2Api([
       base,
       { ...base, id: 101, name: '   ' },
       { ...base, id: 102, name: 'Ohne Icon', icon: undefined },
+      { ...base, id: 103, name: '((906936))' },
+      consumable,
+      { ...consumable, id: 104, name: ' Mastery Point' },
+      { ...consumable, id: 105, name: '"/Clap" Emote Tome' },
     ]);
     const { db: phDb, importer: phImporter } = createTestImporter(phApi.url);
     phApp = createApp(phDb, null, phImporter);
@@ -116,13 +121,18 @@ describe('Platzhalter-Filter', () => {
   const phIds = async (query: string) =>
     ((await (await phApp.request(`/api/items${query}`)).json()) as ItemListResponse).items.map((i) => i.id);
 
-  it('blendet Items mit leerem Namen oder ohne Icon standardmäßig aus', async () => {
+  it('blendet Items mit leerem Namen, ohne Icon oder mit ((ID))-Namen standardmäßig aus', async () => {
     assert.deepEqual(await phIds('?sort=id'), [1]);
-    assert.deepEqual(await phIds('?view=all&sort=id'), [1]);
+    assert.deepEqual(await phIds('?view=all&sort=id'), [1, 8778]);
   });
 
   it('hidePlaceholders=false zeigt sie', async () => {
-    assert.deepEqual(await phIds('?hidePlaceholders=false&sort=id'), [1, 101, 102]);
+    assert.deepEqual(await phIds('?hidePlaceholders=false&sort=id'), [1, 101, 102, 103]);
+  });
+
+  it('hideCommon blendet Mastery Points und Emote Tomes aus', async () => {
+    assert.deepEqual(await phIds('?view=consumable&sort=id'), [8778]);
+    assert.deepEqual(await phIds('?view=consumable&hideCommon=false&sort=id'), [104, 105, 8778]);
   });
 });
 

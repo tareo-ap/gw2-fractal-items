@@ -107,7 +107,7 @@ export function FilterBar({ filters, onChange }: { filters: ListFilters; onChang
                   checked={filters.hideCommon}
                   onChange={(e) => onChange({ hideCommon: e.target.checked })}
                 />
-                Food, Utility, Unlock, Transmutation ausblenden
+                Food, Utility, Unlock, Transmutation, Mastery Points, Emote Tomes ausblenden
               </label>
             )}
             <label className="check">
@@ -116,7 +116,7 @@ export function FilterBar({ filters, onChange }: { filters: ListFilters; onChang
                 checked={filters.hidePlaceholders}
                 onChange={(e) => onChange({ hidePlaceholders: e.target.checked })}
               />
-              Platzhalter ohne Namen oder Icon ausblenden
+              Platzhalter ohne Namen oder Icon ausblenden, z. B. „((906936))“
             </label>
             <label className="check">
               <input type="checkbox" checked={filters.includeRemoved} onChange={(e) => onChange({ includeRemoved: e.target.checked })} />

@@ -182,8 +182,12 @@ export function listItems(db: DatabaseSync, query: ParsedItemListQuery): ItemLis
   if (query.candidate !== 'all') where.push(`i.is_candidate = ${query.candidate === 'yes' ? 1 : 0}`);
   if (query.hideCommon) {
     where.push(`NOT (i.type = 'Consumable' AND i.subtype IS NOT NULL AND i.subtype IN ('Food', 'Utility', 'Unlock', 'Transmutation'))`);
+    // Mastery Points und Emote Tomes sind Freischaltungen ohne Nutzen im Fraktal, aber vom Untertyp
+    // Immediate bzw. Generic. Viele Mastery Points heißen " Mastery Point" mit führendem Leerzeichen.
+    where.push(`NOT (i.type = 'Consumable' AND (trim(i.name) = 'Mastery Point' OR i.name LIKE '%Emote Tome'))`);
   }
-  if (query.hidePlaceholders) where.push("NOT (trim(i.name) = '' OR i.icon IS NULL)");
+  // Platzhalter: leerer Name, kein Icon oder interner Name wie "((906936))".
+  if (query.hidePlaceholders) where.push(`NOT (trim(i.name) = '' OR i.icon IS NULL OR i.name GLOB '((*))')`);
   if (query.rarity.length > 0) {
     where.push(`i.rarity IN (${query.rarity.map(() => '?').join(', ')})`);
     params.push(...query.rarity);
