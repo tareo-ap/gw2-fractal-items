@@ -19,7 +19,10 @@
     "typecheck": "npm run typecheck --workspace server && npm run typecheck --workspace web",
     "start": "npm run start --workspace server",
     "db:import": "npm run db:import --workspace server --",
-    "test": "npm run test --workspace server"
+    "test": "npm run test --workspace server",
+    "export:static": "npm run export:static --workspace server --",
+    "build:pages": "node scripts/pages.mjs build",
+    "preview:pages": "node scripts/pages.mjs preview"
   },
   "devDependencies": {
     "concurrently": "^10.0.6"

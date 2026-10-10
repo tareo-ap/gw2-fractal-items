@@ -1,12 +1,12 @@
 import { useState, type ReactNode } from 'react';
 import type { GameType, Rarity, TestStatus } from '../../../shared/types';
-import { linkHandler } from '../lib/router';
+import { linkHandler, withBase } from '../lib/router';
 import { useT } from '../lib/i18n';
 import { rarityClass } from '../lib/format';
 
 export function Link({ href, className, title, children }: { href: string; className?: string; title?: string; children: ReactNode }) {
   return (
-    <a href={href} className={className} title={title} onClick={linkHandler(href)}>
+    <a href={withBase(href)} className={className} title={title} onClick={linkHandler(href)}>
       {children}
     </a>
   );

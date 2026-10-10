@@ -1,12 +1,13 @@
 import type { GameType, ItemListQuery, ItemView, Lang, Rarity, TestStatus } from '../../../shared/types';
+import { GAME_TYPES, ITEM_SORTS, RARITIES, hideCommonApplies } from '../../../shared/rules';
 
 // Alle Filter der Liste stehen in der URL, damit Links teilbar sind und "Zurück" funktioniert.
 // Standardwerte werden in der URL weggelassen.
 
-export const RARITIES: Rarity[] = ['Junk', 'Basic', 'Fine', 'Masterwork', 'Rare', 'Exotic', 'Ascended', 'Legendary'];
-export const GAME_TYPES: GameType[] = ['Activity', 'Dungeon', 'Pve', 'Pvp', 'PvpLobby', 'Wvw'];
+// Seltenheiten, Game Types und Sortierungen stammen aus shared/rules.ts (dieselben Listen wie im Server).
+export { GAME_TYPES, RARITIES };
 export const VIEWS: ItemView[] = ['gizmo', 'consumable', 'tonic', 'all'];
-export const SORTS = ['name', 'id', 'rarity', 'level', 'lastChanged'] as const;
+export const SORTS = ITEM_SORTS;
 export const PAGE_SIZE = 50;
 
 export type Candidate = NonNullable<ItemListQuery['candidate']>;
@@ -124,7 +125,7 @@ export function exportUrl(f: ListFilters, format: 'csv' | 'json', lang: Lang): s
 
 /** Der Filter hideCommon wirkt nur in den Ansichten Consumables und Alle. */
 export function hasHideCommon(view: ItemView): boolean {
-  return view === 'consumable' || view === 'all';
+  return hideCommonApplies(view);
 }
 
 /** Anzahl gesetzter Filter im aufklappbaren Bereich (für die Anzeige am Button). */

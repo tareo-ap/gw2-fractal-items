@@ -201,6 +201,8 @@ function UpdateSelect({ value, onChange }: { value: number | null; onChange: (id
   const i18n = useT();
   const { t } = i18n;
   const updates = useQuery({ queryKey: ['updates'], queryFn: api.updates });
+  // Erster Stand = Vollimport (nur für die statische Fassung nötig, siehe unten).
+  const baseline = updates.data?.length ? Math.min(...updates.data.map((u) => u.id)) : undefined;
   return (
     <label className="field field-update">
       <span className="field-label">{t('filter.update')}</span>
@@ -208,11 +210,14 @@ function UpdateSelect({ value, onChange }: { value: number | null; onChange: (id
         <option value="">{updates.isError ? t('filter.updatesFailed') : t('filter.allUpdates')}</option>
         {/* Gewähltes Update auch dann anzeigen, wenn es (noch) nicht in der Liste ist. */}
         {value !== null && !updates.data?.some((u) => u.id === value) && <option value={value}>{t('filter.updateN', { id: value })}</option>}
-        {updates.data?.map((u) => (
-          <option key={u.id} value={u.id}>
-            {describeUpdate(u, i18n)}
-          </option>
-        ))}
+        {updates.data
+          // Die statische Fassung hat zum ersten Stand (Vollimport) keine Änderungen, der Filter bliebe leer.
+          ?.filter((u) => import.meta.env.VITE_DATA_MODE !== 'static' || u.id !== baseline)
+          .map((u) => (
+            <option key={u.id} value={u.id}>
+              {describeUpdate(u, i18n)}
+            </option>
+          ))}
       </select>
     </label>
   );

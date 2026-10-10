@@ -28,6 +28,8 @@ import {
   parseItemTestUpdate,
   saveItemTest,
   toCsv,
+  toJson,
+  exportFilename,
   ValidationError,
 } from './routes/items.js';
 import { compareUpdates, deleteUpdate, getUpdate, getUpdateChanges, listUpdates, parseUpdateChangesQuery, toUpdateSummary, type UpdateRow } from './routes/updates.js';
@@ -68,9 +70,9 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
     if (!format) throw new ValidationError('format muss einer dieser Werte sein: csv, json');
     const query = parseItemListQuery(params);
     const rows = exportItems(db, query);
-    const filename = `gw2-items-${query.view}-${new Date().toISOString().slice(0, 10)}.${format}`;
+    const filename = exportFilename(query.view, format);
     const headers = { 'Content-Disposition': `attachment; filename="${filename}"` };
-    if (format === 'json') return c.body(JSON.stringify(rows, null, 2), 200, { ...headers, 'Content-Type': 'application/json' });
+    if (format === 'json') return c.body(toJson(rows), 200, { ...headers, 'Content-Type': 'application/json' });
     return c.body(toCsv(rows), 200, { ...headers, 'Content-Type': 'text/csv; charset=utf-8' });
   });
 

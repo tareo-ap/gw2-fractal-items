@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { ItemDetail, TestStatus } from '../../../shared/types';
 import { api } from '../api';
 import { errorText, useT } from '../lib/i18n';
-import { GameTypeDiff } from './common';
+import { GameTypeDiff, TestBadge } from './common';
 
 const STATUSES: TestStatus[] = ['untested', 'works', 'broken'];
 
@@ -88,6 +88,36 @@ export function TestPanel({ item }: { item: ItemDetail }) {
           <p className="small muted">{t('testPanel.confirmHint')}</p>
         )}
       </form>
+    </section>
+  );
+}
+
+/** Teststatus nur anzeigen (statische Fassung): Status, Notiz und Datum, ohne Formular. */
+export function TestInfo({ item }: { item: ItemDetail }) {
+  const { t, formatDateTime } = useT();
+  return (
+    <section className="panel test-panel">
+      <h2>{t('testPanel.title')}</h2>
+      <p>
+        <TestBadge status={item.test.status} needsRetest={false} />
+      </p>
+      {item.needsRetest && (
+        <div className="warning" role="alert">
+          <strong>{t('testPanel.retestLabel')}</strong> {t('testPanel.retestText')}
+          <GameTypeDiff before={item.test.gameTypesAtTest ?? []} after={item.gameTypes} />
+        </div>
+      )}
+      <p className="small muted">
+        {item.test.testedAt ? t('testPanel.lastTested', { date: formatDateTime(item.test.testedAt) }) : t('testPanel.never')}
+      </p>
+      {item.test.note && (
+        <p style={{ whiteSpace: 'pre-wrap' }}>
+          <span className="field-label">{t('testPanel.note')}</span>
+          <br />
+          {item.test.note}
+        </p>
+      )}
+      <p className="small muted">{t('testPanel.readOnly')}</p>
     </section>
   );
 }

@@ -10,7 +10,9 @@ welche Gizmos und Consumables in Fractals of the Mist nutzbar sein könnten
 | --- | --- |
 | `server/` | Node.js-Backend mit [Hono](https://hono.dev), SQLite über das eingebaute `node:sqlite` |
 | `web/` | React + Vite + TypeScript |
-| `shared/` | Typen, die Server und Web gemeinsam nutzen (nur Typen, kein Laufzeitcode) |
+| `shared/` | Typen und gemeinsame Regeln (Filter, Eingabe-Prüfung, CSV-Format, Logik der statischen Fassung), die Server und Web nutzen |
+| `scripts/` | Build der statischen Fassung (`build:pages`, `preview:pages`) |
+| `site-data/` | Export für GitHub Pages (JSON, wird committet; erst nach dem ersten `npm run export:static` vorhanden) |
 | `sources/` | Alte Exporte, nur als Kontext |
 | `docs/` | PRD |
 
@@ -51,6 +53,33 @@ docker compose up -d --build
 ```
 
 Danach läuft die App auf http://localhost:3000. Die Datenbank liegt im Volume `gw2-items-data` unter `/data`.
+
+## GitHub Pages
+
+Neben der Docker-Version gibt es eine statische, schreibgeschützte Fassung aus demselben Code
+(Liste, Suche, Filter, Details, Änderungen, Vergleich, Export CSV/JSON; ohne Update-Button, Teststatus-Bearbeitung,
+DB-Export und Stände löschen). Die Daten kommen aus JSON-Dateien statt von `/api`; die GW2-API wird dort nie aufgerufen.
+Adresse: https://tareo-ap.github.io/gw2-fractal-items/
+
+Ablauf nach einem Patch:
+
+1. Lokal aktualisieren (Button „Aktualisieren“) und Teststatus pflegen.
+2. `npm run export:static` schreibt die Daten nach `site-data/` (Ordner wird vorher geleert). Optional mit anderer Datei: `npm run export:static -- pfad/zur.db`. Die Datenbank wird nur lesend geöffnet, der Server darf weiterlaufen. Das Skript nennt Dateizahl und Gesamtgröße (Ziel unter ca. 15 MB unkomprimiert).
+3. `site-data/` committen und nach Forgejo pushen; der Push-Mirror bringt es nach GitHub.
+4. Die GitHub Action `.github/workflows/pages.yml` baut bei jedem Push auf `master` (oder manuell per „Run workflow“) mit `npm run build:pages` und veröffentlicht die Seite.
+
+Einmalig auf GitHub: Settings → Pages → Source „GitHub Actions“.
+
+Veröffentlicht werden alle nicht entfernten Fractal-Kandidaten vom Typ Gizmo oder Consumable sowie alle Items, die in einer Änderung ab dem zweiten abgeschlossenen Update vorkommen (damit z. B. „Dungeon weg“ sichtbar bleibt). Die Änderungen des ersten Updates (Vollimport) sind nicht enthalten. Jeder Export-Commit ändert die JSON-Dateien (ca. 10 MB), das Repository wächst dadurch mit jedem Patch.
+
+Lokale Vorschau der Pages-Fassung:
+
+```bash
+npm run build:pages     # braucht site-data/ ; baut mit VITE_DATA_MODE=static nach web/dist
+npm run preview:pages   # vite preview, Adresse steht in der Ausgabe (mit Basis-Pfad)
+```
+
+Der Basis-Pfad ist `/gw2-fractal-items/` und lässt sich über die Umgebungsvariable `VITE_BASE` ändern (z. B. `VITE_BASE=/ npm run build:pages` auf Linux/macOS). `404.html` ist eine Kopie von `index.html`, damit Reload und Deep-Links wie `/gw2-fractal-items/items/123` funktionieren. `npm run build:pages` überschreibt `web/dist`; für das Docker-Image gilt weiterhin `npm run build`.
 
 ## Sichern und Umziehen
 

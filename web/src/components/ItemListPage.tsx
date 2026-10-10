@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type { ItemListItem } from '../../../shared/types';
 import { api } from '../api';
+import { downloadStaticExport } from '../lib/staticApi';
 import { rarityClass, wikiSearchUrl } from '../lib/format';
 import { errorText, useT } from '../lib/i18n';
 import { PAGE_SIZE, exportUrl, toApiQuery, type ListFilters } from '../lib/filters';
@@ -55,13 +56,28 @@ export function ItemListPage({ filters, onChange }: { filters: ListFilters; onCh
         </span>
         <span className="small muted">
           {t('list.export')}{' '}
-          <a href={exportUrl(filters, 'csv', lang)} download title={t('list.exportTitle')}>
-            CSV
-          </a>
-          {' · '}
-          <a href={exportUrl(filters, 'json', lang)} download title={t('list.exportTitle')}>
-            JSON
-          </a>
+          {import.meta.env.VITE_DATA_MODE === 'static' ? (
+            // Pages-Fassung: Die Datei entsteht im Browser aus den geladenen Daten.
+            <>
+              <button type="button" className="link-button" onClick={() => void downloadStaticExport(query, lang, 'csv')} title={t('list.exportTitle')}>
+                CSV
+              </button>
+              {' · '}
+              <button type="button" className="link-button" onClick={() => void downloadStaticExport(query, lang, 'json')} title={t('list.exportTitle')}>
+                JSON
+              </button>
+            </>
+          ) : (
+            <>
+              <a href={exportUrl(filters, 'csv', lang)} download title={t('list.exportTitle')}>
+                CSV
+              </a>
+              {' · '}
+              <a href={exportUrl(filters, 'json', lang)} download title={t('list.exportTitle')}>
+                JSON
+              </a>
+            </>
+          )}
         </span>
         <div className="segmented" role="group" aria-label={t('list.layout')}>
           <button type="button" className={layout === 'table' ? 'active' : ''} aria-pressed={layout === 'table'} onClick={() => changeLayout('table')}>

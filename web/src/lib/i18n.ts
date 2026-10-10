@@ -1,6 +1,6 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Lang } from '../../../shared/types';
-import { ApiError } from '../api';
+import { ApiError } from './apiError';
 
 // Zwei Wörterbücher ohne Fremdbibliothek. Englisch ist Standard und gibt die Schlüssel vor;
 // Deutsch ist als Record<Key, string> typisiert, fehlt dort ein Schlüssel, bricht der Typecheck ab.
@@ -17,6 +17,8 @@ const en = {
   'header.export': 'Export',
   'header.exportTitle': 'Download the database as a file (backup)',
   'header.germanHint': 'German item names will be loaded with the next update.',
+  'header.staticNote': 'Data as of {state} · read-only',
+  'header.staticTitle': 'Static, read-only version. New data only comes with a new export.',
   'lang.aria': 'Language',
   'tabs.aria': 'View',
   'tab.gizmo': 'Gizmos',
@@ -50,6 +52,7 @@ const en = {
   'common.loading': 'Loading …',
   'common.empty': 'empty',
   'error.unreachable': 'Backend not reachable',
+  'error.dataUnreachable': 'Data files not reachable',
 
   // Teststatus, Änderungsarten
   'test.untested': 'Untested',
@@ -194,6 +197,7 @@ const en = {
   'testPanel.saved': 'Saved',
   'testPanel.error': 'Error: {error}',
   'testPanel.confirmHint': 'Saving without changes confirms the status for the current game_types.',
+  'testPanel.readOnly': 'Test results are maintained in the local version and published with each data update.',
 
   // Seite "Änderungen"
   'focus.all': 'All',
@@ -227,6 +231,7 @@ const en = {
   'changes.legacyRange': 'This range contains changes from before old values were stored. For those, the old values are partly missing.',
   'changes.legacyUpdate': 'This update contains changes from before old values were stored. For those, the old values are partly missing.',
   'changes.first': 'This is the first update (full import), so every item is "New". A comparison only makes sense from the second update on.',
+  'changes.firstStatic': 'The static version does not list the entries of the first update.',
   'changes.filterAria': 'Filter',
   'changes.kind': 'Kind',
   'changes.focus': 'Focus',
@@ -271,6 +276,8 @@ const de: Record<Key, string> = {
   'header.export': 'Export',
   'header.exportTitle': 'Datenbank als Datei herunterladen (Sicherung)',
   'header.germanHint': 'Deutsche Item-Namen werden beim nächsten Update geladen.',
+  'header.staticNote': 'Datenstand {state} · schreibgeschützt',
+  'header.staticTitle': 'Statische, schreibgeschützte Fassung. Neue Daten gibt es nur mit einem neuen Export.',
   'lang.aria': 'Sprache',
   'tabs.aria': 'Ansicht',
   'tab.gizmo': 'Gizmos',
@@ -302,6 +309,7 @@ const de: Record<Key, string> = {
   'common.loading': 'Lade …',
   'common.empty': 'leer',
   'error.unreachable': 'Backend nicht erreichbar',
+  'error.dataUnreachable': 'Datendateien nicht erreichbar',
 
   'test.untested': 'Ungetestet',
   'test.works': 'Funktioniert',
@@ -440,6 +448,7 @@ const de: Record<Key, string> = {
   'testPanel.saved': 'Gespeichert',
   'testPanel.error': 'Fehler: {error}',
   'testPanel.confirmHint': 'Speichern ohne Änderung bestätigt den Status für die aktuellen game_types.',
+  'testPanel.readOnly': 'Die Testergebnisse werden in der lokalen Version gepflegt und mit jedem Daten-Update veröffentlicht.',
 
   'focus.all': 'Alle',
   'focus.gameTypes': 'game_types geändert',
@@ -472,6 +481,7 @@ const de: Record<Key, string> = {
   'changes.legacyRange': 'In diesem Bereich liegen Änderungen aus der Zeit vor der Speicherung alter Werte. Dort sind die alten Werte teils nicht gespeichert.',
   'changes.legacyUpdate': 'In diesem Update liegen Änderungen aus der Zeit vor der Speicherung alter Werte. Dort sind die alten Werte teils nicht gespeichert.',
   'changes.first': 'Das ist das erste Update (Vollimport), deshalb sind alle Items „Neu“. Ein Vergleich ist erst ab dem zweiten Update sinnvoll.',
+  'changes.firstStatic': 'Die statische Fassung enthält die Einträge des ersten Updates nicht.',
   'changes.filterAria': 'Filter',
   'changes.kind': 'Art',
   'changes.focus': 'Fokus',
@@ -581,5 +591,5 @@ export function useT(): I18n {
 
 /** Text zu einem Fehler: Netzwerkfehler (Status 0) übersetzt, Server-Meldungen bleiben wie geliefert. */
 export function errorText(error: Error, t: TFunction): string {
-  return error instanceof ApiError && error.status === 0 ? t('error.unreachable') : error.message;
+  return error instanceof ApiError && error.status === 0 ? t(import.meta.env.VITE_DATA_MODE === 'static' ? 'error.dataUnreachable' : 'error.unreachable') : error.message;
 }

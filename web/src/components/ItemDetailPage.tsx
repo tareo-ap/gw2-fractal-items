@@ -7,7 +7,7 @@ import { errorText, useT } from '../lib/i18n';
 import { ErrorBox, GameTypeBadges, ItemIcon, Link, Loading } from './common';
 import { Gw2Text } from './Gw2Text';
 import { HistoryList } from './HistoryList';
-import { TestPanel } from './TestPanel';
+import { TestInfo, TestPanel } from './TestPanel';
 
 export function ItemDetailPage({ id, backHref }: { id: number; backHref: string }) {
   const { t, lang } = useT();
@@ -36,8 +36,12 @@ export function ItemDetailPage({ id, backHref }: { id: number; backHref: string 
             <RawDetails details={item.data.details} />
           </div>
           <div className="detail-side">
-            {/* key: Formular beim Wechsel auf ein anderes Item zurücksetzen */}
-            <TestPanel key={item.data.id} item={item.data} />
+            {import.meta.env.VITE_DATA_MODE === 'static' ? (
+              <TestInfo item={item.data} />
+            ) : (
+              /* key: Formular beim Wechsel auf ein anderes Item zurücksetzen */
+              <TestPanel key={item.data.id} item={item.data} />
+            )}
             <section className="panel">
               <h2>{t('detail.history')}</h2>
               <HistoryList history={item.data.history} />

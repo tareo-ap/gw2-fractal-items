@@ -6,14 +6,21 @@ import type {
   Rarity,
   UpdateChangeCounts,
   UpdateChangeEntry,
-  UpdateChangesQuery,
   UpdateChangesResponse,
   UpdateCompareResponse,
   UpdateDetail,
   UpdateSummary,
 } from '../../../shared/types.js';
-import { stableStringify } from '../importer/diff.js';
-import { bool, int, list, nameSql, oneOf, parseLang, PLACEHOLDER_SQL, textsJoin, TONIC_SQL } from './items.js';
+import { parseUpdateChangesQuery, type ParsedUpdateChangesQuery } from '../../../shared/params.js';
+import {
+  aggregateRange,
+  selectNetChanges,
+  summarize,
+  type RangeChange,
+} from '../../../shared/changes.js';
+import { nameSql, PLACEHOLDER_SQL, textsJoin, TONIC_SQL } from './items.js';
+
+export { parseUpdateChangesQuery, type ParsedUpdateChangesQuery };
 
 export interface UpdateRow {
   id: number;
@@ -120,25 +127,6 @@ export function deleteUpdate(db: DatabaseSync, id: number): DeleteUpdateResult {
 // Änderungen eines Updates
 // ---------------------------------------------------------------------------
 
-export type ParsedUpdateChangesQuery = Required<Omit<UpdateChangesQuery, 'q'>> & Pick<UpdateChangesQuery, 'q'>;
-
-const CHANGE_KINDS: readonly ChangeKind[] = ['added', 'changed', 'removed'];
-
-/** Liest die Query-Parameter von GET /api/updates/:id/changes und füllt Defaults auf. Wirft ValidationError. */
-export function parseUpdateChangesQuery(params: Record<string, string | undefined>): ParsedUpdateChangesQuery {
-  const q = params.q?.trim();
-  return {
-    lang: parseLang(params.lang),
-    kind: list('kind', params.kind, CHANGE_KINDS),
-    focus: oneOf('focus', params.focus, ['all', 'gameTypes', 'dungeonGained', 'dungeonLost'] as const) ?? 'all',
-    type: oneOf('type', params.type, ['gizmo', 'consumable', 'tonic', 'all'] as const) ?? 'all',
-    q: q ? q : undefined,
-    hidePlaceholders: bool('hidePlaceholders', params.hidePlaceholders) ?? true,
-    page: params.page ? int('page', params.page, 1) : 1,
-    pageSize: params.pageSize ? Math.min(int('pageSize', params.pageSize, 1), 200) : 50,
-  };
-}
-
 interface ChangeRow {
   item_id: number;
   kind: ChangeKind;
@@ -217,8 +205,6 @@ export function getUpdateChanges(db: DatabaseSync, update: UpdateDetail, query: 
     )
     .all(...params, query.pageSize, (query.page - 1) * query.pageSize) as unknown as ChangeRow[];
 
-  const parseTypes = (json: string | null) => (json ? (JSON.parse(json) as GameType[]) : null);
-  const parseValues = (json: string | null) => (json ? (JSON.parse(json) as Record<string, unknown>) : null);
   const items: UpdateChangeEntry[] = rows.map((row) => ({
     id: row.item_id,
     name: row.name,
@@ -234,8 +220,8 @@ export function getUpdateChanges(db: DatabaseSync, update: UpdateDetail, query: 
     gameTypesBefore: parseTypes(row.game_types_before),
     gameTypesAfter: parseTypes(row.game_types_after),
     // Neue und entfernte Items: Der Stand steht in raw_json (bei entfernten der letzte bekannte).
-    before: row.kind === 'removed' ? summarize(row.raw_json) : row.kind === 'changed' ? parseValues(row.values_before) : null,
-    after: row.kind === 'added' ? summarize(row.raw_json) : row.kind === 'changed' ? parseValues(row.values_after) : null,
+    before: row.kind === 'removed' ? summarizeJson(row.raw_json) : row.kind === 'changed' ? parseValues(row.values_before) : null,
+    after: row.kind === 'added' ? summarizeJson(row.raw_json) : row.kind === 'changed' ? parseValues(row.values_after) : null,
   }));
 
   const legacy = db
@@ -262,87 +248,17 @@ interface RangeRow {
   matches: number;
 }
 
-/** Netto-Änderung eines Items über alle Updates im Bereich (from, to]. */
-interface NetChange {
-  itemId: number;
-  name: string;
-  nameEn: string;
-  matches: boolean;
-  kind: ChangeKind;
-  gameTypesBefore: string | null; // JSON-Array
-  gameTypesAfter: string | null;
-  gameTypesChanged: boolean;
-  changedFields: string[];
-  before: Record<string, unknown>;
-  after: Record<string, unknown>;
-  unknownFields: string[];
-}
-
-const hasDungeon = (json: string | null) => json !== null && (JSON.parse(json) as string[]).includes('Dungeon');
-
-/**
- * Fasst die Änderungen eines Items (nach update_id sortiert) zusammen:
- * - erste Änderung added und letzte removed: gab es in keinem der beiden Stände, entfällt
- * - erste added: neu; sonst letzte removed: entfernt; sonst geändert
- * - game_types: vorher der Wert der ersten, nachher der Wert der letzten Änderung; netto gleich = keine Änderung
- * - Felder: alter Wert aus der ersten, neuer Wert aus der letzten Änderung, die das Feld betrifft; netto gleiche entfallen
- */
-function aggregate(rows: RangeRow[]): NetChange | null {
-  const first = rows[0]!;
-  const last = rows[rows.length - 1]!;
-  if (first.kind === 'added' && last.kind === 'removed') return null;
-  const kind: ChangeKind = first.kind === 'added' ? 'added' : last.kind === 'removed' ? 'removed' : 'changed';
-
-  const net: NetChange = {
-    itemId: first.item_id,
-    name: first.name,
-    nameEn: first.name_en,
-    matches: first.matches === 1,
-    kind,
-    gameTypesBefore: kind === 'added' ? null : first.game_types_before,
-    gameTypesAfter: kind === 'removed' ? null : last.game_types_after,
-    gameTypesChanged: false,
-    changedFields: [],
-    before: {},
-    after: {},
-    unknownFields: [],
-  };
-  if (kind !== 'changed') return net;
-
-  net.gameTypesChanged = net.gameTypesBefore !== net.gameTypesAfter;
-  if (net.gameTypesChanged) net.changedFields.push('game_types');
-
-  // Zwischenzeitlich entfernt und wieder da: Dafür sind keine Feldwerte gespeichert, der Eintrag bleibt trotzdem.
-  const changedRows = rows.filter((r) => r.kind === 'changed');
-  const fieldsOf = (r: RangeRow) => (r.changed_fields ? (JSON.parse(r.changed_fields) as string[]) : []);
-  const names = [...new Set(changedRows.flatMap(fieldsOf))].filter((n) => n !== 'game_types').sort();
-  for (const name of names) {
-    const firstRow = changedRows.find((r) => fieldsOf(r).includes(name))!;
-    const lastRow = [...changedRows].reverse().find((r) => fieldsOf(r).includes(name))!;
-    if (firstRow.values_before === null || lastRow.values_after === null) {
-      net.changedFields.push(name);
-      net.unknownFields.push(name);
-      continue;
-    }
-    const oldValue = (JSON.parse(firstRow.values_before) as Record<string, unknown>)[name];
-    const newValue = (JSON.parse(lastRow.values_after) as Record<string, unknown>)[name];
-    if (stableStringify(oldValue) === stableStringify(newValue)) continue;
-    net.changedFields.push(name);
-    if (oldValue !== undefined) net.before[name] = oldValue;
-    if (newValue !== undefined) net.after[name] = newValue;
-  }
-  if (net.changedFields.length === 0 && changedRows.length === rows.length) return null;
-  return net;
-}
+const parseTypes = (json: string | null) => (json ? (JSON.parse(json) as GameType[]) : null);
+const parseValues = (json: string | null) => (json ? (JSON.parse(json) as Record<string, unknown>) : null);
 
 /**
  * Vergleicht den Stand nach Update from mit dem Stand nach Update to anhand der gespeicherten Änderungen
- * im Bereich (from, to]. Die Zusammenfassung läuft in TypeScript: alle Änderungen des Bereichs laden,
- * pro Item zusammenfassen, filtern, sortieren, paginieren.
+ * im Bereich (from, to]. Die Zusammenfassung (shared/changes.ts, dieselbe Logik wie in der statischen Fassung)
+ * läuft in TypeScript: alle Änderungen des Bereichs laden, pro Item zusammenfassen, filtern, sortieren, paginieren.
  */
 export function compareUpdates(db: DatabaseSync, from: UpdateDetail, to: UpdateDetail, query: ParsedUpdateChangesQuery): UpdateCompareResponse {
   const filter = itemFilter(query);
-  const rows = db
+  const dbRows = db
     .prepare(
       `SELECT c.update_id, c.item_id, c.kind, c.changed_fields, c.game_types_before, c.game_types_after,
               c.values_before, c.values_after, ${nameSql(query.lang)} AS name, i.name AS name_en, (${filter.conditions.join(' AND ') || '1'}) AS matches
@@ -351,41 +267,23 @@ export function compareUpdates(db: DatabaseSync, from: UpdateDetail, to: UpdateD
        ORDER BY c.item_id, c.update_id`,
     )
     .all(...filter.params, from.id, to.id) as unknown as RangeRow[];
+  const rows: RangeChange[] = dbRows.map((r) => ({
+    updateId: r.update_id,
+    itemId: r.item_id,
+    kind: r.kind,
+    changedFields: r.changed_fields ? (JSON.parse(r.changed_fields) as string[]) : null,
+    gameTypesBefore: parseTypes(r.game_types_before),
+    gameTypesAfter: parseTypes(r.game_types_after),
+    valuesBefore: parseValues(r.values_before),
+    valuesAfter: parseValues(r.values_after),
+    name: r.name,
+    nameEn: r.name_en,
+    matches: r.matches === 1,
+  }));
 
   // Gruppieren (Zeilen sind nach item_id sortiert), zusammenfassen und zählen (ungefiltert).
-  const all: NetChange[] = [];
-  const counts: UpdateChangeCounts = { added: 0, changed: 0, removed: 0, gameTypesChanged: 0, dungeonGained: 0, dungeonLost: 0 };
-  let start = 0;
-  for (let i = 1; i <= rows.length; i++) {
-    if (i < rows.length && rows[i]!.item_id === rows[start]!.item_id) continue;
-    const net = aggregate(rows.slice(start, i));
-    start = i;
-    if (!net) continue;
-    all.push(net);
-    counts[net.kind]++;
-    if (net.gameTypesChanged) counts.gameTypesChanged++;
-    if (isDungeonGained(net)) counts.dungeonGained++;
-    if (isDungeonLost(net)) counts.dungeonLost++;
-  }
-
-  const dungeonChange = (n: NetChange) => isDungeonGained(n) || isDungeonLost(n);
-  const kindRank = { changed: 0, added: 1, removed: 2 };
-  const selected = all
-    .filter((n) => {
-      if (!n.matches) return false;
-      if (query.kind.length > 0 && !query.kind.includes(n.kind)) return false;
-      if (query.focus === 'gameTypes') return n.gameTypesChanged;
-      if (query.focus === 'dungeonGained') return isDungeonGained(n);
-      if (query.focus === 'dungeonLost') return isDungeonLost(n);
-      return true;
-    })
-    .sort(
-      (a, b) =>
-        Number(dungeonChange(b)) - Number(dungeonChange(a)) ||
-        kindRank[a.kind] - kindRank[b.kind] ||
-        a.name.toLowerCase().localeCompare(b.name.toLowerCase()) ||
-        a.itemId - b.itemId,
-    );
+  const { all, counts } = aggregateRange(rows);
+  const selected = selectNetChanges(all, query);
 
   const pageNets = selected.slice((query.page - 1) * query.pageSize, query.page * query.pageSize);
   const info = new Map<number, ItemInfoRow>();
@@ -398,7 +296,6 @@ export function compareUpdates(db: DatabaseSync, from: UpdateDetail, to: UpdateD
     for (const row of infoRows) info.set(row.id, row);
   }
 
-  const parseTypes = (json: string | null) => (json ? (JSON.parse(json) as GameType[]) : null);
   const items: UpdateChangeEntry[] = pageNets.map((n) => {
     const row = info.get(n.itemId)!;
     return {
@@ -413,10 +310,10 @@ export function compareUpdates(db: DatabaseSync, from: UpdateDetail, to: UpdateD
       isCandidate: row.is_candidate === 1,
       kind: n.kind,
       changedFields: n.changedFields,
-      gameTypesBefore: parseTypes(n.gameTypesBefore),
-      gameTypesAfter: parseTypes(n.gameTypesAfter),
-      before: n.kind === 'removed' ? summarize(row.raw_json) : n.kind === 'changed' ? n.before : null,
-      after: n.kind === 'added' ? summarize(row.raw_json) : n.kind === 'changed' ? n.after : null,
+      gameTypesBefore: n.gameTypesBefore,
+      gameTypesAfter: n.gameTypesAfter,
+      before: n.kind === 'removed' ? summarizeJson(row.raw_json) : n.kind === 'changed' ? n.before : null,
+      after: n.kind === 'added' ? summarizeJson(row.raw_json) : n.kind === 'changed' ? n.after : null,
       unknownFields: n.unknownFields,
     };
   });
@@ -429,9 +326,6 @@ export function compareUpdates(db: DatabaseSync, from: UpdateDetail, to: UpdateD
   return { from, to, counts, items, total: selected.length, page: query.page, pageSize: query.pageSize, legacyValues: legacy.legacy === 1 };
 }
 
-const isDungeonGained = (n: NetChange) => n.kind === 'changed' && hasDungeon(n.gameTypesAfter) && !hasDungeon(n.gameTypesBefore);
-const isDungeonLost = (n: NetChange) => n.kind === 'changed' && hasDungeon(n.gameTypesBefore) && !hasDungeon(n.gameTypesAfter);
-
 interface ItemInfoRow {
   id: number;
   type: string;
@@ -443,17 +337,8 @@ interface ItemInfoRow {
   raw_json: string;
 }
 
-/** Die für den Vergleich relevanten Felder eines Items aus raw_json. */
-function summarize(rawJson: string): Record<string, unknown> {
-  const raw = JSON.parse(rawJson) as Record<string, unknown>;
-  const details = raw.details as { type?: unknown } | undefined;
-  const out: Record<string, unknown> = {};
-  for (const field of ['name', 'game_types', 'flags', 'description', 'rarity']) {
-    if (raw[field] !== undefined) out[field] = raw[field];
-  }
-  if (details?.type !== undefined) out['details.type'] = details.type;
-  return out;
-}
+/** Die für den Vergleich relevanten Felder eines Items aus raw_json (siehe summarize in shared/changes.ts). */
+export const summarizeJson = (rawJson: string): Record<string, unknown> => summarize(JSON.parse(rawJson) as Record<string, unknown>);
 
 /** Zähler über das ganze Update, ohne Filter. */
 function countChanges(db: DatabaseSync, updateId: number): UpdateChangeCounts {

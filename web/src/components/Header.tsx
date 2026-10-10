@@ -63,16 +63,28 @@ export function Header({ filters, activeView, changesActive }: { filters: ListFi
               <span>
                 <strong>{formatNumber(s.items)}</strong> Items
               </span>
-              <span title={t('header.lastUpdate')}>
-                {t('header.updateLabel')} <strong>{s.lastUpdate ? `${stateName(s.lastUpdate)} UTC` : t('header.noUpdate')}</strong>
-              </span>
+              {import.meta.env.VITE_DATA_MODE === 'static' ? (
+                // Pages-Fassung: nur der Datenstand, nichts davon ist veränderbar.
+                <span title={t('header.staticTitle')}>
+                  {t('header.staticNote', { state: s.lastUpdate ? stateName(s.lastUpdate) : t('header.noUpdate') })}
+                </span>
+              ) : (
+                <span title={t('header.lastUpdate')}>
+                  {t('header.updateLabel')} <strong>{s.lastUpdate ? `${stateName(s.lastUpdate)} UTC` : t('header.noUpdate')}</strong>
+                </span>
+              )}
             </>
           )}
         </div>
-        <a href="/api/export" download className="small" title={t('header.exportTitle')}>
-          {t('header.export')}
-        </a>
-        <UpdateButton />
+        {/* Datenbank-Export und Update gibt es nur in der lokalen Version (VITE_DATA_MODE=api). */}
+        {import.meta.env.VITE_DATA_MODE !== 'static' && (
+          <>
+            <a href="/api/export" download className="small" title={t('header.exportTitle')}>
+              {t('header.export')}
+            </a>
+            <UpdateButton />
+          </>
+        )}
         <LangSwitch />
         <SettingsMenu />
       </div>

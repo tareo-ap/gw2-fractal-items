@@ -10,16 +10,10 @@ import type {
   UpdateDetail,
   UpdateSummary,
 } from '../../shared/types';
+import { ApiError } from './lib/apiError';
+import { staticApi } from './lib/staticApi';
 
-/** Fehler mit HTTP-Status, damit die UI z. B. 404 oder 409 gezielt behandeln kann. */
-export class ApiError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
-    super(message);
-  }
-}
+export { ApiError };
 
 /**
  * Eintrag aus GET /api/updates. Laut Vertrag UpdateSummary; liefert der Server
@@ -54,7 +48,7 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
-export const api = {
+const restApi = {
   stats: () => request<StatsResponse>('GET', '/api/stats'),
   items: (queryString: string, lang: Lang) => request<ItemListResponse>('GET', `/api/items?${queryString}&lang=${lang}`),
   item: (id: number, lang: Lang) => request<ItemDetail>('GET', `/api/items/${id}?lang=${lang}`),
@@ -68,3 +62,9 @@ export const api = {
   deleteUpdate: (id: number) => request<void>('DELETE', `/api/updates/${id}`),
   startUpdate: () => request<unknown>('POST', '/api/updates'),
 };
+
+/**
+ * Datenquelle der App, beim Build festgelegt (VITE_DATA_MODE): "api" (Standard) fragt den Server, "static" liest die
+ * JSON-Dateien der Pages-Fassung. Die Bedingung steht direkt hier, damit Vite den jeweils anderen Zweig weglässt.
+ */
+export const api: typeof restApi = import.meta.env.VITE_DATA_MODE === 'static' ? staticApi : restApi;

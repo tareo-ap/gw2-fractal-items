@@ -4,32 +4,40 @@ import type {
   ItemChange,
   ItemDetail,
   ItemListItem,
-  ItemListQuery,
   ItemListResponse,
   ItemTestUpdate,
   Lang,
   Rarity,
   TestStatus,
 } from '../../../shared/types.js';
+import { exportFilename, toCsv, toJson, EXPORT_FIELDS, type ExportRow } from '../../../shared/exportFormat.js';
+import { oneOf, parseItemListQuery, parseLang, ValidationError, type ParsedItemListQuery } from '../../../shared/params.js';
+import {
+  GAME_TYPES,
+  HIDE_COMMON_SUBTYPES,
+  ITEM_SORTS,
+  RARITIES,
+  TEST_STATUSES,
+  TONIC_EXCLUDED_SUBTYPE,
+  itemIdFromChatLink,
+  wikiUrl,
+} from '../../../shared/rules.js';
 
-export const RARITIES: readonly Rarity[] = ['Junk', 'Basic', 'Fine', 'Masterwork', 'Rare', 'Exotic', 'Ascended', 'Legendary'];
-export const GAME_TYPES: readonly GameType[] = ['Activity', 'Dungeon', 'Pve', 'Pvp', 'PvpLobby', 'Wvw'];
-const TEST_STATUSES: readonly TestStatus[] = ['untested', 'works', 'broken'];
-const SORTS = ['name', 'id', 'rarity', 'level', 'lastChanged'] as const;
-
-/** Fehler in den Eingaben, wird als HTTP 400 beantwortet. */
-export class ValidationError extends Error {}
+// Die Regeln selbst (Konstanten, Eingabe-Prüfung, CSV-Format) liegen in shared/, damit die statische Fassung
+// im Browser dieselben nutzt. Hier bleiben die SQL-Fassungen; andere Module importieren weiter von hier.
+export { GAME_TYPES, RARITIES, ValidationError, oneOf, parseItemListQuery, parseLang, toCsv, toJson, exportFilename, EXPORT_FIELDS, itemIdFromChatLink, wikiUrl };
+export type { ExportRow, ParsedItemListQuery };
 
 // "Neu testen": Es gibt ein Testergebnis, aber game_types sind heute anders als beim Test.
 // Beide Spalten enthalten sortierte JSON-Arrays (siehe normalizeGameTypes), daher reicht ein
 // String-Vergleich für den Mengenvergleich.
-const NEEDS_RETEST_SQL = `(t.status IS NOT NULL AND t.status <> 'untested' AND t.game_types_at_test IS NOT i.game_types)`;
+export const NEEDS_RETEST_SQL = `(t.status IS NOT NULL AND t.status <> 'untested' AND t.game_types_at_test IS NOT i.game_types)`;
 
 // Tonics: Verwandlungs-Items. Teils als Gizmo, teils als Consumable (Untertyp Generic, Food, Utility …),
 // mal mit Flag "Tonic", mal nur am Namen erkennbar. Untertyp Unlock sind die zugehörigen Rezepte.
 export const TONIC_SQL = `(i.type IN ('Gizmo', 'Consumable')
   AND (EXISTS (SELECT 1 FROM json_each(i.flags) WHERE value = 'Tonic') OR i.name LIKE '%Tonic%')
-  AND (i.subtype IS NULL OR i.subtype <> 'Unlock'))`;
+  AND (i.subtype IS NULL OR i.subtype <> '${TONIC_EXCLUDED_SUBTYPE}'))`;
 
 // Platzhalter: leerer Name, kein Icon oder interner Name wie "((906936))" bzw. "[[913817]]". Erwartet den Alias i.
 export const PLACEHOLDER_SQL = `(trim(i.name) = '' OR i.icon IS NULL OR i.name GLOB '((*))' OR i.name GLOB '[[][[]*]]')`;
@@ -38,24 +46,12 @@ const RARITY_RANK_SQL = `CASE i.rarity ${RARITIES.map((r, idx) => `WHEN '${r}' T
 
 // Sprache: Bei 'de' kommen Name und Beschreibung aus item_texts (Alias d, per LEFT JOIN), sonst aus items.
 // Fehlt der deutsche Text, gilt der englische. Platzhalter-/Tonic-Prüfungen bleiben beim englischen Namen.
-const LANGS: readonly Lang[] = ['en', 'de'];
-
-/** Liest den Parameter lang (Default en). Wirft ValidationError. */
-export function parseLang(value: string | undefined): Lang {
-  return oneOf('lang', value, LANGS) ?? 'en';
-}
-
 /** JOIN auf die Texte der Sprache; leer bei Englisch. Erwartet den Alias i. */
 export const textsJoin = (lang: Lang) => (lang === 'de' ? `LEFT JOIN item_texts d ON d.item_id = i.id AND d.lang = 'de'` : '');
 export const nameSql = (lang: Lang) => (lang === 'de' ? `COALESCE(NULLIF(d.name, ''), i.name)` : 'i.name');
 const descriptionSql = (lang: Lang) => (lang === 'de' ? `CASE WHEN d.item_id IS NOT NULL THEN d.description ELSE i.description END` : 'i.description');
 
-export const wikiUrl = (lang: Lang, name: string) =>
-  lang === 'de'
-    ? `https://wiki-de.guildwars2.com/wiki/Spezial:Suche/${encodeURIComponent(name)}`
-    : `https://wiki.guildwars2.com/wiki/Special:Search/${encodeURIComponent(name)}`;
-
-const sortSql = (lang: Lang): Record<(typeof SORTS)[number], string> => ({
+const sortSql = (lang: Lang): Record<(typeof ITEM_SORTS)[number], string> => ({
   name: `${nameSql(lang)} COLLATE NOCASE`,
   id: 'i.id',
   rarity: RARITY_RANK_SQL,
@@ -95,81 +91,8 @@ const selectItemSql = (lang: Lang) => `
   FROM items i ${textsJoin(lang)} LEFT JOIN item_tests t ON t.item_id = i.id`;
 
 // ---------------------------------------------------------------------------
-// Query-Parameter einlesen
-// ---------------------------------------------------------------------------
-
-/** ItemListQuery mit aufgefüllten Defaults; nur q, testStatus und updateId bleiben optional. */
-export type ParsedItemListQuery = Required<Omit<ItemListQuery, 'q' | 'testStatus' | 'updateId'>> &
-  Pick<ItemListQuery, 'q' | 'testStatus' | 'updateId'>;
-
-/** Liest die Query-Parameter von GET /api/items und füllt Defaults auf. Wirft ValidationError. */
-export function parseItemListQuery(params: Record<string, string | undefined>): ParsedItemListQuery {
-  const q = params.q?.trim();
-  return {
-    q: q ? q : undefined,
-    lang: parseLang(params.lang),
-    view: oneOf('view', params.view, ['gizmo', 'consumable', 'tonic', 'all'] as const) ?? 'gizmo',
-    candidate: oneOf('candidate', params.candidate, ['yes', 'no', 'all'] as const) ?? 'yes',
-    hideCommon: bool('hideCommon', params.hideCommon) ?? true,
-    hidePlaceholders: bool('hidePlaceholders', params.hidePlaceholders) ?? true,
-    rarity: list('rarity', params.rarity, RARITIES),
-    gameType: list('gameType', params.gameType, GAME_TYPES),
-    testStatus: oneOf('testStatus', params.testStatus, [...TEST_STATUSES, 'retest'] as const),
-    updateId: params.updateId ? int('updateId', params.updateId, 1) : undefined,
-    includeRemoved: bool('includeRemoved', params.includeRemoved) ?? false,
-    sort: oneOf('sort', params.sort, SORTS) ?? 'name',
-    order: oneOf('order', params.order, ['asc', 'desc'] as const) ?? 'asc',
-    page: params.page ? int('page', params.page, 1) : 1,
-    pageSize: params.pageSize ? Math.min(int('pageSize', params.pageSize, 1), 200) : 50,
-  };
-}
-
-export function oneOf<T extends string>(name: string, value: string | undefined, allowed: readonly T[]): T | undefined {
-  if (value === undefined || value === '') return undefined;
-  if (!(allowed as readonly string[]).includes(value)) {
-    throw new ValidationError(`${name} muss einer dieser Werte sein: ${allowed.join(', ')}`);
-  }
-  return value as T;
-}
-
-export function bool(name: string, value: string | undefined): boolean | undefined {
-  if (value === undefined || value === '') return undefined;
-  if (value === 'true' || value === '1') return true;
-  if (value === 'false' || value === '0') return false;
-  throw new ValidationError(`${name} muss true oder false sein`);
-}
-
-export function int(name: string, value: string, min: number): number {
-  const n = Number(value);
-  if (!Number.isInteger(n) || n < min) throw new ValidationError(`${name} muss eine ganze Zahl ≥ ${min} sein`);
-  return n;
-}
-
-export function list<T extends string>(name: string, value: string | undefined, allowed: readonly T[]): T[] {
-  if (!value) return [];
-  return value
-    .split(',')
-    .map((v) => v.trim())
-    .filter((v) => v !== '')
-    .map((v) => oneOf(name, v, allowed)!);
-}
-
-// ---------------------------------------------------------------------------
 // Suche
 // ---------------------------------------------------------------------------
-
-/**
- * Item-ID aus einem GW2-Chat-Link wie [&AgEAWgAA]. Aufbau (Base64): Byte 0 = Typ (2 = Item),
- * Byte 1 = Anzahl, Byte 2–4 = Item-ID (little endian). Ingame kopierte Links können sich vom
- * chat_link der API unterscheiden (z. B. andere Anzahl), deshalb wird die ID ausgewertet.
- */
-export function itemIdFromChatLink(link: string): number | null {
-  const match = /^\[&([A-Za-z0-9+/=]+)\]$/.exec(link);
-  if (!match) return null;
-  const bytes = Buffer.from(match[1]!, 'base64');
-  if (bytes.length < 5 || bytes[0] !== 0x02) return null;
-  return bytes[2]! | (bytes[3]! << 8) | (bytes[4]! << 16);
-}
 
 /**
  * Baut aus der Benutzereingabe eine sichere FTS5-Abfrage: Jedes Wort wird in Anführungszeichen
@@ -221,13 +144,13 @@ function buildWhere(query: ParsedItemListQuery): { whereSql: string; params: SQL
   if (query.candidate !== 'all') where.push(`i.is_candidate = ${query.candidate === 'yes' ? 1 : 0}`);
   // In der Tonic-Ansicht gilt hideCommon nicht: Tonics können den Untertyp Food oder Utility haben.
   if (query.hideCommon && query.view !== 'tonic') {
-    where.push(`NOT (i.type = 'Consumable' AND i.subtype IS NOT NULL AND i.subtype IN ('Food', 'Utility', 'Unlock', 'Transmutation', 'Currency'))`);
+    where.push(`NOT (i.type = 'Consumable' AND i.subtype IS NOT NULL AND i.subtype IN (${HIDE_COMMON_SUBTYPES.map((v) => `'${v}'`).join(', ')}))`);
     // Mastery Points und Emote Tomes sind Freischaltungen ohne Nutzen im Fraktal, aber vom Untertyp
     // Immediate bzw. Generic. Viele Mastery Points heißen " Mastery Point" mit führendem Leerzeichen.
     // Währungspakete wie "300 Geodes" sind Immediate und beginnen mit einer Zahl und Leerzeichen.
     where.push(
       `NOT (i.type = 'Consumable' AND (trim(i.name) = 'Mastery Point' OR i.name LIKE '%Emote Tome'
-        OR (i.subtype = 'Immediate' AND i.name GLOB '[0-9]* *')))`,
+        OR (COALESCE(i.subtype, '') = 'Immediate' AND i.name GLOB '[0-9]* *')))`,
     );
   }
   if (query.hidePlaceholders) where.push(`NOT ${PLACEHOLDER_SQL}`);
@@ -274,32 +197,6 @@ export function listItems(db: DatabaseSync, query: ParsedItemListQuery): ItemLis
   return { items: rows.map(toListItem), total, page: query.page, pageSize: query.pageSize };
 }
 
-/** Eine Zeile des Exports (Feldnamen wie in der CSV-Kopfzeile). */
-export interface ExportRow {
-  id: number;
-  name: string;
-  type: string;
-  subtype: string | null;
-  rarity: string;
-  level: number;
-  game_types: GameType[];
-  flags: string[];
-  is_candidate: boolean;
-  removed: boolean;
-  test_status: TestStatus;
-  test_note: string | null;
-  tested_at: string | null;
-  needs_retest: boolean;
-  chat_link: string | null;
-  wiki_url: string;
-  icon: string | null;
-}
-
-export const EXPORT_FIELDS: readonly (keyof ExportRow)[] = [
-  'id', 'name', 'type', 'subtype', 'rarity', 'level', 'game_types', 'flags', 'is_candidate', 'removed',
-  'test_status', 'test_note', 'tested_at', 'needs_retest', 'chat_link', 'wiki_url', 'icon',
-];
-
 /** Alle Treffer der Filter (ohne Paginierung) in der gewählten Sortierung, für den CSV/JSON-Export. */
 export function exportItems(db: DatabaseSync, query: ParsedItemListQuery): ExportRow[] {
   const { whereSql, params } = buildWhere(query);
@@ -337,20 +234,6 @@ export function exportItems(db: DatabaseSync, query: ParsedItemListQuery): Expor
     wiki_url: wikiUrl(query.lang, row.name),
     icon: row.icon,
   }));
-}
-
-/**
- * CSV für deutsches Excel: Semikolon, CRLF, UTF-8 mit BOM. Arrays werden mit "|" verbunden.
- * Texte, die mit =, +, -, @ (oder Tab/CR) beginnen, bekommen ein ' vorangestellt (Formel-Injection).
- */
-export function toCsv(rows: ExportRow[]): string {
-  const cell = (value: ExportRow[keyof ExportRow]): string => {
-    let text = value === null ? '' : Array.isArray(value) ? value.join('|') : String(value);
-    if ((typeof value === 'string' || Array.isArray(value)) && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
-    return /[;"\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-  };
-  const lines = [EXPORT_FIELDS.join(';'), ...rows.map((row) => EXPORT_FIELDS.map((f) => cell(row[f])).join(';'))];
-  return `﻿${lines.join('\r\n')}\r\n`;
 }
 
 export function getItemDetail(db: DatabaseSync, id: number, lang: Lang = 'en'): ItemDetail | null {

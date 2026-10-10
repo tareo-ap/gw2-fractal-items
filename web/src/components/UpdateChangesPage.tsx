@@ -33,7 +33,7 @@ export function UpdatesRedirect() {
       <div className="empty">
         <p>{t('changes.noUpdate')}</p>
       </div>
-      <ManageStates updates={updates.data ?? []} shownIds={[]} />
+      {import.meta.env.VITE_DATA_MODE !== 'static' && <ManageStates updates={updates.data ?? []} shownIds={[]} />}
     </>
   );
 }
@@ -266,6 +266,7 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
       {isFirst && (
         <div className="warning">
           {t('changes.first')}
+          {import.meta.env.VITE_DATA_MODE === 'static' && ` ${t('changes.firstStatic')}`}
         </div>
       )}
 
@@ -353,7 +354,9 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
         </div>
       )}
       <Pagination page={filters.page} total={data.total} pageSize={data.pageSize || PAGE_SIZE} onPage={(page) => change({ page })} />
-      <ManageStates updates={updates.data ?? []} shownIds={'from' in source ? [source.from, source.to] : [source.id]} />
+      {import.meta.env.VITE_DATA_MODE !== 'static' && (
+        <ManageStates updates={updates.data ?? []} shownIds={'from' in source ? [source.from, source.to] : [source.id]} />
+      )}
     </>
   );
 }

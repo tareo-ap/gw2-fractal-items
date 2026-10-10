@@ -9,7 +9,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test \"src/**/*.test.ts\"",
     "db:import": "node --import tsx src/cli/importDb.ts",
-    "start": "node dist/server/src/index.js"
+    "start": "node dist/server/src/index.js",
+    "export:static": "node --import tsx src/cli/exportStatic.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.4",
