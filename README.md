@@ -1,50 +1,50 @@
 # GW2 Fractal Items
 
-Kleine Webanwendung, die alle Guild-Wars-2-Items aus der offiziellen API lädt und zeigt,
-welche Gizmos und Consumables in Fractals of the Mist nutzbar sein könnten
-(Kriterium: `game_types` enthält `Dungeon`). Anforderungen: [docs/PRD.md](docs/PRD.md).
+A small web app that loads all Guild Wars 2 items from the official API and shows
+which gizmos and consumables might be usable in Fractals of the Mist
+(criterion: `game_types` contains `Dungeon`).
 
-## Aufbau
+Public read-only version: https://tareo-ap.github.io/gw2-fractal-items/
 
-| Ordner | Inhalt |
+## Structure
+
+| Folder | Contents |
 | --- | --- |
-| `server/` | Node.js-Backend mit [Hono](https://hono.dev), SQLite über das eingebaute `node:sqlite` |
+| `server/` | Node.js backend with [Hono](https://hono.dev), SQLite via the built-in `node:sqlite` |
 | `web/` | React + Vite + TypeScript |
-| `shared/` | Typen und gemeinsame Regeln (Filter, Eingabe-Prüfung, CSV-Format, Logik der statischen Fassung), die Server und Web nutzen |
-| `scripts/` | Build der statischen Fassung (`build:pages`, `preview:pages`) |
-| `site-data/` | Export für GitHub Pages (JSON, wird committet; erst nach dem ersten `npm run export:static` vorhanden) |
-| `sources/` | Alte Exporte, nur als Kontext |
-| `docs/` | PRD |
+| `shared/` | Types and shared rules (filters, input validation, CSV format, logic of the static version) used by server and web |
+| `scripts/` | Build of the static version (`build:pages`, `preview:pages`) |
+| `site-data/` | Export for GitHub Pages (JSON, committed; created by `npm run export:static`) |
 
-Im Betrieb ist es ein einziger Prozess: Der Server liefert die API unter `/api/*` und das gebaute Frontend aus.
-In der Entwicklung laufen Vite (Port 5173) und Server (Port 3000) getrennt, Vite leitet `/api` an den Server weiter.
+In production it is a single process: the server serves the API under `/api/*` and the built frontend.
+During development Vite (port 5173) and the server (port 3000) run separately; Vite proxies `/api` to the server.
 
-## Entwicklung
+## Development
 
-Voraussetzung: Node.js 24 oder neuer.
+Requires Node.js 24 or newer.
 
 ```bash
 npm install
-npm run dev        # Server und Web gleichzeitig, danach http://localhost:5173 öffnen
+npm run dev        # server and web together, then open http://localhost:5173
 npm run typecheck
-npm test           # Backend-Tests (gegen einen lokalen Fake der GW2-API)
+npm test           # backend tests (against a local fake of the GW2 API)
 npm run build
 ```
 
-Server und Web lassen sich auch getrennt starten: `npm run dev:server` und `npm run dev:web` in zwei Terminals.
-Beim Start schreibt der Server Port und Datenbankpfad ins Log. Ist der Port belegt, sagt er das und beendet sich.
+Server and web can also be started separately: `npm run dev:server` and `npm run dev:web` in two terminals.
+On startup the server logs its port and database path. If the port is taken, it says so and exits.
 
-Die Daten kommen über den Button „Aktualisieren“: Der erste Lauf lädt alle Items aus der GW2-API
-(mehrere hundert Requests, gedrosselt auf 5 pro Sekunde), spätere Läufe vergleichen mit dem Cache.
+Data is loaded with the "Update" button: the first run fetches all items from the GW2 API
+(several hundred requests, throttled to 5 per second), later runs compare against the cache.
 
-Die Oberfläche gibt es auf Englisch (Standard) und Deutsch; der Umschalter „EN | DE“ sitzt oben rechts, die Wahl merkt sich der Browser.
-In der deutschen Ansicht erscheinen auch Item-Namen und Beschreibungen auf Deutsch (mit Fallback auf Englisch) und die Suche findet deutsche und englische Begriffe.
-Dafür lädt jedes Update zusätzlich die deutschen Texte, es dauert deshalb etwa doppelt so lange (ca. 14 statt 7 Minuten). Die deutschen Texte erscheinen erst nach dem ersten Update mit dieser Version.
-Scheitert nur der deutsche Teil, bleibt das Update gültig; der nächste Lauf holt die Texte nach.
+The interface is available in English (default) and German; the "EN | DE" switch is at the top right and the browser remembers the choice.
+In German, item names and descriptions are shown in German too (falling back to English), and search finds German and English terms.
+Each update therefore also loads the German texts and takes about twice as long (roughly 14 instead of 7 minutes).
+If only the German part fails, the update stays valid and the next run fetches the texts again.
 
-Die aktuell gefilterte Liste (alle Treffer, mit Kandidaten und Testergebnissen) lässt sich über die Links „CSV“ und „JSON“ neben der Trefferanzahl herunterladen; die CSV ist für deutsches Excel gedacht (Semikolon, UTF-8 mit BOM).
+The currently filtered list (all results, including candidates and test results) can be downloaded via the "CSV" and "JSON" links next to the result count. The CSV targets Excel with German settings (semicolon, UTF-8 with BOM).
 
-Die Datenbank landet in der Entwicklung unter `data/gw2-items.db` (per `.gitignore` ausgeschlossen).
+During development the database is stored in `data/gw2-items.db` (excluded via `.gitignore`).
 
 ## Docker
 
@@ -52,51 +52,55 @@ Die Datenbank landet in der Entwicklung unter `data/gw2-items.db` (per `.gitigno
 docker compose up -d --build
 ```
 
-Danach läuft die App auf http://localhost:3000. Die Datenbank liegt im Volume `gw2-items-data` unter `/data`.
+The app then runs on http://localhost:3000. The database lives in the volume `gw2-items-data` under `/data`.
 
 ## GitHub Pages
 
-Neben der Docker-Version gibt es eine statische, schreibgeschützte Fassung aus demselben Code
-(Liste, Suche, Filter, Details, Änderungen, Vergleich, Export CSV/JSON; ohne Update-Button, Teststatus-Bearbeitung,
-DB-Export und Stände löschen). Die Daten kommen aus JSON-Dateien statt von `/api`; die GW2-API wird dort nie aufgerufen.
-Adresse: https://tareo-ap.github.io/gw2-fractal-items/
+Besides the Docker version there is a static, read-only version built from the same code
+(list, search, filters, details, changes, comparison, CSV/JSON export; no update button, no test status editing,
+no database export, no deleting of states). It loads JSON files instead of calling `/api` and never calls the GW2 API.
+Address: https://tareo-ap.github.io/gw2-fractal-items/
 
-Ablauf nach einem Patch:
+Workflow after a game patch:
 
-1. Lokal aktualisieren (Button „Aktualisieren“) und Teststatus pflegen.
-2. `npm run export:static` schreibt die Daten nach `site-data/` (Ordner wird vorher geleert). Optional mit anderer Datei: `npm run export:static -- pfad/zur.db`. Die Datenbank wird nur lesend geöffnet, der Server darf weiterlaufen. Das Skript nennt Dateizahl und Gesamtgröße (Ziel unter ca. 15 MB unkomprimiert).
-3. `site-data/` committen und nach Forgejo pushen; der Push-Mirror bringt es nach GitHub.
-4. Die GitHub Action `.github/workflows/pages.yml` baut bei jedem Push auf `main` (oder manuell per „Run workflow“) mit `npm run build:pages` und veröffentlicht die Seite.
+1. Update locally ("Update" button) and maintain the test status.
+2. `npm run export:static` writes the data to `site-data/` (the folder is emptied first). Another database file can be passed: `npm run export:static -- path/to/file.db`. The database is opened read-only, so the server may keep running. The script prints the file count and total size (target: below about 15 MB uncompressed).
+3. Commit `site-data/` and push to Forgejo; the push mirror brings it to GitHub.
+4. The GitHub Action `.github/workflows/pages.yml` builds with `npm run build:pages` on every push to `main` (or manually via "Run workflow") and publishes the site.
 
-Einmalig auf GitHub: Settings → Pages → Source „GitHub Actions“.
+One-time setup on GitHub: Settings → Pages → Source "GitHub Actions".
 
-Veröffentlicht werden alle nicht entfernten Fractal-Kandidaten vom Typ Gizmo oder Consumable sowie alle Items, die in einer Änderung ab dem zweiten abgeschlossenen Update vorkommen (damit z. B. „Dungeon weg“ sichtbar bleibt). Die Änderungen des ersten Updates (Vollimport) sind nicht enthalten. Jeder Export-Commit ändert die JSON-Dateien (ca. 10 MB), das Repository wächst dadurch mit jedem Patch.
+Published are all non-removed Fractal candidates of type Gizmo or Consumable, plus all items that appear in a change from the second completed update onwards (so that e.g. "Dungeon removed" stays visible). Changes of the first update (full import) are not included. Every export commit changes the JSON files (about 10 MB), so the repository grows with each patch.
 
-Lokale Vorschau der Pages-Fassung:
+Local preview of the Pages version:
 
 ```bash
-npm run build:pages     # braucht site-data/ ; baut mit VITE_DATA_MODE=static nach web/dist
-npm run preview:pages   # vite preview, Adresse steht in der Ausgabe (mit Basis-Pfad)
+npm run build:pages     # needs site-data/; builds with VITE_DATA_MODE=static into web/dist
+npm run preview:pages   # vite preview, the address (with base path) is printed
 ```
 
-Der Basis-Pfad ist `/gw2-fractal-items/` und lässt sich über die Umgebungsvariable `VITE_BASE` ändern (z. B. `VITE_BASE=/ npm run build:pages` auf Linux/macOS). `404.html` ist eine Kopie von `index.html`, damit Reload und Deep-Links wie `/gw2-fractal-items/items/123` funktionieren. `npm run build:pages` überschreibt `web/dist`; für das Docker-Image gilt weiterhin `npm run build`.
+The base path is `/gw2-fractal-items/` and can be changed with the environment variable `VITE_BASE` (e.g. `VITE_BASE=/ npm run build:pages` on Linux/macOS). `404.html` is a copy of `index.html` so that reloads and deep links such as `/gw2-fractal-items/items/123` work. `npm run build:pages` overwrites `web/dist`; the Docker image still uses `npm run build`.
 
-## Sichern und Umziehen
+## Backup and moving
 
-- Sichern: Im Kopf der App auf „Export“ klicken (bzw. `/api/export` aufrufen). Das lädt eine konsistente Kopie der Datenbank als `gw2-items-JJJJ-MM-TT.db`, auch während ein Update läuft.
-- Einspielen: Server beenden, dann `npm run db:import -- datei.db`. Die bisherige Datenbank bleibt als `gw2-items.db.bak-<Zeitstempel>` neben der neuen liegen. Das Skript bricht ab, wenn der Server noch läuft.
-- Docker: Container stoppen, die Datei per `docker cp datei.db <container>:/data/gw2-items.db` ins Volume kopieren (die alte Datei vorher sichern), Container wieder starten.
+- Backup: click "Export" in the app header (or open `/api/export`). This downloads a consistent copy of the database as `gw2-items-YYYY-MM-DD.db`, even while an update is running.
+- Restore: stop the server, then run `npm run db:import -- file.db`. The previous database is kept next to it as `gw2-items.db.bak-<timestamp>`. The script aborts if the server is still running.
+- Docker: stop the container, copy the file into the volume with `docker cp file.db <container>:/data/gw2-items.db` (back up the old file first), start the container again.
 
-## Konfiguration
+## Configuration
 
-| Variable | Default | Bedeutung |
+| Variable | Default | Meaning |
 | --- | --- | --- |
-| `PORT` | `3000` | HTTP-Port |
-| `DB_PATH` | `data/gw2-items.db` (Docker: `/data/gw2-items.db`) | SQLite-Datei |
-| `WEB_DIST` | leer (Docker: `/app/web/dist`) | Gebautes Frontend; leer = Server liefert nur die API |
-| `GW2_API_BASE` | `https://api.guildwars2.com` | Basis-URL der GW2-API |
-| `UPDATE_CHECK` | `off` (Docker-Image: `on`) | Automatische Prüfung auf eine neue Game-Build. Bei neuer Build-ID startet ein Update; solange es noch kein abgeschlossenes Update gibt (erster Vollimport), nie. Ungültige Werte der folgenden Variablen schalten die Prüfung aus |
-| `UPDATE_CHECK_TZ` | `Europe/Berlin` | Zeitzone für alle Zeiten des Zeitplans (IANA-Name, Sommer-/Winterzeit wird berücksichtigt) |
-| `UPDATE_CHECK_DAILY_AT` | `06:00` | Tägliche Prüfung (HH:MM) |
-| `UPDATE_CHECK_PATCH_WINDOW` | `Tue 17:00-19:00` | Patch-Fenster (Wochentag `Mon`…`Sun`, von-bis); neue Patches kommen meist dienstags abends. `off` = kein Fenster |
-| `UPDATE_CHECK_PATCH_EVERY_MINUTES` | `30` | Abstand der Prüfungen im Patch-Fenster (17:00, 17:30, … 19:00). Nach dem Start wird nicht sofort geprüft, sondern zum nächsten Termin |
+| `PORT` | `3000` | HTTP port |
+| `DB_PATH` | `data/gw2-items.db` (Docker: `/data/gw2-items.db`) | SQLite file |
+| `WEB_DIST` | empty (Docker: `/app/web/dist`) | Built frontend; empty = the server only serves the API |
+| `GW2_API_BASE` | `https://api.guildwars2.com` | Base URL of the GW2 API |
+| `UPDATE_CHECK` | `off` (Docker image: `on`) | Automatic check for a new game build. A new build ID starts an update; never before the first completed update (initial full import). Invalid values of the following variables disable the check |
+| `UPDATE_CHECK_TZ` | `Europe/Berlin` | Time zone for all schedule times (IANA name, daylight saving time is handled) |
+| `UPDATE_CHECK_DAILY_AT` | `06:00` | Daily check (HH:MM) |
+| `UPDATE_CHECK_PATCH_WINDOW` | `Tue 17:00-19:00` | Patch window (weekday `Mon`…`Sun`, from-to); new patches usually arrive on Tuesday evenings. `off` = no window |
+| `UPDATE_CHECK_PATCH_EVERY_MINUTES` | `30` | Interval of checks within the patch window (17:00, 17:30, … 19:00). The server does not check right after startup but at the next scheduled time |
+
+## Legal
+
+Guild Wars 2 © ArenaNet, LLC. Item data and icons come from the official GW2 API. This project is not affiliated with ArenaNet.

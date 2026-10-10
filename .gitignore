@@ -9,3 +9,5 @@ Thumbs.db
 
 # Alte Exporte, nur lokal (nicht veröffentlichen)
 sources/
+# Projektdokumentation, nur lokal bzw. im privaten Docs-Repo (nicht veröffentlichen)
+docs/
