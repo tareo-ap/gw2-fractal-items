@@ -77,10 +77,10 @@ before(async () => {
   baselineId = (await runImport(importer)).updateId!;
 
   // Test status; then the second update changes the game_types (-> "retest").
-  saveItemTest(db, 1, { status: 'works', note: 'klappt; "gut"' });
+  saveItemTest(db, 1, { status: 'works', note: 'works; "good"' });
   saveItemTest(db, 8778, { status: 'works', note: null });
-  saveItemTest(db, 2, { status: 'broken', note: 'Zeile 1\nZeile 2' });
-  saveItemTest(db, 301, { status: 'untested', note: 'nur Notiz' });
+  saveItemTest(db, 2, { status: 'broken', note: 'line 1\nline 2' });
+  saveItemTest(db, 301, { status: 'untested', note: 'note only' });
 
   api.items.get(1)!.game_types = ['Pve', 'Wvw'];
   api.items.get(2)!.game_types = ['Dungeon', 'Pve', 'Wvw'];
@@ -99,7 +99,7 @@ before(async () => {
   api.items.set(3, { ...gizmo, id: 3, name: 'Old Gizmo', game_types: ['Dungeon', 'Pve'] }); // back again
   api.items.delete(9);
   api.items.get(2)!.game_types = ['Pve'];
-  api.items.get(5)!.description = 'Noch eine Beschreibung';
+  api.items.get(5)!.description = 'Another description';
   api.items.get(6)!.name = 'Shiny Rock';
   api.items.get(204)!.flags = ['NoSell', 'Tonic'];
   api.items.get(303)!.game_types = ['Dungeon', 'Pve'];
@@ -133,7 +133,7 @@ function staticList(qs: string) {
 }
 
 function checkList(qs: string) {
-  assert.deepEqual(staticList(qs), serverList(qs), `Liste: ${qs}`);
+  assert.deepEqual(staticList(qs), serverList(qs), `List: ${qs}`);
 }
 
 describe('Export: item selection', () => {
@@ -344,7 +344,7 @@ describe('Changes: browser logic against server', () => {
             const params = { ...entries(qs), lang };
             const fromServer = compareUpdates(db, fromUpdate, toUpdate, parseUpdateChangesQuery(params));
             const fromStatic = staticCompare(ds, fromUpdate, toUpdate, parseUpdateChangesQuery(params));
-            assert.deepEqual(fromStatic, fromServer, `Vergleich ${from}→${to} ${lang} ${qs}`);
+            assert.deepEqual(fromStatic, fromServer, `Compare ${from}→${to} ${lang} ${qs}`);
             if (fromStatic.items.length > 0) nonEmpty++;
           }
         }

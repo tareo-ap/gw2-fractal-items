@@ -219,11 +219,11 @@ describe('Test status and updates', () => {
   });
 
   it('PUT test saves and needsRetest applies after game_types change', async () => {
-    const res = await putTest(1, { status: 'works', note: '  klappt in Fraktal 40  ' });
+    const res = await putTest(1, { status: 'works', note: '  works in fractal 40  ' });
     assert.equal(res.status, 200);
     const saved = (await res.json()) as ItemDetail;
     assert.equal(saved.test.status, 'works');
-    assert.equal(saved.test.note, 'klappt in Fraktal 40');
+    assert.equal(saved.test.note, 'works in fractal 40');
     assert.ok(saved.test.testedAt);
     assert.deepEqual(saved.test.gameTypesAtTest, ['Dungeon', 'Pve', 'Wvw']);
     assert.equal(saved.needsRetest, false);
@@ -330,7 +330,7 @@ describe('GET /api/items/export', () => {
   });
 
   it('CSV: BOM, semicolon, header, quoting and formula protection', async () => {
-    await putTest(8778, { status: 'works', note: 'a;b "c"\nzweite Zeile' });
+    await putTest(8778, { status: 'works', note: 'a;b "c"\nsecond line' });
     await putTest(6, { status: 'works', note: '=1+1' });
     const res = await app.request('/api/items/export?format=csv&view=all&candidate=all&testStatus=works&sort=id');
     assert.equal(res.status, 200);
@@ -343,7 +343,7 @@ describe('GET /api/items/export', () => {
     const header = 'id;name;type;subtype;rarity;level;game_types;flags;is_candidate;removed;test_status;test_note;tested_at;needs_retest;chat_link;wiki_url;icon';
     assert.ok(body.startsWith(`${header}\r\n`));
     assert.ok(body.endsWith('\r\n'));
-    assert.ok(body.includes(';"a;b ""c""\nzweite Zeile";'));
+    assert.ok(body.includes(';"a;b ""c""\nsecond line";'));
     assert.ok(body.includes(";'=1+1;"));
     assert.ok(body.includes(';false;false;works;'));
   });
