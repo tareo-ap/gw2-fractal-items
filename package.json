@@ -12,12 +12,13 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "concurrently -n server,web -c blue,green \"npm:dev:server\" \"npm:dev:web\"",
+    "dev": "concurrently --names server,web --prefix-colors blue,green --kill-others-on-fail \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "npm run dev --workspace server",
     "dev:web": "npm run dev --workspace web",
     "build": "npm run build --workspace web && npm run build --workspace server",
     "typecheck": "npm run typecheck --workspace server && npm run typecheck --workspace web",
-    "start": "npm run start --workspace server"
+    "start": "npm run start --workspace server",
+    "test": "npm run test --workspace server"
   },
   "devDependencies": {
     "concurrently": "^10.0.6"

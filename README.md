@@ -25,8 +25,15 @@ Voraussetzung: Node.js 24 oder neuer.
 npm install
 npm run dev        # Server und Web gleichzeitig, danach http://localhost:5173 öffnen
 npm run typecheck
+npm test           # Backend-Tests (gegen einen lokalen Fake der GW2-API)
 npm run build
 ```
+
+Server und Web lassen sich auch getrennt starten: `npm run dev:server` und `npm run dev:web` in zwei Terminals.
+Beim Start schreibt der Server Port und Datenbankpfad ins Log. Ist der Port belegt, sagt er das und beendet sich.
+
+Die Daten kommen über den Button „Aktualisieren“: Der erste Lauf lädt alle Items aus der GW2-API
+(mehrere hundert Requests, gedrosselt auf 5 pro Sekunde), spätere Läufe vergleichen mit dem Cache.
 
 Die Datenbank landet in der Entwicklung unter `data/gw2-items.db` (per `.gitignore` ausgeschlossen).
 

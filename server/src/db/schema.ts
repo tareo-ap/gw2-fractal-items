@@ -66,4 +66,25 @@ export const migrations: string[] = [
   -- Volltextsuche über Name und Beschreibung. Wird beim Import mitgepflegt.
   CREATE VIRTUAL TABLE items_fts USING fts5(name, description, content='items', content_rowid='id');
   `,
+  // 2: Volltextindex per Trigger synchron halten, zusätzliche Indizes für die Filter
+  `
+  -- items_fts ist eine "external content"-Tabelle: Sie speichert nur den Index, die Texte
+  -- liegen in items. Beim Löschen/Ändern muss FTS5 die alten Werte über das spezielle
+  -- 'delete'-Kommando bekommen, sonst bleibt der Index inkonsistent.
+  CREATE TRIGGER items_fts_insert AFTER INSERT ON items BEGIN
+    INSERT INTO items_fts(rowid, name, description) VALUES (new.id, new.name, new.description);
+  END;
+  CREATE TRIGGER items_fts_delete AFTER DELETE ON items BEGIN
+    INSERT INTO items_fts(items_fts, rowid, name, description) VALUES ('delete', old.id, old.name, old.description);
+  END;
+  CREATE TRIGGER items_fts_update AFTER UPDATE OF name, description ON items BEGIN
+    INSERT INTO items_fts(items_fts, rowid, name, description) VALUES ('delete', old.id, old.name, old.description);
+    INSERT INTO items_fts(rowid, name, description) VALUES (new.id, new.name, new.description);
+  END;
+  -- Falls schon Daten ohne Trigger geschrieben wurden: Index einmal neu aufbauen.
+  INSERT INTO items_fts(items_fts) VALUES ('rebuild');
+
+  CREATE INDEX items_chat_link ON items(chat_link);
+  CREATE INDEX item_changes_update ON item_changes(update_id, kind);
+  `,
 ];

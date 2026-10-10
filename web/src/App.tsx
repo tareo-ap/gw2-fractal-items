@@ -1,39 +1,42 @@
-import { useQuery } from '@tanstack/react-query';
-import { api } from './api';
+import { useRef } from 'react';
+import { navigate, useLocation } from './lib/router';
+import { listUrl, parseFilters, DEFAULT_FILTERS, type ListFilters } from './lib/filters';
+import { Header } from './components/Header';
+import { ItemListPage } from './components/ItemListPage';
+import { ItemDetailPage } from './components/ItemDetailPage';
+import type { FilterChange } from './components/FilterBar';
+import { Link } from './components/common';
 
-// Startseite für Meilenstein 1: zeigt nur, dass Frontend, Backend und Datenbank zusammenspielen.
+// Routen: "/" = Liste (Filter in den Query-Parametern), "/items/:id" = Detailansicht.
 export function App() {
-  const stats = useQuery({ queryKey: ['stats'], queryFn: api.stats });
+  const { path, params } = useLocation();
+  const detailMatch = /^\/items\/(\d+)\/?$/.exec(path);
+  const isList = path === '/';
+
+  // Letzte Listen-URL merken, damit "Zurück zur Liste" und die Tabs die Filter behalten.
+  const lastList = useRef<ListFilters>(DEFAULT_FILTERS);
+  if (isList) lastList.current = parseFilters(params);
+  const filters = lastList.current;
+
+  const changeFilters: FilterChange = (change, options = {}) => {
+    // Jede Filteränderung springt auf Seite 1, außer beim Blättern selbst.
+    const next = { ...filters, ...change, page: options.keepPage ? (change.page ?? filters.page) : 1 };
+    navigate(listUrl(next), { replace: options.replace });
+  };
 
   return (
     <div className="app">
-      <header className="app-header">
-        <h1>GW2 Fractal Items</h1>
-      </header>
+      <Header filters={filters} activeView={isList ? filters.view : null} />
       <main className="content">
-        {stats.isPending && <p className="muted">Lade …</p>}
-        {stats.isError && <p className="error">Backend nicht erreichbar: {stats.error.message}</p>}
-        {stats.data && (
-          <div className="stat-grid">
-            <Stat label="Items gesamt" value={stats.data.items} />
-            <Stat label="Gizmo-Kandidaten" value={stats.data.candidates.gizmo} />
-            <Stat label="Consumable-Kandidaten" value={stats.data.candidates.consumable} />
-            <Stat
-              label="Letztes Update"
-              value={stats.data.lastUpdate ? new Date(stats.data.lastUpdate.startedAt).toLocaleString('de-DE') : 'noch keins'}
-            />
+        {isList && <ItemListPage filters={filters} onChange={changeFilters} />}
+        {detailMatch && <ItemDetailPage id={Number(detailMatch[1])} backHref={listUrl(filters)} />}
+        {!isList && !detailMatch && (
+          <div className="empty">
+            <p>Diese Seite gibt es nicht.</p>
+            <Link href="/">Zur Liste</Link>
           </div>
         )}
       </main>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="stat">
-      <div className="stat-value">{typeof value === 'number' ? value.toLocaleString('de-DE') : value}</div>
-      <div className="stat-label">{label}</div>
     </div>
   );
 }
