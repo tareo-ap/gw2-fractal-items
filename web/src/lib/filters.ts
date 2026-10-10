@@ -18,6 +18,7 @@ export interface ListFilters {
   q: string;
   candidate: Candidate;
   hideCommon: boolean;
+  hidePlaceholders: boolean;
   rarity: Rarity[];
   gameType: GameType[];
   testStatus: TestFilter | null;
@@ -33,6 +34,7 @@ export const DEFAULT_FILTERS: ListFilters = {
   q: '',
   candidate: 'yes',
   hideCommon: true,
+  hidePlaceholders: true,
   rarity: [],
   gameType: [],
   testStatus: null,
@@ -66,6 +68,7 @@ export function parseFilters(params: URLSearchParams): ListFilters {
     q: params.get('q') ?? '',
     candidate: oneOf(params.get('candidate'), ['yes', 'no', 'all'] as const) ?? d.candidate,
     hideCommon: params.get('hideCommon') !== 'false',
+    hidePlaceholders: params.get('hidePlaceholders') !== 'false',
     rarity: listOf(params.get('rarity'), RARITIES),
     gameType: listOf(params.get('gameType'), GAME_TYPES),
     testStatus: oneOf(params.get('testStatus'), ['untested', 'works', 'broken', 'retest'] as const) ?? null,
@@ -85,6 +88,7 @@ export function filtersToParams(f: ListFilters): URLSearchParams {
   if (f.q.trim()) p.set('q', f.q.trim());
   if (f.candidate !== d.candidate) p.set('candidate', f.candidate);
   if (!f.hideCommon) p.set('hideCommon', 'false');
+  if (!f.hidePlaceholders) p.set('hidePlaceholders', 'false');
   if (f.rarity.length) p.set('rarity', f.rarity.join(','));
   if (f.gameType.length) p.set('gameType', f.gameType.join(','));
   if (f.testStatus) p.set('testStatus', f.testStatus);
@@ -107,6 +111,7 @@ export function toApiQuery(f: ListFilters): string {
   p.set('view', f.view);
   p.set('candidate', f.candidate);
   p.set('hideCommon', String(f.hideCommon));
+  p.set('hidePlaceholders', String(f.hidePlaceholders));
   p.set('page', String(f.page));
   p.set('pageSize', String(PAGE_SIZE));
   return p.toString();
@@ -121,5 +126,6 @@ export function countExtraFilters(f: ListFilters): number {
   if (f.updateId !== null) n++;
   if (f.includeRemoved) n++;
   if (f.view !== 'gizmo' && !f.hideCommon) n++;
+  if (!f.hidePlaceholders) n++;
   return n;
 }

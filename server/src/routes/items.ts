@@ -80,6 +80,7 @@ export function parseItemListQuery(params: Record<string, string | undefined>): 
     view: oneOf('view', params.view, ['gizmo', 'consumable', 'all'] as const) ?? 'gizmo',
     candidate: oneOf('candidate', params.candidate, ['yes', 'no', 'all'] as const) ?? 'yes',
     hideCommon: bool('hideCommon', params.hideCommon) ?? true,
+    hidePlaceholders: bool('hidePlaceholders', params.hidePlaceholders) ?? true,
     rarity: list('rarity', params.rarity, RARITIES),
     gameType: list('gameType', params.gameType, GAME_TYPES),
     testStatus: oneOf('testStatus', params.testStatus, [...TEST_STATUSES, 'retest'] as const),
@@ -182,6 +183,7 @@ export function listItems(db: DatabaseSync, query: ParsedItemListQuery): ItemLis
   if (query.hideCommon) {
     where.push(`NOT (i.type = 'Consumable' AND i.subtype IS NOT NULL AND i.subtype IN ('Food', 'Utility', 'Unlock', 'Transmutation'))`);
   }
+  if (query.hidePlaceholders) where.push("NOT (trim(i.name) = '' OR i.icon IS NULL)");
   if (query.rarity.length > 0) {
     where.push(`i.rarity IN (${query.rarity.map(() => '?').join(', ')})`);
     params.push(...query.rarity);

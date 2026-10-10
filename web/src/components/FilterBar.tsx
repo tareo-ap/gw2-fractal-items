@@ -111,6 +111,14 @@ export function FilterBar({ filters, onChange }: { filters: ListFilters; onChang
               </label>
             )}
             <label className="check">
+              <input
+                type="checkbox"
+                checked={filters.hidePlaceholders}
+                onChange={(e) => onChange({ hidePlaceholders: e.target.checked })}
+              />
+              Platzhalter ohne Namen oder Icon ausblenden
+            </label>
+            <label className="check">
               <input type="checkbox" checked={filters.includeRemoved} onChange={(e) => onChange({ includeRemoved: e.target.checked })} />
               Entfernte Items anzeigen
             </label>

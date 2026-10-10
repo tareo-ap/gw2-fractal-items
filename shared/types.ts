@@ -61,6 +61,7 @@ export interface ItemListQuery {
   q?: string; // Volltext über Name + Beschreibung; reine Zahl = Item-ID; "[&...]" = Chat-Link
   view?: ItemView; // Default 'gizmo'
   candidate?: 'yes' | 'no' | 'all'; // Default 'yes'
+  hidePlaceholders?: boolean; // Default true; blendet Platzhalter aus (Name leer oder kein Icon), in allen Ansichten
   hideCommon?: boolean; // Default true; blendet Consumables mit subtype Food, Utility, Unlock, Transmutation aus
   rarity?: Rarity[];
   gameType?: GameType[]; // Item muss alle genannten enthalten

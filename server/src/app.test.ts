@@ -92,6 +92,37 @@ describe('GET /api/items', () => {
     await getJson('/api/items?view=foo', 400);
     await getJson('/api/items?rarity=Shiny', 400);
     await getJson('/api/items?page=0', 400);
+    await getJson('/api/items?hidePlaceholders=maybe', 400);
+  });
+});
+
+describe('Platzhalter-Filter', () => {
+  let phApi: FakeGw2Api;
+  let phApp: Hono;
+
+  before(async () => {
+    const base = fixtureItems()[0]!;
+    phApi = await startFakeGw2Api([
+      base,
+      { ...base, id: 101, name: '   ' },
+      { ...base, id: 102, name: 'Ohne Icon', icon: undefined },
+    ]);
+    const { db: phDb, importer: phImporter } = createTestImporter(phApi.url);
+    phApp = createApp(phDb, null, phImporter);
+    await runImport(phImporter);
+  });
+  after(() => phApi.close());
+
+  const phIds = async (query: string) =>
+    ((await (await phApp.request(`/api/items${query}`)).json()) as ItemListResponse).items.map((i) => i.id);
+
+  it('blendet Items mit leerem Namen oder ohne Icon standardmäßig aus', async () => {
+    assert.deepEqual(await phIds('?sort=id'), [1]);
+    assert.deepEqual(await phIds('?view=all&sort=id'), [1]);
+  });
+
+  it('hidePlaceholders=false zeigt sie', async () => {
+    assert.deepEqual(await phIds('?hidePlaceholders=false&sort=id'), [1, 101, 102]);
   });
 });
 
