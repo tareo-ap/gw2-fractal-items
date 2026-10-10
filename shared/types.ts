@@ -61,8 +61,8 @@ export interface ItemListQuery {
   q?: string; // Volltext über Name + Beschreibung; reine Zahl = Item-ID; "[&...]" = Chat-Link
   view?: ItemView; // Default 'gizmo'
   candidate?: 'yes' | 'no' | 'all'; // Default 'yes'
-  hidePlaceholders?: boolean; // Default true; blendet Platzhalter aus (Name leer, kein Icon oder Name wie "((906936))"), in allen Ansichten
-  hideCommon?: boolean; // Default true; blendet Consumables mit subtype Food, Utility, Unlock, Transmutation sowie Mastery Points und Emote Tomes aus
+  hidePlaceholders?: boolean; // Default true; blendet Platzhalter aus (Name leer, kein Icon oder Name wie "((906936))" oder "[[913817]]"), in allen Ansichten
+  hideCommon?: boolean; // Default true; blendet Consumables mit subtype Food, Utility, Unlock, Transmutation, Currency sowie Mastery Points, Emote Tomes und Währungspakete aus
   rarity?: Rarity[];
   gameType?: GameType[]; // Item muss alle genannten enthalten
   testStatus?: TestStatus | 'retest';

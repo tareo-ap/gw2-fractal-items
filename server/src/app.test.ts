@@ -111,6 +111,10 @@ describe('Platzhalter-Filter', () => {
       consumable,
       { ...consumable, id: 104, name: ' Mastery Point' },
       { ...consumable, id: 105, name: '"/Clap" Emote Tome' },
+      { ...base, id: 106, name: '[[913817]]' },
+      { ...consumable, id: 107, name: '300 Geodes', details: { type: 'Immediate' } },
+      { ...consumable, id: 108, name: 'Magnetite Shard', details: { type: 'Currency' } },
+      { ...consumable, id: 109, name: '2nd Place Finisher', details: { type: 'Generic' } },
     ]);
     const { db: phDb, importer: phImporter } = createTestImporter(phApi.url);
     phApp = createApp(phDb, null, phImporter);
@@ -121,18 +125,18 @@ describe('Platzhalter-Filter', () => {
   const phIds = async (query: string) =>
     ((await (await phApp.request(`/api/items${query}`)).json()) as ItemListResponse).items.map((i) => i.id);
 
-  it('blendet Items mit leerem Namen, ohne Icon oder mit ((ID))-Namen standardmäßig aus', async () => {
+  it('blendet Items mit leerem Namen, ohne Icon oder mit ((ID))- oder [[ID]]-Namen standardmäßig aus', async () => {
     assert.deepEqual(await phIds('?sort=id'), [1]);
-    assert.deepEqual(await phIds('?view=all&sort=id'), [1, 8778]);
+    assert.deepEqual(await phIds('?view=all&sort=id'), [1, 109, 8778]);
   });
 
   it('hidePlaceholders=false zeigt sie', async () => {
-    assert.deepEqual(await phIds('?hidePlaceholders=false&sort=id'), [1, 101, 102, 103]);
+    assert.deepEqual(await phIds('?hidePlaceholders=false&sort=id'), [1, 101, 102, 103, 106]);
   });
 
-  it('hideCommon blendet Mastery Points und Emote Tomes aus', async () => {
-    assert.deepEqual(await phIds('?view=consumable&sort=id'), [8778]);
-    assert.deepEqual(await phIds('?view=consumable&hideCommon=false&sort=id'), [104, 105, 8778]);
+  it('hideCommon blendet Mastery Points, Emote Tomes und Währungen aus', async () => {
+    assert.deepEqual(await phIds('?view=consumable&sort=id'), [109, 8778]);
+    assert.deepEqual(await phIds('?view=consumable&hideCommon=false&sort=id'), [104, 105, 107, 108, 109, 8778]);
   });
 });
 
