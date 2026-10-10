@@ -55,8 +55,7 @@ const en = {
   'phase.done': 'Done',
   'phase.failed': 'Failed',
   'update.button': 'Update',
-  'update.tooltip':
-    'Loads all items again from the official GW2 API (/v2/items, English and German names and descriptions) and compares them with the stored state. New, changed and removed items appear in the Changes tab as a new state named <date>_<time UTC>_<game build>. Takes about 15 minutes. Your test results stay; items whose game_types changed are marked "retest".',
+  'update.tooltip': 'Update the local API cache (all GW2 items, English and German)',
   'update.running': 'Updating …',
   'update.alreadyRunning': 'An update is already running.',
   'update.startFailed': 'Could not start the update: {error}',
@@ -263,8 +262,7 @@ const de: Record<Key, string> = {
   'phase.done': 'Fertig',
   'phase.failed': 'Fehlgeschlagen',
   'update.button': 'Aktualisieren',
-  'update.tooltip':
-    'Lädt alle Items erneut aus der offiziellen GW2-API (/v2/items, englische und deutsche Namen und Beschreibungen) und vergleicht sie mit dem gespeicherten Stand. Neue, geänderte und entfernte Items erscheinen im Tab „Änderungen“ als neuer Stand mit dem Namen <Datum>_<Uhrzeit UTC>_<Game-Build>. Dauert etwa 15 Minuten. Deine Testergebnisse bleiben erhalten; Items mit geänderten game_types werden als „neu testen“ markiert.',
+  'update.tooltip': 'Lokalen API-Cache aktualisieren (alle GW2-Items, Englisch und Deutsch)',
   'update.running': 'Aktualisiere …',
   'update.alreadyRunning': 'Ein Update läuft bereits.',
   'update.startFailed': 'Update konnte nicht gestartet werden: {error}',
