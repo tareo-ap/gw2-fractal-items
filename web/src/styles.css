@@ -285,9 +285,12 @@ tr.removed .item-name, li.removed .item-name { text-decoration: line-through; }
 .change-removed { color: var(--error); }
 
 /* ---------- Änderungen eines Updates ---------- */
-.update-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 12px; margin-bottom: 12px; }
+/* Titel über die volle Breite, darunter "Von" und "Bis" nebeneinander (schmal: untereinander). */
+.update-head { display: grid; grid-template-columns: 1fr 1fr; align-items: end; gap: 12px; margin-bottom: 12px; }
+.update-head > :first-child { grid-column: 1 / -1; }
 .update-head h2 { margin-bottom: 4px; }
-.update-head .field-update { flex: 0 1 460px; }
+.update-head .field-update { min-width: 0; }
+@media (max-width: 700px) { .update-head { grid-template-columns: 1fr; } }
 .count-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 12px; }
 .count-tile {
   display: flex; flex-direction: column; gap: 2px; padding: 10px 14px;
