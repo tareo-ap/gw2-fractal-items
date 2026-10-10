@@ -175,7 +175,8 @@ textarea { width: 100%; resize: vertical; }
 .progress-fill.indeterminate { animation: slide 1.2s ease-in-out infinite; }
 @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
 
-.tabs { display: flex; gap: 4px; max-width: var(--content-width); margin: 0 auto; padding: 0 24px; overflow-x: auto; }
+/* Tabs brechen bei wenig Platz in eine zweite Zeile um, statt seitlich zu scrollen. */
+.tabs { display: flex; flex-wrap: wrap; gap: 0 4px; max-width: var(--content-width); margin: 0 auto; padding: 0 24px; }
 .tab {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 8px 14px; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap;
@@ -399,7 +400,9 @@ tr.removed .item-name, li.removed .item-name { text-decoration: line-through; }
 }
 @media (max-width: 640px) {
   .header-top { padding: 10px 16px 6px; }
-  .tabs { padding: 0 8px; }
+  .tabs { padding: 0 8px; gap: 0; }
+  .tab { padding: 8px 10px; gap: 6px; }
+  .segmented { flex-wrap: wrap; }
   .content { padding: 14px 16px 32px; }
   .app-footer { padding: 14px 16px 24px; }
   .header-stats { flex-basis: 100%; order: 3; }
