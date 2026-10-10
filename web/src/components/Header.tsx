@@ -1,20 +1,37 @@
 import { useQuery } from '@tanstack/react-query';
-import type { ItemView } from '../../../shared/types';
+import type { ItemView, Lang } from '../../../shared/types';
 import { api } from '../api';
-import { formatDateTime, formatNumber } from '../lib/format';
+import { useT, type Key } from '../lib/i18n';
 import { listUrl, type ListFilters } from '../lib/filters';
 import { Link } from './common';
 import { UpdateButton } from './UpdateButton';
 
-const TABS: { view: ItemView; label: string }[] = [
-  { view: 'gizmo', label: 'Gizmos' },
-  { view: 'consumable', label: 'Consumables' },
-  { view: 'tonic', label: 'Tonics' },
-  { view: 'all', label: 'Alle' },
+const TABS: { view: ItemView; label: Key }[] = [
+  { view: 'gizmo', label: 'tab.gizmo' },
+  { view: 'consumable', label: 'tab.consumable' },
+  { view: 'tonic', label: 'tab.tonic' },
+  { view: 'all', label: 'tab.all' },
 ];
+
+const LANGS: Lang[] = ['en', 'de'];
+
+/** Umschalter EN | DE. */
+function LangSwitch() {
+  const { lang, setLang, t } = useT();
+  return (
+    <div className="segmented lang-switch" role="group" aria-label={t('lang.aria')}>
+      {LANGS.map((l) => (
+        <button key={l} type="button" className={l === lang ? 'active' : ''} aria-pressed={l === lang} lang={l} onClick={() => setLang(l)}>
+          {l.toUpperCase()}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 /** Kopfzeile mit Tabs, Kennzahlen und Update-Button. activeView ist null auf der Detailseite. */
 export function Header({ filters, activeView, changesActive }: { filters: ListFilters; activeView: ItemView | null; changesActive: boolean }) {
+  const { t, lang, formatDateTime, formatNumber } = useT();
   const stats = useQuery({ queryKey: ['stats'], queryFn: api.stats });
   const s = stats.data;
 
@@ -38,32 +55,33 @@ export function Header({ filters, activeView, changesActive }: { filters: ListFi
           GW2 Fractal Items
         </Link>
         <div className="header-stats small">
-          {stats.isError && <span className="error">Kennzahlen nicht verfügbar</span>}
+          {stats.isError && <span className="error">{t('header.statsUnavailable')}</span>}
           {s && (
             <>
               <span>
                 <strong>{formatNumber(s.items)}</strong> Items
               </span>
-              <span title="Letztes Update">
-                Update: <strong>{s.lastUpdate ? formatDateTime(s.lastUpdate.startedAt) : 'noch keins'}</strong>
+              <span title={t('header.lastUpdate')}>
+                {t('header.updateLabel')} <strong>{s.lastUpdate ? formatDateTime(s.lastUpdate.startedAt) : t('header.noUpdate')}</strong>
               </span>
             </>
           )}
         </div>
-        <a href="/api/export" download className="small" title="Datenbank als Datei herunterladen (Sicherung)">
-          Export
+        <a href="/api/export" download className="small" title={t('header.exportTitle')}>
+          {t('header.export')}
         </a>
         <UpdateButton />
+        <LangSwitch />
       </div>
-      <nav className="tabs" aria-label="Ansicht">
+      <nav className="tabs" aria-label={t('tabs.aria')}>
         {TABS.map((tab) => {
           const count = tabCount(tab.view);
           const href = listUrl({ ...filters, view: tab.view, page: 1 });
           return (
             <Link key={tab.view} href={href} className={tab.view === activeView ? 'tab active' : 'tab'}>
-              {tab.label}
+              {t(tab.label)}
               {count !== null && (
-                <span className="tab-count" title="Fractal-Kandidaten">
+                <span className="tab-count" title={t('tab.candidatesTitle')}>
                   {formatNumber(count)}
                 </span>
               )}
@@ -71,14 +89,16 @@ export function Header({ filters, activeView, changesActive }: { filters: ListFi
           );
         })}
         <Link href="/updates" className={changesActive ? 'tab active' : 'tab'}>
-          Änderungen
+          {t('tab.changes')}
           {changesCount !== null && (
-            <span className="tab-count" title="Einträge im neuesten Update">
+            <span className="tab-count" title={t('tab.changesTitle')}>
               {formatNumber(changesCount)}
             </span>
           )}
         </Link>
       </nav>
+      {/* Deutsche Texte kommen erst mit einem Update, das lang=de lädt. */}
+      {lang === 'de' && s && s.items > 0 && s.germanTexts === 0 && <div className="lang-hint small">{t('header.germanHint')}</div>}
     </header>
   );
 }

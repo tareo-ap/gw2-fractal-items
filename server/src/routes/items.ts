@@ -7,6 +7,7 @@ import type {
   ItemListQuery,
   ItemListResponse,
   ItemTestUpdate,
+  Lang,
   Rarity,
   TestStatus,
 } from '../../../shared/types.js';
@@ -35,17 +36,37 @@ export const PLACEHOLDER_SQL = `(trim(i.name) = '' OR i.icon IS NULL OR i.name G
 
 const RARITY_RANK_SQL = `CASE i.rarity ${RARITIES.map((r, idx) => `WHEN '${r}' THEN ${idx}`).join(' ')} ELSE 99 END`;
 
-const SORT_SQL: Record<(typeof SORTS)[number], string> = {
-  name: 'i.name COLLATE NOCASE',
+// Sprache: Bei 'de' kommen Name und Beschreibung aus item_texts (Alias d, per LEFT JOIN), sonst aus items.
+// Fehlt der deutsche Text, gilt der englische. Platzhalter-/Tonic-Prüfungen bleiben beim englischen Namen.
+const LANGS: readonly Lang[] = ['en', 'de'];
+
+/** Liest den Parameter lang (Default en). Wirft ValidationError. */
+export function parseLang(value: string | undefined): Lang {
+  return oneOf('lang', value, LANGS) ?? 'en';
+}
+
+/** JOIN auf die Texte der Sprache; leer bei Englisch. Erwartet den Alias i. */
+export const textsJoin = (lang: Lang) => (lang === 'de' ? `LEFT JOIN item_texts d ON d.item_id = i.id AND d.lang = 'de'` : '');
+export const nameSql = (lang: Lang) => (lang === 'de' ? `COALESCE(NULLIF(d.name, ''), i.name)` : 'i.name');
+const descriptionSql = (lang: Lang) => (lang === 'de' ? `CASE WHEN d.item_id IS NOT NULL THEN d.description ELSE i.description END` : 'i.description');
+
+export const wikiUrl = (lang: Lang, name: string) =>
+  lang === 'de'
+    ? `https://wiki-de.guildwars2.com/wiki/Spezial:Suche/${encodeURIComponent(name)}`
+    : `https://wiki.guildwars2.com/wiki/Special:Search/${encodeURIComponent(name)}`;
+
+const sortSql = (lang: Lang): Record<(typeof SORTS)[number], string> => ({
+  name: `${nameSql(lang)} COLLATE NOCASE`,
   id: 'i.id',
   rarity: RARITY_RANK_SQL,
   level: 'i.level',
   lastChanged: 'i.last_changed_update',
-};
+});
 
 interface ItemRow {
   id: number;
   name: string;
+  name_en: string;
   type: string;
   subtype: string | null;
   rarity: string;
@@ -68,10 +89,10 @@ interface ItemDetailRow extends ItemRow {
   game_types_at_test: string | null;
 }
 
-const SELECT_ITEM_SQL = `
-  SELECT i.id, i.name, i.type, i.subtype, i.rarity, i.level, i.icon, i.game_types, i.is_candidate, i.removed,
+const selectItemSql = (lang: Lang) => `
+  SELECT i.id, ${nameSql(lang)} AS name, i.name AS name_en, i.type, i.subtype, i.rarity, i.level, i.icon, i.game_types, i.is_candidate, i.removed,
          t.status AS test_status, ${NEEDS_RETEST_SQL} AS needs_retest
-  FROM items i LEFT JOIN item_tests t ON t.item_id = i.id`;
+  FROM items i ${textsJoin(lang)} LEFT JOIN item_tests t ON t.item_id = i.id`;
 
 // ---------------------------------------------------------------------------
 // Query-Parameter einlesen
@@ -86,6 +107,7 @@ export function parseItemListQuery(params: Record<string, string | undefined>): 
   const q = params.q?.trim();
   return {
     q: q ? q : undefined,
+    lang: parseLang(params.lang),
     view: oneOf('view', params.view, ['gizmo', 'consumable', 'tonic', 'all'] as const) ?? 'gizmo',
     candidate: oneOf('candidate', params.candidate, ['yes', 'no', 'all'] as const) ?? 'yes',
     hideCommon: bool('hideCommon', params.hideCommon) ?? true,
@@ -181,8 +203,14 @@ function buildWhere(query: ParsedItemListQuery): { whereSql: string; params: SQL
     } else {
       const fts = toFtsQuery(query.q);
       if (fts) {
-        where.push('i.id IN (SELECT rowid FROM items_fts WHERE items_fts MATCH ?)');
-        params.push(fts);
+        if (query.lang === 'de') {
+          // Deutsch: Treffer im deutschen oder im englischen Index genügt (Eigennamen, Chat-Begriffe).
+          where.push('(i.id IN (SELECT rowid FROM items_fts_de WHERE items_fts_de MATCH ?) OR i.id IN (SELECT rowid FROM items_fts WHERE items_fts MATCH ?))');
+          params.push(fts, fts);
+        } else {
+          where.push('i.id IN (SELECT rowid FROM items_fts WHERE items_fts MATCH ?)');
+          params.push(fts);
+        }
       }
     }
   }
@@ -237,8 +265,8 @@ export function listItems(db: DatabaseSync, query: ParsedItemListQuery): ItemLis
   const direction = query.order === 'desc' ? 'DESC' : 'ASC';
   const rows = db
     .prepare(
-      `${SELECT_ITEM_SQL} ${whereSql}
-       ORDER BY ${SORT_SQL[query.sort]} ${direction}, i.id ${direction}
+      `${selectItemSql(query.lang)} ${whereSql}
+       ORDER BY ${sortSql(query.lang)[query.sort]} ${direction}, i.id ${direction}
        LIMIT ? OFFSET ?`,
     )
     .all(...params, query.pageSize, (query.page - 1) * query.pageSize) as unknown as ItemRow[];
@@ -278,11 +306,11 @@ export function exportItems(db: DatabaseSync, query: ParsedItemListQuery): Expor
   const direction = query.order === 'desc' ? 'DESC' : 'ASC';
   const rows = db
     .prepare(
-      `SELECT i.id, i.name, i.type, i.subtype, i.rarity, i.level, i.icon, i.game_types, i.flags, i.chat_link,
+      `SELECT i.id, ${nameSql(query.lang)} AS name, i.name AS name_en, i.type, i.subtype, i.rarity, i.level, i.icon, i.game_types, i.flags, i.chat_link,
               i.is_candidate, i.removed, t.status AS test_status, t.note AS test_note, t.tested_at,
               ${NEEDS_RETEST_SQL} AS needs_retest
-       FROM items i LEFT JOIN item_tests t ON t.item_id = i.id ${whereSql}
-       ORDER BY ${SORT_SQL[query.sort]} ${direction}, i.id ${direction}`,
+       FROM items i ${textsJoin(query.lang)} LEFT JOIN item_tests t ON t.item_id = i.id ${whereSql}
+       ORDER BY ${sortSql(query.lang)[query.sort]} ${direction}, i.id ${direction}`,
     )
     .all(...params) as unknown as (ItemRow & {
     flags: string;
@@ -306,7 +334,7 @@ export function exportItems(db: DatabaseSync, query: ParsedItemListQuery): Expor
     tested_at: row.tested_at,
     needs_retest: row.needs_retest === 1,
     chat_link: row.chat_link,
-    wiki_url: `https://wiki.guildwars2.com/wiki/Special:Search/${encodeURIComponent(row.name)}`,
+    wiki_url: wikiUrl(query.lang, row.name),
     icon: row.icon,
   }));
 }
@@ -325,14 +353,14 @@ export function toCsv(rows: ExportRow[]): string {
   return `﻿${lines.join('\r\n')}\r\n`;
 }
 
-export function getItemDetail(db: DatabaseSync, id: number): ItemDetail | null {
+export function getItemDetail(db: DatabaseSync, id: number, lang: Lang = 'en'): ItemDetail | null {
   const row = db
     .prepare(
-      `SELECT i.id, i.name, i.type, i.subtype, i.rarity, i.level, i.icon, i.game_types, i.is_candidate, i.removed,
-              i.description, i.chat_link, i.flags, i.raw_json,
+      `SELECT i.id, ${nameSql(lang)} AS name, i.name AS name_en, i.type, i.subtype, i.rarity, i.level, i.icon, i.game_types, i.is_candidate, i.removed,
+              ${descriptionSql(lang)} AS description, i.chat_link, i.flags, i.raw_json,
               t.status AS test_status, t.note AS test_note, t.tested_at, t.game_types_at_test,
               ${NEEDS_RETEST_SQL} AS needs_retest
-       FROM items i LEFT JOIN item_tests t ON t.item_id = i.id
+       FROM items i ${textsJoin(lang)} LEFT JOIN item_tests t ON t.item_id = i.id
        WHERE i.id = ?`,
     )
     .get(id) as ItemDetailRow | undefined;
@@ -363,7 +391,7 @@ export function getItemDetail(db: DatabaseSync, id: number): ItemDetail | null {
     restrictions: Array.isArray(raw.restrictions) ? (raw.restrictions as string[]) : [],
     vendorValue: typeof raw.vendor_value === 'number' ? raw.vendor_value : 0,
     details: isObject(raw.details) ? raw.details : null,
-    wikiUrl: `https://wiki.guildwars2.com/wiki/Special:Search/${encodeURIComponent(row.name)}`,
+    wikiUrl: wikiUrl(lang, row.name),
     test: {
       status: (row.test_status as TestStatus | null) ?? 'untested',
       note: row.test_note,
@@ -413,6 +441,7 @@ function toListItem(row: ItemRow): ItemListItem {
   return {
     id: row.id,
     name: row.name,
+    nameEn: row.name_en,
     type: row.type,
     subtype: row.subtype,
     rarity: row.rarity as Rarity,

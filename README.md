@@ -35,6 +35,11 @@ Beim Start schreibt der Server Port und Datenbankpfad ins Log. Ist der Port bele
 Die Daten kommen über den Button „Aktualisieren“: Der erste Lauf lädt alle Items aus der GW2-API
 (mehrere hundert Requests, gedrosselt auf 5 pro Sekunde), spätere Läufe vergleichen mit dem Cache.
 
+Die Oberfläche gibt es auf Englisch (Standard) und Deutsch; der Umschalter „EN | DE“ sitzt oben rechts, die Wahl merkt sich der Browser.
+In der deutschen Ansicht erscheinen auch Item-Namen und Beschreibungen auf Deutsch (mit Fallback auf Englisch) und die Suche findet deutsche und englische Begriffe.
+Dafür lädt jedes Update zusätzlich die deutschen Texte, es dauert deshalb etwa doppelt so lange (ca. 14 statt 7 Minuten). Die deutschen Texte erscheinen erst nach dem ersten Update mit dieser Version.
+Scheitert nur der deutsche Teil, bleibt das Update gültig; der nächste Lauf holt die Texte nach.
+
 Die aktuell gefilterte Liste (alle Treffer, mit Kandidaten und Testergebnissen) lässt sich über die Links „CSV“ und „JSON“ neben der Trefferanzahl herunterladen; die CSV ist für deutsches Excel gedacht (Semikolon, UTF-8 mit BOM).
 
 Die Datenbank landet in der Entwicklung unter `data/gw2-items.db` (per `.gitignore` ausgeschlossen).

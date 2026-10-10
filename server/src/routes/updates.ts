@@ -2,6 +2,7 @@ import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import type {
   ChangeKind,
   GameType,
+  Lang,
   Rarity,
   UpdateChangeCounts,
   UpdateChangeEntry,
@@ -12,7 +13,7 @@ import type {
   UpdateSummary,
 } from '../../../shared/types.js';
 import { stableStringify } from '../importer/diff.js';
-import { bool, int, list, oneOf, PLACEHOLDER_SQL, TONIC_SQL } from './items.js';
+import { bool, int, list, nameSql, oneOf, parseLang, PLACEHOLDER_SQL, textsJoin, TONIC_SQL } from './items.js';
 
 export interface UpdateRow {
   id: number;
@@ -81,6 +82,7 @@ const CHANGE_KINDS: readonly ChangeKind[] = ['added', 'changed', 'removed'];
 export function parseUpdateChangesQuery(params: Record<string, string | undefined>): ParsedUpdateChangesQuery {
   const q = params.q?.trim();
   return {
+    lang: parseLang(params.lang),
     kind: list('kind', params.kind, CHANGE_KINDS),
     focus: oneOf('focus', params.focus, ['all', 'gameTypes', 'dungeonGained', 'dungeonLost'] as const) ?? 'all',
     type: oneOf('type', params.type, ['gizmo', 'consumable', 'tonic', 'all'] as const) ?? 'all',
@@ -101,6 +103,7 @@ interface ChangeRow {
   values_after: string | null;
   raw_json: string;
   name: string;
+  name_en: string;
   type: string;
   subtype: string | null;
   rarity: string;
@@ -109,7 +112,7 @@ interface ChangeRow {
   is_candidate: number;
 }
 
-const FROM_CHANGES_SQL = 'FROM item_changes c JOIN items i ON i.id = c.item_id';
+const fromChangesSql = (lang: Lang) => `FROM item_changes c JOIN items i ON i.id = c.item_id ${textsJoin(lang)}`;
 
 /** Bedingungen auf den Items (Typ, Platzhalter, Suche); gemeinsam für /changes und /compare. Alias i. */
 function itemFilter(query: ParsedUpdateChangesQuery): { conditions: string[]; params: SQLInputValue[] } {
@@ -122,12 +125,15 @@ function itemFilter(query: ParsedUpdateChangesQuery): { conditions: string[]; pa
   if (query.q) {
     // %, _ und \ sind in LIKE Sonderzeichen und werden mit \ maskiert. Eine reine Zahl findet zusätzlich die ID.
     const pattern = `%${query.q.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+    // Deutsch: Treffer im deutschen oder im englischen Namen genügt.
+    const nameLike = query.lang === 'de' ? `(i.name LIKE ? ESCAPE '\\' OR d.name LIKE ? ESCAPE '\\')` : `i.name LIKE ? ESCAPE '\\'`;
+    const patterns = query.lang === 'de' ? [pattern, pattern] : [pattern];
     if (/^\d+$/.test(query.q)) {
-      conditions.push(`(i.name LIKE ? ESCAPE '\\' OR i.id = ?)`);
-      params.push(pattern, Number(query.q));
+      conditions.push(`(${nameLike} OR i.id = ?)`);
+      params.push(...patterns, Number(query.q));
     } else {
-      conditions.push(`i.name LIKE ? ESCAPE '\\'`);
-      params.push(pattern);
+      conditions.push(nameLike);
+      params.push(...patterns);
     }
   }
   return { conditions, params };
@@ -149,18 +155,18 @@ export function getUpdateChanges(db: DatabaseSync, update: UpdateDetail, query: 
   params.push(...filter.params);
 
   const whereSql = `WHERE ${where.join(' AND ')}`;
-  const { total } = db.prepare(`SELECT COUNT(*) AS total ${FROM_CHANGES_SQL} ${whereSql}`).get(...params) as { total: number };
+  const { total } = db.prepare(`SELECT COUNT(*) AS total ${fromChangesSql(query.lang)} ${whereSql}`).get(...params) as { total: number };
 
   // Dungeon-Änderungen zuerst, dann geändert, neu, entfernt, dann nach Name.
   const rows = db
     .prepare(
       `SELECT c.item_id, c.kind, c.changed_fields, c.game_types_before, c.game_types_after,
               c.values_before, c.values_after, i.raw_json,
-              i.name, i.type, i.subtype, i.rarity, i.icon, i.removed, i.is_candidate
-       ${FROM_CHANGES_SQL} ${whereSql}
+              ${nameSql(query.lang)} AS name, i.name AS name_en, i.type, i.subtype, i.rarity, i.icon, i.removed, i.is_candidate
+       ${fromChangesSql(query.lang)} ${whereSql}
        ORDER BY CASE WHEN (${DUNGEON_GAINED_SQL}) OR (${DUNGEON_LOST_SQL}) THEN 0 ELSE 1 END,
                 CASE c.kind WHEN 'changed' THEN 0 WHEN 'added' THEN 1 ELSE 2 END,
-                i.name COLLATE NOCASE, i.id
+                ${nameSql(query.lang)} COLLATE NOCASE, i.id
        LIMIT ? OFFSET ?`,
     )
     .all(...params, query.pageSize, (query.page - 1) * query.pageSize) as unknown as ChangeRow[];
@@ -170,6 +176,7 @@ export function getUpdateChanges(db: DatabaseSync, update: UpdateDetail, query: 
   const items: UpdateChangeEntry[] = rows.map((row) => ({
     id: row.item_id,
     name: row.name,
+    nameEn: row.name_en,
     type: row.type,
     subtype: row.subtype,
     rarity: row.rarity as Rarity,
@@ -205,6 +212,7 @@ interface RangeRow {
   values_before: string | null;
   values_after: string | null;
   name: string;
+  name_en: string;
   matches: number;
 }
 
@@ -212,6 +220,7 @@ interface RangeRow {
 interface NetChange {
   itemId: number;
   name: string;
+  nameEn: string;
   matches: boolean;
   kind: ChangeKind;
   gameTypesBefore: string | null; // JSON-Array
@@ -241,6 +250,7 @@ function aggregate(rows: RangeRow[]): NetChange | null {
   const net: NetChange = {
     itemId: first.item_id,
     name: first.name,
+    nameEn: first.name_en,
     matches: first.matches === 1,
     kind,
     gameTypesBefore: kind === 'added' ? null : first.game_types_before,
@@ -289,8 +299,8 @@ export function compareUpdates(db: DatabaseSync, from: UpdateDetail, to: UpdateD
   const rows = db
     .prepare(
       `SELECT c.update_id, c.item_id, c.kind, c.changed_fields, c.game_types_before, c.game_types_after,
-              c.values_before, c.values_after, i.name, (${filter.conditions.join(' AND ') || '1'}) AS matches
-       ${FROM_CHANGES_SQL}
+              c.values_before, c.values_after, ${nameSql(query.lang)} AS name, i.name AS name_en, (${filter.conditions.join(' AND ') || '1'}) AS matches
+       ${fromChangesSql(query.lang)}
        WHERE c.update_id > ? AND c.update_id <= ?
        ORDER BY c.item_id, c.update_id`,
     )
@@ -348,6 +358,7 @@ export function compareUpdates(db: DatabaseSync, from: UpdateDetail, to: UpdateD
     return {
       id: n.itemId,
       name: n.name,
+      nameEn: n.nameEn,
       type: row.type,
       subtype: row.subtype,
       rarity: row.rarity as Rarity,

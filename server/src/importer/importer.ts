@@ -14,6 +14,9 @@ export class ImportAlreadyRunningError extends Error {
   }
 }
 
+/** Hinweis an Update und Status, wenn der deutsche Teil nicht vollständig geladen werden konnte. */
+const GERMAN_INCOMPLETE = 'Deutsche Texte nicht vollständig geladen';
+
 const idleStatus = (): ImportStatus => ({
   running: false,
   updateId: null,
@@ -35,8 +38,9 @@ export function failOrphanedUpdates(db: DatabaseSync): void {
 /**
  * Import/Update aller Items als Hintergrundjob im selben Prozess. Es läuft immer nur einer.
  *
- * Ablauf: IDs laden → alle Details laden (nur im Speicher) → mit der DB vergleichen und schreiben.
+ * Ablauf: IDs laden → alle Details laden (nur im Speicher) → deutsche Texte laden → mit der DB vergleichen und schreiben.
  * Erst wenn alle Details da sind, wird geschrieben. Bricht der Download ab, bleibt die DB unverändert.
+ * Ausnahme: Scheitert nur der deutsche Teil, gilt das Update trotzdem (siehe run).
  */
 export class Importer {
   private status: ImportStatus = idleStatus();
@@ -88,16 +92,42 @@ export class Importer {
       this.status.processed += chunk.length;
     }
 
-    // Phase 3: Vergleich mit der DB und Schreiben
+    // Phase 3: deutsche Texte (nur Name und Beschreibung) in denselben Blöcken, nur für Items mit englischen Details.
+    // Scheitert dieser Teil (nach den Retries des Clients), wäre es schade um den fertigen englischen Download:
+    // Das Update wird trotzdem geschrieben und als 'done' markiert, die bis dahin geladenen deutschen Texte
+    // werden behalten. Der Hinweis steht in updates.error bzw. ImportStatus.error; das nächste Update holt alles nach.
+    this.status.phase = 'details_de';
+    this.status.processed = 0;
+    this.status.total = items.size;
+    const texts = new Map<number, ItemText>();
+    let germanError: string | null = null;
+    const loadedIds = [...items.keys()];
+    try {
+      for (let i = 0; i < loadedIds.length; i += IDS_PER_REQUEST) {
+        const chunk = loadedIds.slice(i, i + IDS_PER_REQUEST);
+        for (const item of await this.client.getItems(chunk, 'de')) texts.set(item.id, toText(item));
+        this.status.processed += chunk.length;
+      }
+    } catch (err) {
+      console.error(`Import ${updateId}: deutsche Texte nicht vollständig geladen:`, err);
+      germanError = GERMAN_INCOMPLETE;
+    }
+
+    this.status.total = ids.length; // Zähler der Details-Phase wiederherstellen
+    this.status.processed = ids.length;
+
+    // Phase 4: Vergleich mit der DB und Schreiben (Hash und Diff nur über den englischen Stand)
     this.status.phase = 'diff';
     const counts = writeItems(this.db, updateId, [...items.values()], new Set(ids));
+    writeTexts(this.db, 'de', texts);
 
     this.db
       .prepare(
-        `UPDATE updates SET status = 'done', finished_at = ?, added = ?, changed = ?, removed = ? WHERE id = ?`,
+        `UPDATE updates SET status = 'done', finished_at = ?, added = ?, changed = ?, removed = ?, error = ? WHERE id = ?`,
       )
-      .run(new Date().toISOString(), counts.added, counts.changed, counts.removed, updateId);
+      .run(new Date().toISOString(), counts.added, counts.changed, counts.removed, germanError, updateId);
     this.status.phase = 'done';
+    this.status.error = germanError;
     this.status.running = false;
   }
 
@@ -211,6 +241,46 @@ export function writeItems(db: DatabaseSync, updateId: number, items: Gw2Item[],
   });
 
   return counts;
+}
+
+export interface ItemText {
+  name: string;
+  description: string | null;
+}
+
+function toText(item: Gw2Item): ItemText {
+  return {
+    name: typeof item.name === 'string' ? item.name : '',
+    description: typeof item.description === 'string' && item.description !== '' ? item.description : null,
+  };
+}
+
+/**
+ * Speichert übersetzte Texte in item_texts und im Volltextindex der Sprache (derzeit nur 'de').
+ * Unveränderte Texte werden übersprungen. Entfernte Items behalten ihre Texte (es wird nie gelöscht).
+ * Kein Teil des Vergleichs: erzeugt weder Hash-Änderungen noch item_changes.
+ */
+export function writeTexts(db: DatabaseSync, lang: 'de', texts: Map<number, ItemText>): void {
+  const select = db.prepare('SELECT name, description FROM item_texts WHERE item_id = ? AND lang = ?');
+  const upsert = db.prepare(`
+    INSERT INTO item_texts (item_id, lang, name, description) VALUES (?, ?, ?, ?)
+    ON CONFLICT(item_id, lang) DO UPDATE SET name = excluded.name, description = excluded.description`);
+  // items_fts_de hat eigenen Inhalt: alten Eintrag über die rowid löschen, neuen einfügen.
+  const deleteFts = db.prepare('DELETE FROM items_fts_de WHERE rowid = ?');
+  const insertFts = db.prepare('INSERT INTO items_fts_de (rowid, name, description) VALUES (?, ?, ?)');
+
+  const entries = [...texts];
+  for (let i = 0; i < entries.length; i += WRITE_BLOCK_SIZE) {
+    transaction(db, () => {
+      for (const [id, text] of entries.slice(i, i + WRITE_BLOCK_SIZE)) {
+        const old = select.get(id, lang) as { name: string; description: string | null } | undefined;
+        if (old && old.name === text.name && old.description === text.description) continue;
+        upsert.run(id, lang, text.name, text.description);
+        deleteFts.run(id);
+        insertFts.run(id, text.name, text.description);
+      }
+    });
+  }
 }
 
 /** Abgeleitete Spalten für die Tabelle items. */

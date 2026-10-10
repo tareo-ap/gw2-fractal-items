@@ -23,6 +23,7 @@ import {
   listItems,
   oneOf,
   parseItemListQuery,
+  parseLang,
   parseItemTestUpdate,
   saveItemTest,
   toCsv,
@@ -49,6 +50,7 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
         consumable: count(`SELECT COUNT(*) AS n FROM items WHERE removed = 0 AND is_candidate = 1 AND type = 'Consumable'`),
         tonic: count(`SELECT COUNT(*) AS n FROM items i WHERE i.removed = 0 AND i.is_candidate = 1 AND ${TONIC_SQL}`),
       },
+      germanTexts: count(`SELECT COUNT(*) AS n FROM item_texts WHERE lang = 'de'`),
       lastUpdate: last ? toUpdateSummary(last) : null,
     });
   });
@@ -71,17 +73,18 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
   });
 
   app.get('/api/items/:id', (c) => {
-    const item = getItemDetail(db, parseId(c.req.param('id')));
+    const item = getItemDetail(db, parseId(c.req.param('id')), parseLang(c.req.query('lang')));
     return item ? c.json<ItemDetail>(item) : c.json({ error: 'Item nicht gefunden' }, 404);
   });
 
   app.put('/api/items/:id/test', async (c) => {
     const id = parseId(c.req.param('id'));
+    const lang = parseLang(c.req.query('lang'));
     const body: unknown = await c.req.json().catch(() => {
       throw new ValidationError('Body ist kein gültiges JSON');
     });
     if (!saveItemTest(db, id, parseItemTestUpdate(body))) return c.json({ error: 'Item nicht gefunden' }, 404);
-    return c.json<ItemDetail>(getItemDetail(db, id)!);
+    return c.json<ItemDetail>(getItemDetail(db, id, lang)!);
   });
 
   // --- Updates -------------------------------------------------------------

@@ -3,29 +3,20 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type { ChangeFocus, ChangeKind, ItemView, UpdateChangeEntry, UpdateCompareResponse, UpdateDetail } from '../../../shared/types';
 import { api, ApiError } from '../api';
 import { CHANGE_KINDS, changesUrl, compareUrl, parseChangesFilters, toChangesApiQuery, type ChangesFilters } from '../lib/changes';
-import { CHANGE_LABELS, describeUpdate, formatDateTime, formatNumber, rarityClass } from '../lib/format';
+import { describeUpdate, rarityClass } from '../lib/format';
+import { errorText, useT, type TFunction } from '../lib/i18n';
 import { PAGE_SIZE } from '../lib/filters';
 import { navigate } from '../lib/router';
 import { ErrorBox, GameTypeBadges, GameTypeDiff, ItemIcon, Link, Loading } from './common';
 import { Gw2Text } from './Gw2Text';
 import { Pagination } from './ItemListPage';
 
-const FOCUS_LABELS: Record<ChangeFocus, string> = {
-  all: 'Alle',
-  gameTypes: 'game_types geändert',
-  dungeonGained: 'Dungeon dazu',
-  dungeonLost: 'Dungeon weg',
-};
-
-const TYPE_LABELS: [ItemView, string][] = [
-  ['gizmo', 'Gizmo'],
-  ['consumable', 'Consumable'],
-  ['tonic', 'Tonics'],
-  ['all', 'Alle'],
-];
+const FOCUSES: ChangeFocus[] = ['all', 'gameTypes', 'dungeonGained', 'dungeonLost'];
+const TYPES: ItemView[] = ['gizmo', 'consumable', 'tonic', 'all'];
 
 /** "/updates": springt auf das neueste abgeschlossene Update. */
 export function UpdatesRedirect() {
+  const { t } = useT();
   const updates = useQuery({ queryKey: ['updates'], queryFn: api.updates });
   const latest = updates.data?.find((u) => u.status === undefined || u.status === 'done');
 
@@ -34,12 +25,12 @@ export function UpdatesRedirect() {
   }, [latest]);
 
   if (updates.isError) {
-    return <ErrorBox message={`Updates konnten nicht geladen werden: ${updates.error.message}`} onRetry={() => void updates.refetch()} />;
+    return <ErrorBox message={t('changes.updatesError', { error: errorText(updates.error, t) })} onRetry={() => void updates.refetch()} />;
   }
-  if (updates.isPending || latest) return <Loading text="Lade Updates …" />;
+  if (updates.isPending || latest) return <Loading text={t('changes.loadingUpdates')} />;
   return (
     <div className="empty">
-      <p>Noch kein Update. Mit „Aktualisieren“ oben rechts die Items laden.</p>
+      <p>{t('changes.noUpdate')}</p>
     </div>
   );
 }
@@ -50,13 +41,14 @@ function same<T>(a: T[], b: T[]): boolean {
 
 /** "/updates/compare?from=A&to=B": liest die beiden Update-IDs aus der URL. */
 export function CompareRoute({ params }: { params: URLSearchParams }) {
+  const { t } = useT();
   const from = Number(params.get('from'));
   const to = Number(params.get('to'));
   if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || from >= to) {
     return (
       <div className="empty">
-        <p>Ungültiger Vergleich: from muss kleiner als to sein.</p>
-        <Link href="/updates">Zum neuesten Update</Link>
+        <p>{t('changes.invalidCompare')}</p>
+        <Link href="/updates">{t('changes.toLatest')}</Link>
       </div>
     );
   }
@@ -73,13 +65,15 @@ const isDone = (u: { status?: string }) => u.status === undefined || u.status ==
  * (/updates/compare). Zähler als Filter-Kacheln, Filterleiste und Liste.
  */
 export function UpdateChangesPage({ source, params }: { source: Source; params: URLSearchParams }) {
+  const i18n = useT();
+  const { t, lang, formatNumber, formatDateTime } = i18n;
   const filters = parseChangesFilters(params);
   const query = toChangesApiQuery(filters);
   const changes = useQuery({
-    queryKey: ['updateChanges', source, query],
+    queryKey: ['updateChanges', source, lang, query],
     queryFn: async (): Promise<Page> => {
-      if ('from' in source) return api.compareUpdates(source.from, source.to, query);
-      const { update, ...rest } = await api.updateChanges(source.id, query);
+      if ('from' in source) return api.compareUpdates(source.from, source.to, query, lang);
+      const { update, ...rest } = await api.updateChanges(source.id, query, lang);
       return { ...rest, from: null, to: update };
     },
     placeholderData: keepPreviousData, // alte Seite stehen lassen, bis die neue da ist
@@ -100,14 +94,14 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
     const notFound = changes.error instanceof ApiError && changes.error.status === 404;
     return notFound ? (
       <div className="empty">
-        <p>Dieses Update gibt es nicht oder der Vergleich ist ungültig.</p>
-        <Link href="/updates">Zum neuesten Update</Link>
+        <p>{t('changes.notFound')}</p>
+        <Link href="/updates">{t('changes.toLatest')}</Link>
       </div>
     ) : (
-      <ErrorBox message={`Änderungen konnten nicht geladen werden: ${changes.error.message}`} onRetry={() => void changes.refetch()} />
+      <ErrorBox message={t('changes.loadError', { error: errorText(changes.error, t) })} onRetry={() => void changes.refetch()} />
     );
   }
-  if (!changes.data) return <Loading text="Lade Änderungen …" />;
+  if (!changes.data) return <Loading text={t('changes.loading')} />;
 
   const data = changes.data;
   const { to: update, counts } = data;
@@ -117,14 +111,14 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
   const doneUpdates = (updates.data ?? []).filter(isDone);
 
   const kindTile = (kind: ChangeKind, count: number, className: string) => ({
-    label: CHANGE_LABELS[kind],
+    label: t(`change.${kind}`),
     count,
     patch: { kind: [kind], focus: 'all' } as Partial<ChangesFilters>,
     active: same(filters.kind, [kind]) && filters.focus === 'all',
     className,
   });
   const focusTile = (focus: ChangeFocus, count: number, className = '') => ({
-    label: FOCUS_LABELS[focus],
+    label: t(`focus.${focus}`),
     count,
     patch: { kind: [], focus } as Partial<ChangesFilters>,
     active: filters.focus === focus,
@@ -147,14 +141,14 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
     <>
       <div className="panel update-head">
         <div>
-          <h2>{'from' in source ? `Vergleich: Stand nach Update #${source.from} mit Stand nach Update #${update.id}` : `Änderungen im Update #${update.id}`}</h2>
+          <h2>{'from' in source ? t('changes.titleCompare', { from: source.from, to: update.id }) : t('changes.titleUpdate', { id: update.id })}</h2>
           <div className="small muted">
-            {formatDateTime(update.startedAt)} · Build {update.buildId ?? 'unbekannt'} ·{' '}
-            {update.status === 'done' ? 'abgeschlossen' : update.status === 'running' ? 'läuft noch' : 'fehlgeschlagen'}
+            {formatDateTime(update.startedAt)} · {t('changes.build', { build: update.buildId ?? t('changes.unknownBuild') })} ·{' '}
+            {update.status === 'done' ? t('changes.statusDone') : update.status === 'running' ? t('changes.statusRunning') : t('changes.statusFailed')}
           </div>
         </div>
         <label className="field field-update">
-          <span className="field-label">Von (Stand nach)</span>
+          <span className="field-label">{t('changes.from')}</span>
           <select
             value={fromId ?? ''}
             disabled={fromId === undefined}
@@ -163,13 +157,13 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
             {fromId === undefined && <option value="">–</option>}
             {doneUpdates.filter((u) => u.id < toId).map((u) => (
               <option key={u.id} value={u.id}>
-                {describeUpdate(u)}
+                {describeUpdate(u, i18n)}
               </option>
             ))}
           </select>
         </label>
         <label className="field field-update">
-          <span className="field-label">Bis (Stand nach)</span>
+          <span className="field-label">{t('changes.to')}</span>
           <select
             value={toId}
             disabled={fromId === undefined}
@@ -177,23 +171,25 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
           >
             {doneUpdates.filter((u) => u.id > (fromId ?? 0) || u.id === toId).map((u) => (
               <option key={u.id} value={u.id}>
-                {describeUpdate(u)}
+                {describeUpdate(u, i18n)}
               </option>
             ))}
-            {!doneUpdates.some((u) => u.id === toId) && <option value={toId}>Update #{toId}</option>}
+            {!doneUpdates.some((u) => u.id === toId) && <option value={toId}>{t('filter.updateN', { id: toId })}</option>}
           </select>
         </label>
       </div>
 
-      {update.status === 'failed' && <div className="warning">Dieses Update ist fehlgeschlagen{update.error ? `: ${update.error}` : ''}.</div>}
+      {update.status === 'failed' && (
+        <div className="warning">{update.error ? t('changes.failedWithError', { error: update.error }) : t('changes.failed')}</div>
+      )}
       {data.legacyValues && (
         <div className="warning">
-          In diesem {'from' in source ? 'Bereich' : 'Update'} liegen Änderungen aus der Zeit vor der Speicherung alter Werte. Dort sind die alten Werte teils nicht gespeichert.
+          {'from' in source ? t('changes.legacyRange') : t('changes.legacyUpdate')}
         </div>
       )}
       {isFirst && (
         <div className="warning">
-          Das ist das erste Update (Vollimport), deshalb sind alle Items „Neu“. Ein Vergleich ist erst ab dem zweiten Update sinnvoll.
+          {t('changes.first')}
         </div>
       )}
 
@@ -206,10 +202,10 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
         ))}
       </div>
 
-      <section className="filters" aria-label="Filter">
+      <section className="filters" aria-label={t('changes.filterAria')}>
         <div className="filter-row">
           <fieldset className="chip-group">
-            <legend className="field-label">Art</legend>
+            <legend className="field-label">{t('changes.kind')}</legend>
             {CHANGE_KINDS.map((kind) => (
               <button
                 key={kind}
@@ -218,26 +214,26 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
                 aria-pressed={filters.kind.includes(kind)}
                 onClick={() => toggleKind(kind)}
               >
-                {CHANGE_LABELS[kind]}
+                {t(`change.${kind}`)}
               </button>
             ))}
           </fieldset>
           <div className="field">
-            <span className="field-label">Fokus</span>
-            <div className="segmented" role="group" aria-label="Fokus">
-              {(Object.keys(FOCUS_LABELS) as ChangeFocus[]).map((focus) => (
+            <span className="field-label">{t('changes.focus')}</span>
+            <div className="segmented" role="group" aria-label={t('changes.focus')}>
+              {FOCUSES.map((focus) => (
                 <button key={focus} type="button" className={filters.focus === focus ? 'active' : ''} aria-pressed={filters.focus === focus} onClick={() => change({ focus })}>
-                  {FOCUS_LABELS[focus]}
+                  {t(`focus.${focus}`)}
                 </button>
               ))}
             </div>
           </div>
           <div className="field">
-            <span className="field-label">Typ</span>
-            <div className="segmented" role="group" aria-label="Typ">
-              {TYPE_LABELS.map(([type, label]) => (
+            <span className="field-label">{t('changes.type')}</span>
+            <div className="segmented" role="group" aria-label={t('changes.type')}>
+              {TYPES.map((type) => (
                 <button key={type} type="button" className={filters.type === type ? 'active' : ''} aria-pressed={filters.type === type} onClick={() => change({ type })}>
-                  {label}
+                  {t(`type.${type}`)}
                 </button>
               ))}
             </div>
@@ -245,37 +241,38 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
         </div>
         <div className="filter-row changes-search">
           <label className="field field-search">
-            <span className="field-label">Suche</span>
+            <span className="field-label">{t('changes.search')}</span>
             <input
               type="search"
               key={`${toId}-${filters.q}`}
               defaultValue={filters.q}
               onChange={(e) => change({ q: e.target.value }, { replace: true })}
-              placeholder="Name oder ID"
+              placeholder={t('changes.searchPlaceholder')}
               autoComplete="off"
             />
           </label>
           <label className="check">
             <input type="checkbox" checked={filters.hidePlaceholders} onChange={(e) => change({ hidePlaceholders: e.target.checked })} />
-            Platzhalter ausblenden
+            {t('changes.hidePlaceholders')}
           </label>
         </div>
       </section>
 
       <div className="result-bar">
         <span className="muted" aria-live="polite">
-          {formatNumber(data.total)} Einträge{changes.isFetching && ' · aktualisiere …'}
+          {t('changes.entries', { n: formatNumber(data.total) })}
+          {changes.isFetching && t('changes.refreshing')}
         </span>
       </div>
 
       {data.items.length === 0 ? (
-        <p className="empty">Keine Änderungen für diese Filter.</p>
+        <p className="empty">{t('changes.noResults')}</p>
       ) : (
         <div className={changes.isPlaceholderData ? 'results stale' : 'results'}>
           <ChangesTable
             items={data.items}
-            oldLabel={fromUpdate ? `Stand nach #${fromUpdate.id} (${formatDateTime(fromUpdate.startedAt)})` : 'Alt (vor dem Import)'}
-            newLabel={`Stand nach #${update.id} (${formatDateTime(update.startedAt)})`}
+            oldLabel={fromUpdate ? t('changes.stateAfter', { id: fromUpdate.id, date: formatDateTime(fromUpdate.startedAt) }) : t('changes.beforeImport')}
+            newLabel={t('changes.stateAfter', { id: update.id, date: formatDateTime(update.startedAt) })}
           />
         </div>
       )}
@@ -285,7 +282,6 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
 }
 
 const MAX_TEXT = 160;
-const NOT_STORED = 'alter Wert nicht gespeichert (Update vor dieser Version)';
 
 interface FieldRowData {
   name: string;
@@ -294,20 +290,24 @@ interface FieldRowData {
   message?: string;
 }
 
-const Missing = ({ text = 'gab es noch nicht' }: { text?: string }) => <span className="muted">{text}</span>;
+const Missing = ({ text }: { text: string }) => <span className="muted">{text}</span>;
 
 /** Zeilen eines Eintrags: game_types immer zuerst, danach die übrigen Felder in API-Reihenfolge. */
-function buildRows(item: UpdateChangeEntry): FieldRowData[] {
+function buildRows(item: UpdateChangeEntry, t: TFunction): FieldRowData[] {
   const rows: FieldRowData[] = [];
+  const notStored = t('changes.notStored');
+  const didNotExist = t('changes.didNotExist');
+  const removedText = t('changes.removedValue');
+  const absent = t('changes.absent');
   const { kind } = item;
 
   if ((kind !== 'changed' || item.changedFields.includes('game_types')) && (item.gameTypesBefore || item.gameTypesAfter)) {
     rows.push({
       name: 'game_types',
-      before: kind === 'added' ? <Missing /> : <GameTypeBadges gameTypes={item.gameTypesBefore ?? []} />,
+      before: kind === 'added' ? <Missing text={didNotExist} /> : <GameTypeBadges gameTypes={item.gameTypesBefore ?? []} />,
       after:
         kind === 'removed' ? (
-          <Missing text="entfernt" />
+          <Missing text={removedText} />
         ) : (
           <>
             <GameTypeBadges gameTypes={item.gameTypesAfter ?? []} />
@@ -319,34 +319,35 @@ function buildRows(item: UpdateChangeEntry): FieldRowData[] {
 
   if (kind === 'changed' && item.before === null) {
     const others = item.changedFields.filter((n) => n !== 'game_types');
-    if (others.length > 0) rows.push({ name: others.join(', '), message: NOT_STORED });
+    if (others.length > 0) rows.push({ name: others.join(', '), message: notStored });
     return rows;
   }
 
   const names = kind === 'changed' ? item.changedFields : Object.keys((kind === 'added' ? item.after : item.before) ?? {});
   for (const name of names.filter((n) => n !== 'game_types')) {
     if (item.unknownFields?.includes(name)) {
-      rows.push({ name, message: NOT_STORED });
+      rows.push({ name, message: notStored });
       continue;
     }
     const before = item.before?.[name];
     const after = item.after?.[name];
     rows.push({
       name,
-      before: kind === 'added' ? <Missing /> : before === undefined ? <Missing text="nicht vorhanden" /> : <ValueView value={before} />,
-      after: kind === 'removed' ? <Missing text="entfernt" /> : after === undefined ? <Missing text="nicht vorhanden" /> : <ValueView value={after} />,
+      before: kind === 'added' ? <Missing text={didNotExist} /> : before === undefined ? <Missing text={absent} /> : <ValueView value={before} />,
+      after: kind === 'removed' ? <Missing text={removedText} /> : after === undefined ? <Missing text={absent} /> : <ValueView value={after} />,
     });
   }
   return rows;
 }
 
 function ChangesTable({ items, oldLabel, newLabel }: { items: UpdateChangeEntry[]; oldLabel: string; newLabel: string }) {
+  const { t } = useT();
   return (
     <table className="item-table changes-table">
       <thead>
         <tr>
-          <th>Item</th>
-          <th>Feld</th>
+          <th>{t('changes.colItem')}</th>
+          <th>{t('changes.colField')}</th>
           <th>{oldLabel}</th>
           <th>{newLabel}</th>
         </tr>
@@ -360,9 +361,10 @@ function ChangesTable({ items, oldLabel, newLabel }: { items: UpdateChangeEntry[
 
 /** Ein Eintrag als eigener tbody: Item-Zelle mit rowspan, dazu eine Zeile pro geändertem Feld. */
 function ChangeRows({ item, oldLabel, newLabel }: { item: UpdateChangeEntry; oldLabel: string; newLabel: string }) {
+  const { t } = useT();
   const dungeonChanged = (item.gameTypesBefore?.includes('Dungeon') ?? false) !== (item.gameTypesAfter?.includes('Dungeon') ?? false);
   const classes = [item.kind === 'changed' && dungeonChanged ? 'dungeon-change' : '', item.removed ? 'removed' : ''].filter(Boolean).join(' ');
-  const rows = buildRows(item);
+  const rows = buildRows(item, t);
 
   const itemCell = (
     <td rowSpan={Math.max(rows.length, 1)} className="item-cell">
@@ -372,11 +374,13 @@ function ChangeRows({ item, oldLabel, newLabel }: { item: UpdateChangeEntry; old
           <Link href={`/items/${item.id}`} className={`item-name ${rarityClass(item.rarity)}`}>
             {item.name || `#${item.id}`}
           </Link>
+          {/* In der deutschen Ansicht steht der englische Name klein darunter (Alt/Neu sind englisch). */}
+          {item.nameEn !== item.name && <div className="small muted">{item.nameEn}</div>}
           <div className="small muted">
             {item.type}
             {item.subtype && ` · ${item.subtype}`} · #{item.id}
           </div>
-          <span className={`badge change-${item.kind}`}>{CHANGE_LABELS[item.kind]}</span>
+          <span className={`badge change-${item.kind}`}>{t(`change.${item.kind}`)}</span>
         </div>
       </div>
     </td>
@@ -388,7 +392,7 @@ function ChangeRows({ item, oldLabel, newLabel }: { item: UpdateChangeEntry; old
         <tr>
           {itemCell}
           <td colSpan={3} className="small muted">
-            Keine Feldänderung erfasst.
+            {t('changes.noFieldChange')}
           </td>
         </tr>
       )}
@@ -420,9 +424,10 @@ function ChangeRows({ item, oldLabel, newLabel }: { item: UpdateChangeEntry; old
 
 /** Wert eines Feldes lesbar: Text mit GW2-Markup, Arrays als Chips, Objekte als "Schlüssel: Wert". */
 function ValueView({ value }: { value: unknown }) {
+  const { t } = useT();
   if (typeof value === 'string') return <LongText text={value} />;
   if (Array.isArray(value)) {
-    if (value.length === 0) return <span className="muted">leer</span>;
+    if (value.length === 0) return <span className="muted">{t('common.empty')}</span>;
     return (
       <span className="badges">
         {value.map((v, i) => (
@@ -435,7 +440,7 @@ function ValueView({ value }: { value: unknown }) {
   }
   if (value !== null && typeof value === 'object') {
     const entries = Object.entries(value);
-    if (entries.length === 0) return <span className="muted">leer</span>;
+    if (entries.length === 0) return <span className="muted">{t('common.empty')}</span>;
     return (
       <dl className="kv">
         {entries.map(([key, v]) => (
@@ -451,14 +456,15 @@ function ValueView({ value }: { value: unknown }) {
 
 /** Lange Texte gekürzt (ohne GW2-Markup), per Klick vollständig mit Markup. */
 function LongText({ text }: { text: string }) {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
-  if (text === '') return <span className="muted">leer</span>;
+  if (text === '') return <span className="muted">{t('common.empty')}</span>;
   if (text.length <= MAX_TEXT) return <Gw2Text text={text} />;
   return (
     <>
       {open ? <Gw2Text text={text} /> : <span>{text.replace(/<[^>]*>/g, '').slice(0, MAX_TEXT)} …</span>}{' '}
       <button type="button" className="link-button small" onClick={() => setOpen(!open)}>
-        {open ? 'weniger' : 'mehr'}
+        {open ? t('value.less') : t('value.more')}
       </button>
     </>
   );

@@ -7,10 +7,12 @@ import { ItemDetailPage } from './components/ItemDetailPage';
 import type { FilterChange } from './components/FilterBar';
 import { CompareRoute, UpdateChangesPage, UpdatesRedirect } from './components/UpdateChangesPage';
 import { Link } from './components/common';
+import { useT } from './lib/i18n';
 
 // Routen: "/" = Liste (Filter in den Query-Parametern), "/items/:id" = Detailansicht,
 // "/updates/:id" = Änderungen eines Updates, "/updates" = Weiterleitung auf das neueste.
 export function App() {
+  const { t } = useT();
   const { path, params } = useLocation();
   const detailMatch = /^\/items\/(\d+)\/?$/.exec(path);
   const updateMatch = /^\/updates\/(\d+)\/?$/.exec(path);
@@ -40,8 +42,8 @@ export function App() {
         {isUpdatesRoot && <UpdatesRedirect />}
         {!isList && !detailMatch && !updateMatch && !compareMatch && !isUpdatesRoot && (
           <div className="empty">
-            <p>Diese Seite gibt es nicht.</p>
-            <Link href="/">Zur Liste</Link>
+            <p>{t('app.notFound')}</p>
+            <Link href="/">{t('app.toList')}</Link>
           </div>
         )}
       </main>

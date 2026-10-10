@@ -1,10 +1,11 @@
 import type { ItemChange } from '../../../shared/types';
-import { CHANGE_LABELS, formatDateTime } from '../lib/format';
+import { useT } from '../lib/i18n';
 import { GameTypeDiff, Link } from './common';
 
 /** Änderungsverlauf eines Items, neueste zuerst; game_types-Änderungen hervorgehoben. */
 export function HistoryList({ history }: { history: ItemChange[] }) {
-  if (history.length === 0) return <p className="small muted">Keine Änderungen erfasst.</p>;
+  const { t, formatDateTime } = useT();
+  if (history.length === 0) return <p className="small muted">{t('history.empty')}</p>;
   return (
     <ol className="history">
       {history.map((change) => {
@@ -14,7 +15,7 @@ export function HistoryList({ history }: { history: ItemChange[] }) {
         return (
           <li key={`${change.updateId}-${change.kind}`} className={dungeonChanged ? 'history-entry dungeon-change' : 'history-entry'}>
             <div className="history-head">
-              <span className={`badge change-${change.kind}`}>{CHANGE_LABELS[change.kind]}</span>
+              <span className={`badge change-${change.kind}`}>{t(`change.${change.kind}`)}</span>
               <Link href={`/updates/${change.updateId}`} className="small">
                 {formatDateTime(change.updateStartedAt)}
               </Link>
@@ -23,7 +24,7 @@ export function HistoryList({ history }: { history: ItemChange[] }) {
               <GameTypeDiff before={change.gameTypesBefore ?? []} after={change.gameTypesAfter ?? []} />
             )}
             {change.kind === 'changed' && change.changedFields.length > 0 && (
-              <div className="small muted">Felder: {change.changedFields.join(', ')}</div>
+              <div className="small muted">{t('history.fields', { fields: change.changedFields.join(', ') })}</div>
             )}
           </li>
         );

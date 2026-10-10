@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type { ItemListItem } from '../../../shared/types';
 import { api } from '../api';
-import { formatNumber, rarityClass } from '../lib/format';
+import { rarityClass } from '../lib/format';
+import { errorText, useT } from '../lib/i18n';
 import { PAGE_SIZE, exportUrl, toApiQuery, type ListFilters } from '../lib/filters';
 import { ErrorBox, GameTypeBadges, ItemIcon, Link, Loading, TestBadge } from './common';
 import { FilterBar, type FilterChange } from './FilterBar';
@@ -28,11 +29,12 @@ function saveLayout(layout: Layout) {
 }
 
 export function ItemListPage({ filters, onChange }: { filters: ListFilters; onChange: FilterChange }) {
+  const { t, lang, formatNumber } = useT();
   const [layout, setLayout] = useState<Layout>(loadLayout);
   const query = toApiQuery(filters);
   const items = useQuery({
-    queryKey: ['items', query],
-    queryFn: () => api.items(query),
+    queryKey: ['items', lang, query],
+    queryFn: () => api.items(query, lang),
     placeholderData: keepPreviousData, // alte Seite stehen lassen, bis die neue da ist
   });
 
@@ -48,32 +50,32 @@ export function ItemListPage({ filters, onChange }: { filters: ListFilters; onCh
 
       <div className="result-bar">
         <span className="muted" aria-live="polite">
-          {data ? `${formatNumber(data.total)} Items` : items.isPending ? 'Lade …' : ''}
-          {items.isFetching && data && ' · aktualisiere …'}
+          {data ? t('list.items', { n: formatNumber(data.total) }) : items.isPending ? t('list.loading') : ''}
+          {items.isFetching && data && t('list.refreshing')}
         </span>
         <span className="small muted">
-          Export:{' '}
-          <a href={exportUrl(filters, 'csv')} download title="Aktuelle Liste mit allen Treffern exportieren">
+          {t('list.export')}{' '}
+          <a href={exportUrl(filters, 'csv', lang)} download title={t('list.exportTitle')}>
             CSV
           </a>
           {' · '}
-          <a href={exportUrl(filters, 'json')} download title="Aktuelle Liste mit allen Treffern exportieren">
+          <a href={exportUrl(filters, 'json', lang)} download title={t('list.exportTitle')}>
             JSON
           </a>
         </span>
-        <div className="segmented" role="group" aria-label="Darstellung">
+        <div className="segmented" role="group" aria-label={t('list.layout')}>
           <button type="button" className={layout === 'table' ? 'active' : ''} aria-pressed={layout === 'table'} onClick={() => changeLayout('table')}>
-            Tabelle
+            {t('list.table')}
           </button>
           <button type="button" className={layout === 'grid' ? 'active' : ''} aria-pressed={layout === 'grid'} onClick={() => changeLayout('grid')}>
-            Kacheln
+            {t('list.grid')}
           </button>
         </div>
       </div>
 
-      {items.isError && <ErrorBox message={`Items konnten nicht geladen werden: ${items.error.message}`} onRetry={() => void items.refetch()} />}
-      {items.isPending && <Loading text="Lade Items …" />}
-      {data && data.items.length === 0 && <p className="empty">Keine Items gefunden. Filter anpassen oder Suche ändern.</p>}
+      {items.isError && <ErrorBox message={t('list.loadError', { error: errorText(items.error, t) })} onRetry={() => void items.refetch()} />}
+      {items.isPending && <Loading text={t('list.loadingItems')} />}
+      {data && data.items.length === 0 && <p className="empty">{t('list.empty')}</p>}
       {data && data.items.length > 0 && (
         <div className={items.isPlaceholderData ? 'results stale' : 'results'}>
           {layout === 'table' ? <ItemTable items={data.items} /> : <ItemGrid items={data.items} />}
@@ -88,6 +90,11 @@ function itemHref(item: ItemListItem) {
   return `/items/${item.id}`;
 }
 
+/** Tooltip mit dem englischen Namen, wenn die Ansicht einen anderen Namen zeigt (Deutsch). */
+function nameTitle(item: ItemListItem) {
+  return item.nameEn && item.nameEn !== item.name ? item.nameEn : undefined;
+}
+
 function TypeText({ item }: { item: ItemListItem }) {
   return (
     <>
@@ -98,16 +105,17 @@ function TypeText({ item }: { item: ItemListItem }) {
 }
 
 function ItemTable({ items }: { items: ItemListItem[] }) {
+  const { t } = useT();
   return (
     <table className="item-table">
       <thead>
         <tr>
-          <th className="col-icon" aria-label="Icon" />
-          <th>Name</th>
-          <th className="col-type">Typ</th>
-          <th className="col-level">Level</th>
+          <th className="col-icon" aria-label={t('col.icon')} />
+          <th>{t('col.name')}</th>
+          <th className="col-type">{t('col.type')}</th>
+          <th className="col-level">{t('col.level')}</th>
           <th>Game Types</th>
-          <th>Test</th>
+          <th>{t('col.test')}</th>
         </tr>
       </thead>
       <tbody>
@@ -117,12 +125,12 @@ function ItemTable({ items }: { items: ItemListItem[] }) {
               <ItemIcon icon={item.icon} rarity={item.rarity} name={item.name} size={36} />
             </td>
             <td>
-              <Link href={itemHref(item)} className={`item-name ${rarityClass(item.rarity)}`}>
+              <Link href={itemHref(item)} className={`item-name ${rarityClass(item.rarity)}`} title={nameTitle(item)}>
                 {item.name || `#${item.id}`}
               </Link>
               <div className="small muted">
                 {item.rarity} · #{item.id}
-                {item.removed && ' · entfernt'}
+                {item.removed && ` · ${t('list.removed')}`}
               </div>
             </td>
             <td className="col-type">
@@ -143,6 +151,7 @@ function ItemTable({ items }: { items: ItemListItem[] }) {
 }
 
 function ItemGrid({ items }: { items: ItemListItem[] }) {
+  const { t } = useT();
   return (
     <ul className="item-grid">
       {items.map((item) => (
@@ -150,10 +159,12 @@ function ItemGrid({ items }: { items: ItemListItem[] }) {
           <Link href={itemHref(item)} className="item-card">
             <ItemIcon icon={item.icon} rarity={item.rarity} name={item.name} size={48} />
             <span className="item-card-body">
-              <span className={`item-name ${rarityClass(item.rarity)}`}>{item.name || `#${item.id}`}</span>
+              <span className={`item-name ${rarityClass(item.rarity)}`} title={nameTitle(item)}>
+                {item.name || `#${item.id}`}
+              </span>
               <span className="small muted">
                 <TypeText item={item} />
-                {item.removed && ' · entfernt'}
+                {item.removed && ` · ${t('list.removed')}`}
               </span>
               <GameTypeBadges gameTypes={item.gameTypes} />
               <TestBadge status={item.testStatus} needsRetest={item.needsRetest} />
@@ -166,23 +177,24 @@ function ItemGrid({ items }: { items: ItemListItem[] }) {
 }
 
 export function Pagination({ page, total, pageSize, onPage }: { page: number; total: number; pageSize: number; onPage: (page: number) => void }) {
+  const { t, formatNumber } = useT();
   const pages = Math.max(1, Math.ceil(total / pageSize));
   if (pages <= 1) return null;
   return (
-    <nav className="pagination" aria-label="Seiten">
-      <button type="button" className="btn" disabled={page <= 1} onClick={() => onPage(1)} aria-label="Erste Seite">
+    <nav className="pagination" aria-label={t('page.aria')}>
+      <button type="button" className="btn" disabled={page <= 1} onClick={() => onPage(1)} aria-label={t('page.first')}>
         «
       </button>
       <button type="button" className="btn" disabled={page <= 1} onClick={() => onPage(page - 1)}>
-        Zurück
+        {t('page.prev')}
       </button>
       <span className="muted">
-        Seite {formatNumber(page)} von {formatNumber(pages)}
+        {t('page.of', { page: formatNumber(page), pages: formatNumber(pages) })}
       </span>
       <button type="button" className="btn" disabled={page >= pages} onClick={() => onPage(page + 1)}>
-        Weiter
+        {t('page.next')}
       </button>
-      <button type="button" className="btn" disabled={page >= pages} onClick={() => onPage(pages)} aria-label="Letzte Seite">
+      <button type="button" className="btn" disabled={page >= pages} onClick={() => onPage(pages)} aria-label={t('page.last')}>
         »
       </button>
     </nav>

@@ -3,6 +3,7 @@ import type {
   ItemDetail,
   ItemListResponse,
   ItemTestUpdate,
+  Lang,
   StatsResponse,
   UpdateChangesResponse,
   UpdateCompareResponse,
@@ -55,14 +56,14 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
 
 export const api = {
   stats: () => request<StatsResponse>('GET', '/api/stats'),
-  items: (queryString: string) => request<ItemListResponse>('GET', `/api/items?${queryString}`),
-  item: (id: number) => request<ItemDetail>('GET', `/api/items/${id}`),
+  items: (queryString: string, lang: Lang) => request<ItemListResponse>('GET', `/api/items?${queryString}&lang=${lang}`),
+  item: (id: number, lang: Lang) => request<ItemDetail>('GET', `/api/items/${id}?lang=${lang}`),
   setTest: (id: number, update: ItemTestUpdate) => request<unknown>('PUT', `/api/items/${id}/test`, update),
   updates: () => request<UpdateListEntry[]>('GET', '/api/updates'),
-  updateChanges: (id: number, queryString: string) =>
-    request<UpdateChangesResponse>('GET', `/api/updates/${id}/changes?${queryString}`),
-  compareUpdates: (from: number, to: number, queryString: string) =>
-    request<UpdateCompareResponse>('GET', `/api/updates/compare?from=${from}&to=${to}&${queryString}`),
+  updateChanges: (id: number, queryString: string, lang: Lang) =>
+    request<UpdateChangesResponse>('GET', `/api/updates/${id}/changes?${queryString}&lang=${lang}`),
+  compareUpdates: (from: number, to: number, queryString: string, lang: Lang) =>
+    request<UpdateCompareResponse>('GET', `/api/updates/compare?from=${from}&to=${to}&${queryString}&lang=${lang}`),
   importStatus: () => request<ImportStatus>('GET', '/api/updates/status'),
   startUpdate: () => request<unknown>('POST', '/api/updates'),
 };

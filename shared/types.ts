@@ -7,9 +7,13 @@ export type GameType = 'Activity' | 'Dungeon' | 'Pve' | 'Pvp' | 'PvpLobby' | 'Wv
 
 export type TestStatus = 'untested' | 'works' | 'broken';
 
+/** Sprache der Item-Namen und -Beschreibungen (Query-Parameter lang, Default 'en'). */
+export type Lang = 'en' | 'de';
+
 export interface StatsResponse {
   items: number;
   candidates: { gizmo: number; consumable: number; tonic: number };
+  germanTexts: number; // Anzahl Items mit deutschem Namen (item_texts, lang=de); 0 = noch kein Update mit Deutsch
   lastUpdate: UpdateSummary | null;
 }
 
@@ -40,7 +44,8 @@ export type ItemView = 'gizmo' | 'consumable' | 'tonic' | 'all';
 /** Eintrag in der Ergebnisliste. */
 export interface ItemListItem {
   id: number;
-  name: string;
+  name: string; // in der gewählten Sprache (lang), Fallback Englisch
+  nameEn: string; // immer der englische Name
   type: ItemType;
   subtype: string | null; // details.type, z. B. Food, Utility, Generic
   rarity: Rarity;
@@ -58,6 +63,7 @@ export interface ItemListItem {
  * Mehrfachwerte (rarity, gameType) als kommagetrennte Liste, z. B. rarity=Rare,Exotic.
  */
 export interface ItemListQuery {
+  lang?: Lang; // Default 'en'
   q?: string; // Volltext über Name + Beschreibung; reine Zahl = Item-ID; "[&...]" = Chat-Link
   view?: ItemView; // Default 'gizmo'
   candidate?: 'yes' | 'no' | 'all'; // Default 'yes'
@@ -101,13 +107,13 @@ export interface ItemChange {
 
 /** GET /api/items/:id */
 export interface ItemDetail extends ItemListItem {
-  description: string | null; // kann GW2-Markup wie <c=@flavor>…</c> enthalten
+  description: string | null; // in der gewählten Sprache; kann GW2-Markup wie <c=@flavor>…</c> enthalten
   chatLink: string | null;
   flags: string[];
   restrictions: string[];
   vendorValue: number;
   details: Record<string, unknown> | null; // details-Objekt der API, roh
-  wikiUrl: string; // https://wiki.guildwars2.com/wiki/Special:Search/<Name>
+  wikiUrl: string; // en: https://wiki.guildwars2.com/wiki/Special:Search/<Name>, de: https://wiki-de.guildwars2.com/wiki/Spezial:Suche/<Name>
   test: ItemTest;
   history: ItemChange[]; // neueste zuerst
 }
@@ -132,11 +138,11 @@ export interface UpdateDetail extends UpdateSummary {
 export interface ImportStatus {
   running: boolean;
   updateId: number | null;
-  phase: 'idle' | 'ids' | 'details' | 'diff' | 'done' | 'failed';
-  processed: number; // Items mit geladenen Details
-  total: number; // Anzahl Item-IDs laut API
+  phase: 'idle' | 'ids' | 'details' | 'details_de' | 'diff' | 'done' | 'failed';
+  processed: number; // Items mit geladenen Details (in details_de: deutsche Texte)
+  total: number; // Anzahl Item-IDs laut API (in details_de: Anzahl geladener Items)
   startedAt: string | null;
-  error: string | null;
+  error: string | null; // bei phase 'done' nur gesetzt, wenn die deutschen Texte nicht vollständig geladen wurden
 }
 
 // ---------------------------------------------------------------------------
@@ -150,6 +156,7 @@ export type ChangeFocus = 'all' | 'gameTypes' | 'dungeonGained' | 'dungeonLost';
  * Query-Parameter (alle optional). kind als kommagetrennte Liste, z. B. kind=added,changed.
  */
 export interface UpdateChangesQuery {
+  lang?: Lang; // Default 'en'; Name und Suche, Alt/Neu-Werte bleiben englisch
   kind?: ChangeKind[]; // Default: alle
   focus?: ChangeFocus; // Default 'all'
   type?: ItemView; // Default 'all'
@@ -171,7 +178,8 @@ export interface UpdateChangeCounts {
 
 export interface UpdateChangeEntry extends Omit<ItemChange, 'updateId' | 'updateStartedAt'> {
   id: number;
-  name: string;
+  name: string; // in der gewählten Sprache, Fallback Englisch
+  nameEn: string;
   type: ItemType;
   subtype: string | null;
   rarity: Rarity;

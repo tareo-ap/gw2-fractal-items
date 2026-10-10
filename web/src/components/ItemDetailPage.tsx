@@ -3,29 +3,31 @@ import { useQuery } from '@tanstack/react-query';
 import type { ItemDetail } from '../../../shared/types';
 import { api, ApiError } from '../api';
 import { formatCoins, rarityClass } from '../lib/format';
+import { errorText, useT } from '../lib/i18n';
 import { ErrorBox, GameTypeBadges, ItemIcon, Link, Loading } from './common';
 import { Gw2Text } from './Gw2Text';
 import { HistoryList } from './HistoryList';
 import { TestPanel } from './TestPanel';
 
 export function ItemDetailPage({ id, backHref }: { id: number; backHref: string }) {
+  const { t, lang } = useT();
   const item = useQuery({
-    queryKey: ['item', id],
-    queryFn: () => api.item(id),
+    queryKey: ['item', id, lang],
+    queryFn: () => api.item(id, lang),
     retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
   });
 
   return (
     <div className="detail-page">
       <Link href={backHref} className="back-link">
-        ← Zurück zur Liste
+        {t('detail.back')}
       </Link>
-      {item.isPending && <Loading text="Lade Item …" />}
+      {item.isPending && <Loading text={t('detail.loading')} />}
       {item.isError &&
         (item.error instanceof ApiError && item.error.status === 404 ? (
-          <ErrorBox message={`Item #${id} wurde nicht gefunden.`} />
+          <ErrorBox message={t('detail.notFound', { id })} />
         ) : (
-          <ErrorBox message={`Item konnte nicht geladen werden: ${item.error.message}`} onRetry={() => void item.refetch()} />
+          <ErrorBox message={t('detail.loadError', { error: errorText(item.error, t) })} onRetry={() => void item.refetch()} />
         ))}
       {item.data && (
         <div className="detail-layout">
@@ -37,7 +39,7 @@ export function ItemDetailPage({ id, backHref }: { id: number; backHref: string 
             {/* key: Formular beim Wechsel auf ein anderes Item zurücksetzen */}
             <TestPanel key={item.data.id} item={item.data} />
             <section className="panel">
-              <h2>Änderungsverlauf</h2>
+              <h2>{t('detail.history')}</h2>
               <HistoryList history={item.data.history} />
             </section>
           </div>
@@ -49,15 +51,17 @@ export function ItemDetailPage({ id, backHref }: { id: number; backHref: string 
 
 /** Kasten im Stil des Ingame-Tooltips. */
 function Tooltip({ item }: { item: ItemDetail }) {
+  const { t } = useT();
   return (
     <article className={`tooltip ${rarityClass(item.rarity)} ${item.removed ? 'removed' : ''}`}>
       <header className="tooltip-head">
         <ItemIcon icon={item.icon} rarity={item.rarity} name={item.name} size={64} />
         <div>
           <h1 className="item-name tooltip-name">{item.name || `#${item.id}`}</h1>
+          {item.nameEn !== item.name && <div className="small muted">{t('detail.englishName', { name: item.nameEn })}</div>}
           <div className="small muted">
             #{item.id}
-            {item.removed && <span className="badge badge-removed">nicht mehr in der API</span>}
+            {item.removed && <span className="badge badge-removed">{t('detail.removedBadge')}</span>}
           </div>
         </div>
       </header>
@@ -69,32 +73,32 @@ function Tooltip({ item }: { item: ItemDetail }) {
       )}
 
       <dl className="tooltip-props">
-        <dt>Typ</dt>
+        <dt>{t('detail.type')}</dt>
         <dd>
           {item.type}
           {item.subtype && ` · ${item.subtype}`}
         </dd>
-        <dt>Seltenheit</dt>
+        <dt>{t('detail.rarity')}</dt>
         <dd className="item-name">{item.rarity}</dd>
-        <dt>Level</dt>
+        <dt>{t('detail.level')}</dt>
         <dd>{item.level}</dd>
         <dt>Game Types</dt>
         <dd>
           <GameTypeBadges gameTypes={item.gameTypes} />
-          {item.isCandidate && <span className="small candidate-hint"> Fractal-Kandidat</span>}
+          {item.isCandidate && <span className="small candidate-hint"> {t('detail.candidate')}</span>}
         </dd>
         <dt>Flags</dt>
         <dd>{item.flags.length ? item.flags.join(', ') : '–'}</dd>
         <dt>Restrictions</dt>
         <dd>{item.restrictions.length ? item.restrictions.join(', ') : '–'}</dd>
-        <dt>Händlerwert</dt>
+        <dt>{t('detail.vendorValue')}</dt>
         <dd>{formatCoins(item.vendorValue)}</dd>
       </dl>
 
       <footer className="tooltip-foot">
         {item.chatLink && <ChatLink code={item.chatLink} />}
         <a href={item.wikiUrl} target="_blank" rel="noreferrer noopener" className="btn btn-small">
-          Im Wiki öffnen ↗
+          {t('detail.wiki')}
         </a>
       </footer>
     </article>
@@ -102,6 +106,7 @@ function Tooltip({ item }: { item: ItemDetail }) {
 }
 
 function ChatLink({ code }: { code: string }) {
+  const { t } = useT();
   const [copied, setCopied] = useState<'ok' | 'fail' | null>(null);
 
   const copy = async () => {
@@ -120,17 +125,18 @@ function ChatLink({ code }: { code: string }) {
         {code}
       </code>
       <button type="button" className="btn btn-small" onClick={() => void copy()}>
-        {copied === 'ok' ? 'Kopiert ✓' : copied === 'fail' ? 'Bitte manuell kopieren' : 'Kopieren'}
+        {copied === 'ok' ? t('detail.copied') : copied === 'fail' ? t('detail.copyManual') : t('detail.copy')}
       </button>
     </span>
   );
 }
 
 function RawDetails({ details }: { details: Record<string, unknown> | null }) {
+  const { t } = useT();
   if (!details) return null;
   return (
     <details className="panel raw-details">
-      <summary>Rohdaten (details)</summary>
+      <summary>{t('detail.raw')}</summary>
       <pre>{JSON.stringify(details, null, 2)}</pre>
     </details>
   );

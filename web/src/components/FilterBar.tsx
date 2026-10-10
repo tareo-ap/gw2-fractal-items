@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { describeUpdate } from '../lib/format';
+import { useT } from '../lib/i18n';
 import {
   GAME_TYPES,
   RARITIES,
@@ -16,44 +17,32 @@ import {
 
 export type FilterChange = (change: Partial<ListFilters>, options?: { replace?: boolean; keepPage?: boolean }) => void;
 
-const SORT_LABELS: Record<SortField, string> = {
-  name: 'Name',
-  id: 'ID',
-  rarity: 'Seltenheit',
-  level: 'Level',
-  lastChanged: 'Zuletzt geändert',
-};
-
-const TEST_FILTER_LABELS: Record<TestFilter, string> = {
-  untested: 'Ungetestet',
-  works: 'Funktioniert',
-  broken: 'Funktioniert nicht',
-  retest: 'Neu testen',
-};
+const TEST_FILTERS: TestFilter[] = ['untested', 'works', 'broken', 'retest'];
 
 export function FilterBar({ filters, onChange }: { filters: ListFilters; onChange: FilterChange }) {
+  const { t } = useT();
   const extraCount = countExtraFilters(filters);
   // Nur beim ersten Rendern entscheiden, ob der Bereich offen ist; danach steuert der Nutzer.
   const [initiallyOpen] = useState(extraCount > 0);
   return (
-    <section className="filters" aria-label="Suche und Filter">
+    <section className="filters" aria-label={t('filter.aria')}>
       <div className="filter-row">
         <SearchInput value={filters.q} onSearch={(q) => onChange({ q }, { replace: true })} />
         <label className="field">
-          <span className="field-label">Kandidat</span>
+          <span className="field-label">{t('filter.candidate')}</span>
           <select value={filters.candidate} onChange={(e) => onChange({ candidate: e.target.value as Candidate })}>
-            <option value="yes">Ja (Dungeon)</option>
-            <option value="no">Nein</option>
-            <option value="all">Alle</option>
+            <option value="yes">{t('filter.candidate.yes')}</option>
+            <option value="no">{t('filter.candidate.no')}</option>
+            <option value="all">{t('filter.candidate.all')}</option>
           </select>
         </label>
         <label className="field">
-          <span className="field-label">Sortierung</span>
+          <span className="field-label">{t('filter.sort')}</span>
           <span className="sort-group">
             <select value={filters.sort} onChange={(e) => onChange({ sort: e.target.value as SortField })}>
               {SORTS.map((s) => (
                 <option key={s} value={s}>
-                  {SORT_LABELS[s]}
+                  {t(`sort.${s}`)}
                 </option>
               ))}
             </select>
@@ -61,8 +50,8 @@ export function FilterBar({ filters, onChange }: { filters: ListFilters; onChang
               type="button"
               className="btn btn-icon"
               onClick={() => onChange({ order: filters.order === 'asc' ? 'desc' : 'asc' })}
-              title={filters.order === 'asc' ? 'Aufsteigend' : 'Absteigend'}
-              aria-label={filters.order === 'asc' ? 'Aufsteigend, klicken für absteigend' : 'Absteigend, klicken für aufsteigend'}
+              title={filters.order === 'asc' ? t('filter.asc') : t('filter.desc')}
+              aria-label={filters.order === 'asc' ? t('filter.ascAria') : t('filter.descAria')}
             >
               {filters.order === 'asc' ? '↑' : '↓'}
             </button>
@@ -72,28 +61,28 @@ export function FilterBar({ filters, onChange }: { filters: ListFilters; onChang
 
       <details className="more-filters" open={initiallyOpen || undefined}>
         <summary>
-          Weitere Filter{extraCount > 0 && <span className="tab-count">{extraCount}</span>}
+          {t('filter.more')}{extraCount > 0 && <span className="tab-count">{extraCount}</span>}
         </summary>
         <div className="filter-groups">
           <ChipGroup
-            label="Seltenheit"
+            label={t('filter.rarity')}
             options={RARITIES}
             selected={filters.rarity}
             onChange={(rarity) => onChange({ rarity })}
             chipClass={(r) => `rarity-${r.toLowerCase()}`}
           />
-          <ChipGroup label="Game Types (alle müssen passen)" options={GAME_TYPES} selected={filters.gameType} onChange={(gameType) => onChange({ gameType })} />
+          <ChipGroup label={t('filter.gameTypes')} options={GAME_TYPES} selected={filters.gameType} onChange={(gameType) => onChange({ gameType })} />
           <div className="filter-row">
             <label className="field">
-              <span className="field-label">Teststatus</span>
+              <span className="field-label">{t('filter.testStatus')}</span>
               <select
                 value={filters.testStatus ?? ''}
                 onChange={(e) => onChange({ testStatus: (e.target.value || null) as TestFilter | null })}
               >
-                <option value="">Alle</option>
-                {(Object.keys(TEST_FILTER_LABELS) as TestFilter[]).map((t) => (
-                  <option key={t} value={t}>
-                    {TEST_FILTER_LABELS[t]}
+                <option value="">{t('filter.all')}</option>
+                {TEST_FILTERS.map((f) => (
+                  <option key={f} value={f}>
+                    {t(`test.${f}`)}
                   </option>
                 ))}
               </select>
@@ -108,7 +97,7 @@ export function FilterBar({ filters, onChange }: { filters: ListFilters; onChang
                   checked={filters.hideCommon}
                   onChange={(e) => onChange({ hideCommon: e.target.checked })}
                 />
-                Food, Utility, Unlock, Transmutation, Währungen, Mastery Points, Emote Tomes ausblenden
+                {t('filter.hideCommon')}
               </label>
             )}
             <label className="check">
@@ -117,11 +106,11 @@ export function FilterBar({ filters, onChange }: { filters: ListFilters; onChang
                 checked={filters.hidePlaceholders}
                 onChange={(e) => onChange({ hidePlaceholders: e.target.checked })}
               />
-              Platzhalter ohne Namen oder Icon ausblenden, z. B. „((906936))“ oder „[[913817]]“
+              {t('filter.hidePlaceholders')}
             </label>
             <label className="check">
               <input type="checkbox" checked={filters.includeRemoved} onChange={(e) => onChange({ includeRemoved: e.target.checked })} />
-              Entfernte Items anzeigen
+              {t('filter.includeRemoved')}
             </label>
           </div>
         </div>
@@ -132,6 +121,7 @@ export function FilterBar({ filters, onChange }: { filters: ListFilters; onChang
 
 /** Suchfeld mit Verzögerung: die URL wird erst 300 ms nach der letzten Eingabe aktualisiert. */
 function SearchInput({ value, onSearch }: { value: string; onSearch: (q: string) => void }) {
+  const { t } = useT();
   const [text, setText] = useState(value);
   const timer = useRef<number | undefined>(undefined);
 
@@ -153,12 +143,12 @@ function SearchInput({ value, onSearch }: { value: string; onSearch: (q: string)
 
   return (
     <label className="field field-search">
-      <span className="field-label">Suche</span>
+      <span className="field-label">{t('filter.search')}</span>
       <input
         type="search"
         value={text}
         onChange={(e) => handleChange(e.target.value)}
-        placeholder="Name, Beschreibung, ID oder Chat-Link"
+        placeholder={t('filter.searchPlaceholder')}
         autoComplete="off"
       />
     </label>
@@ -178,6 +168,7 @@ function ChipGroup<T extends string>({
   onChange: (values: T[]) => void;
   chipClass?: (value: T) => string;
 }) {
+  const { t } = useT();
   const toggle = (value: T) => {
     // Reihenfolge wie in options halten, damit die URL stabil bleibt.
     const next = selected.includes(value) ? selected.filter((v) => v !== value) : options.filter((o) => o === value || selected.includes(o));
@@ -199,7 +190,7 @@ function ChipGroup<T extends string>({
       ))}
       {selected.length > 0 && (
         <button type="button" className="chip chip-clear" onClick={() => onChange([])}>
-          zurücksetzen
+          {t('filter.clear')}
         </button>
       )}
     </fieldset>
@@ -207,17 +198,19 @@ function ChipGroup<T extends string>({
 }
 
 function UpdateSelect({ value, onChange }: { value: number | null; onChange: (id: number | null) => void }) {
+  const i18n = useT();
+  const { t } = i18n;
   const updates = useQuery({ queryKey: ['updates'], queryFn: api.updates });
   return (
     <label className="field field-update">
-      <span className="field-label">Nur aus Update</span>
+      <span className="field-label">{t('filter.update')}</span>
       <select value={value ?? ''} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)} disabled={updates.isPending}>
-        <option value="">{updates.isError ? 'Updates nicht ladbar' : 'Alle Updates'}</option>
+        <option value="">{updates.isError ? t('filter.updatesFailed') : t('filter.allUpdates')}</option>
         {/* Gewähltes Update auch dann anzeigen, wenn es (noch) nicht in der Liste ist. */}
-        {value !== null && !updates.data?.some((u) => u.id === value) && <option value={value}>Update #{value}</option>}
+        {value !== null && !updates.data?.some((u) => u.id === value) && <option value={value}>{t('filter.updateN', { id: value })}</option>}
         {updates.data?.map((u) => (
           <option key={u.id} value={u.id}>
-            {describeUpdate(u)}
+            {describeUpdate(u, i18n)}
           </option>
         ))}
       </select>

@@ -92,4 +92,18 @@ export const migrations: string[] = [
   ALTER TABLE item_changes ADD COLUMN values_before TEXT;
   ALTER TABLE item_changes ADD COLUMN values_after TEXT;
   `,
+  // 4: übersetzte Namen und Beschreibungen (bisher nur lang=de), getrennt vom englischen Stand in items
+  `
+  -- Hash, Diff und item_changes kennen diese Tabelle nicht: Reine Übersetzungsänderungen gelten nicht als Änderung.
+  CREATE TABLE item_texts (
+    item_id     INTEGER NOT NULL,
+    lang        TEXT    NOT NULL, -- de
+    name        TEXT    NOT NULL,
+    description TEXT,
+    PRIMARY KEY (item_id, lang)
+  );
+
+  -- Volltextindex für die deutschen Texte (eigener Inhalt, rowid = item_id). Der Importer pflegt ihn mit.
+  CREATE VIRTUAL TABLE items_fts_de USING fts5(name, description);
+  `,
 ];

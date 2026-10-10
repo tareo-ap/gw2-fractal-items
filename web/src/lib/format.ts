@@ -1,51 +1,25 @@
-import type { ChangeKind, ImportStatus, Rarity, TestStatus } from '../../../shared/types';
+import type { Rarity } from '../../../shared/types';
 import type { UpdateListEntry } from '../api';
-
-export function formatNumber(n: number): string {
-  return n.toLocaleString('de-DE');
-}
-
-export function formatDateTime(iso: string | null): string {
-  if (!iso) return '–';
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
-}
+import type { I18n } from './i18n';
 
 /** CSS-Klasse, die --rc auf die passende Seltenheitsfarbe setzt. */
 export function rarityClass(rarity: Rarity | string): string {
   return `rarity-${rarity.toLowerCase()}`;
 }
 
-export const TEST_LABELS: Record<TestStatus, string> = {
-  untested: 'Ungetestet',
-  works: 'Funktioniert',
-  broken: 'Funktioniert nicht',
-};
-
-export const CHANGE_LABELS: Record<ChangeKind, string> = {
-  added: 'Neu',
-  changed: 'Geändert',
-  removed: 'Entfernt',
-};
-
-export const PHASE_LABELS: Record<ImportStatus['phase'], string> = {
-  idle: 'Bereit',
-  ids: 'Lade Item-IDs',
-  details: 'Lade Item-Details',
-  diff: 'Vergleiche mit Cache',
-  done: 'Fertig',
-  failed: 'Fehlgeschlagen',
-};
-
-/** Kurzbeschreibung eines Updates für das Dropdown, z. B. "10.10.2026, 14:03 · +12 neu · 30 geändert". */
-export function describeUpdate(u: UpdateListEntry): string {
-  const parts = [formatDateTime(u.startedAt), `${u.added} neu`, `${u.changed} geändert`, `${u.removed} entfernt`];
+/** Kurzbeschreibung eines Updates für das Dropdown, z. B. "10.10.2026, 14:03 · 12 neu · 30 geändert". */
+export function describeUpdate(u: UpdateListEntry, { t, formatDateTime }: Pick<I18n, 't' | 'formatDateTime'>): string {
+  const parts = [
+    formatDateTime(u.startedAt),
+    t('update.describeNew', { n: u.added }),
+    t('update.describeChanged', { n: u.changed }),
+    t('update.describeRemoved', { n: u.removed }),
+  ];
   if (u.dungeonGained !== undefined || u.dungeonLost !== undefined) {
     parts.push(`Dungeon +${u.dungeonGained ?? 0} / −${u.dungeonLost ?? 0}`);
   }
-  if (u.status === 'running') parts.push('läuft');
-  if (u.status === 'failed') parts.push('fehlgeschlagen');
+  if (u.status === 'running') parts.push(t('update.describeRunning'));
+  if (u.status === 'failed') parts.push(t('update.describeFailed'));
   return parts.join(' · ');
 }
 

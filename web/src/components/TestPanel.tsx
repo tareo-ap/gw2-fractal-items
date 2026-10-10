@@ -2,13 +2,14 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { ItemDetail, TestStatus } from '../../../shared/types';
 import { api } from '../api';
-import { TEST_LABELS, formatDateTime } from '../lib/format';
+import { errorText, useT } from '../lib/i18n';
 import { GameTypeDiff } from './common';
 
 const STATUSES: TestStatus[] = ['untested', 'works', 'broken'];
 
 /** Teststatus mit Notiz setzen (PUT /api/items/:id/test). */
 export function TestPanel({ item }: { item: ItemDetail }) {
+  const { t, formatDateTime } = useT();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<TestStatus>(item.test.status);
   const [note, setNote] = useState(item.test.note ?? '');
@@ -30,15 +31,15 @@ export function TestPanel({ item }: { item: ItemDetail }) {
 
   return (
     <section className="panel test-panel">
-      <h2>Teststatus</h2>
+      <h2>{t('testPanel.title')}</h2>
       {item.needsRetest && (
         <div className="warning" role="alert">
-          <strong>Neu testen:</strong> Die game_types haben sich seit dem letzten Test geändert.
+          <strong>{t('testPanel.retestLabel')}</strong> {t('testPanel.retestText')}
           <GameTypeDiff before={item.test.gameTypesAtTest ?? []} after={item.gameTypes} />
         </div>
       )}
       <p className="small muted">
-        {item.test.testedAt ? `Zuletzt getestet: ${formatDateTime(item.test.testedAt)}` : 'Noch nicht getestet.'}
+        {item.test.testedAt ? t('testPanel.lastTested', { date: formatDateTime(item.test.testedAt) }) : t('testPanel.never')}
       </p>
 
       <form
@@ -47,7 +48,7 @@ export function TestPanel({ item }: { item: ItemDetail }) {
           save.mutate();
         }}
       >
-        <div className="segmented status-choice" role="radiogroup" aria-label="Status">
+        <div className="segmented status-choice" role="radiogroup" aria-label={t('testPanel.status')}>
           {STATUSES.map((s) => (
             <button
               key={s}
@@ -60,12 +61,12 @@ export function TestPanel({ item }: { item: ItemDetail }) {
                 setSaved(false);
               }}
             >
-              {TEST_LABELS[s]}
+              {t(`test.${s}`)}
             </button>
           ))}
         </div>
         <label className="field">
-          <span className="field-label">Notiz</span>
+          <span className="field-label">{t('testPanel.note')}</span>
           <textarea
             value={note}
             rows={3}
@@ -73,18 +74,18 @@ export function TestPanel({ item }: { item: ItemDetail }) {
               setNote(e.target.value);
               setSaved(false);
             }}
-            placeholder="z. B. in welchem Fraktal getestet, Auffälligkeiten"
+            placeholder={t('testPanel.notePlaceholder')}
           />
         </label>
         <div className="form-actions">
           <button type="submit" className="btn btn-primary" disabled={save.isPending || (!dirty && !item.needsRetest)}>
-            {save.isPending ? 'Speichere …' : 'Speichern'}
+            {save.isPending ? t('testPanel.saving') : t('testPanel.save')}
           </button>
-          {saved && !dirty && <span className="small success">Gespeichert</span>}
-          {save.isError && <span className="small error">Fehler: {save.error.message}</span>}
+          {saved && !dirty && <span className="small success">{t('testPanel.saved')}</span>}
+          {save.isError && <span className="small error">{t('testPanel.error', { error: errorText(save.error, t) })}</span>}
         </div>
         {item.needsRetest && !dirty && (
-          <p className="small muted">Speichern ohne Änderung bestätigt den Status für die aktuellen game_types.</p>
+          <p className="small muted">{t('testPanel.confirmHint')}</p>
         )}
       </form>
     </section>

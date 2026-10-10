@@ -1,11 +1,12 @@
 import { useState, type ReactNode } from 'react';
 import type { GameType, Rarity, TestStatus } from '../../../shared/types';
 import { linkHandler } from '../lib/router';
-import { TEST_LABELS, rarityClass } from '../lib/format';
+import { useT } from '../lib/i18n';
+import { rarityClass } from '../lib/format';
 
-export function Link({ href, className, children }: { href: string; className?: string; children: ReactNode }) {
+export function Link({ href, className, title, children }: { href: string; className?: string; title?: string; children: ReactNode }) {
   return (
-    <a href={href} className={className} onClick={linkHandler(href)}>
+    <a href={href} className={className} title={title} onClick={linkHandler(href)}>
       {children}
     </a>
   );
@@ -40,12 +41,13 @@ export function GameTypeBadges({ gameTypes }: { gameTypes: GameType[] }) {
 }
 
 export function TestBadge({ status, needsRetest }: { status: TestStatus; needsRetest: boolean }) {
+  const { t } = useT();
   return (
     <span className="badges">
-      <span className={`badge test-${status}`}>{TEST_LABELS[status]}</span>
+      <span className={`badge test-${status}`}>{t(`test.${status}`)}</span>
       {needsRetest && (
-        <span className="badge badge-retest" title="game_types haben sich seit dem Test geändert">
-          neu testen
+        <span className="badge badge-retest" title={t('badge.retestTitle')}>
+          {t('badge.retest')}
         </span>
       )}
     </span>
@@ -53,23 +55,25 @@ export function TestBadge({ status, needsRetest }: { status: TestStatus; needsRe
 }
 
 export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  const { t } = useT();
   return (
     <div className="error-box" role="alert">
       <span>{message}</span>
       {onRetry && (
         <button type="button" className="btn btn-small" onClick={onRetry}>
-          Erneut versuchen
+          {t('common.retry')}
         </button>
       )}
     </div>
   );
 }
 
-export function Loading({ text = 'Lade …' }: { text?: string }) {
+export function Loading({ text }: { text?: string }) {
+  const { t } = useT();
   return (
     <div className="loading" role="status">
       <span className="spinner" aria-hidden="true" />
-      {text}
+      {text ?? t('common.loading')}
     </div>
   );
 }

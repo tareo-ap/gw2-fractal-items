@@ -9,6 +9,10 @@ export interface FakeGw2Api {
   /** IDs, die /v2/items auflistet, für die es aber keine Details gibt (→ 206 Partial Content). */
   ghostIds: number[];
   buildId: number | null;
+  /** Deutsche Texte pro ID für lang=de. Ohne Eintrag (oder ohne Feld) liefert die API den englischen Text. */
+  german: Map<number, { name?: string; description?: string }>;
+  /** Wenn true, antwortet jeder Request mit lang=de mit 500 (englische Requests laufen normal). */
+  failGerman: boolean;
   /** Statuscodes, die den nächsten Requests (egal welcher Pfad) der Reihe nach geliefert werden. */
   failures: number[];
   requests: string[];
@@ -21,6 +25,8 @@ export async function startFakeGw2Api(items: Gw2Item[]): Promise<FakeGw2Api> {
     items: new Map(items.map((item) => [item.id, structuredClone(item)])),
     ghostIds: [],
     buildId: 123456,
+    german: new Map(),
+    failGerman: false,
     failures: [],
     requests: [],
     close: () =>
@@ -48,7 +54,12 @@ export async function startFakeGw2Api(items: Gw2Item[]): Promise<FakeGw2Api> {
       const ids = url.searchParams.get('ids');
       if (!ids) return send(200, [...api.items.keys(), ...api.ghostIds]);
       const requested = ids.split(',').map(Number);
-      const found = requested.map((id) => api.items.get(id)).filter((item) => item !== undefined);
+      const lang = url.searchParams.get('lang');
+      if (lang === 'de' && api.failGerman) return send(500, { text: 'german down' });
+      const found = requested
+        .map((id) => api.items.get(id))
+        .filter((item) => item !== undefined)
+        .map((item) => (lang === 'de' ? { ...item, ...api.german.get(item.id) } : item));
       if (found.length === 0) return send(404, { text: 'all ids provided are invalid' });
       return send(found.length < requested.length ? 206 : 200, found);
     }

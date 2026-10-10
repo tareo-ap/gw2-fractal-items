@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api';
-import { PHASE_LABELS, formatNumber } from '../lib/format';
+import { errorText, useT } from '../lib/i18n';
 import { Link } from './common';
 
 // Button "Aktualisieren": startet einen Import und pollt den Status, solange er läuft.
 export function UpdateButton() {
+  const { t, formatNumber } = useT();
   const queryClient = useQueryClient();
   const [message, setMessage] = useState<string | null>(null);
   const wasRunning = useRef(false);
@@ -37,9 +38,9 @@ export function UpdateButton() {
     onError: (error) => {
       if (error instanceof ApiError && error.status === 409) {
         wasRunning.current = true;
-        setMessage('Ein Update läuft bereits.');
+        setMessage(t('update.alreadyRunning'));
       } else {
-        setMessage(`Update konnte nicht gestartet werden: ${error.message}`);
+        setMessage(t('update.startFailed', { error: errorText(error, t) }));
       }
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['importStatus'] }),
@@ -51,12 +52,12 @@ export function UpdateButton() {
   return (
     <div className="update-box">
       <button type="button" className="btn btn-primary" onClick={() => start.mutate()} disabled={running || start.isPending}>
-        {running ? 'Aktualisiere …' : 'Aktualisieren'}
+        {running ? t('update.running') : t('update.button')}
       </button>
       {running && data && (
         <div className="progress" aria-live="polite">
           <div className="progress-label">
-            {PHASE_LABELS[data.phase]}
+            {t(`phase.${data.phase}`)}
             {data.total > 0 && ` · ${formatNumber(data.processed)} / ${formatNumber(data.total)}`}
           </div>
           <div className="progress-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent ?? undefined}>
@@ -66,10 +67,14 @@ export function UpdateButton() {
       )}
       {!running && data?.phase === 'done' && data.updateId !== null && (
         <Link href={`/updates/${data.updateId}`} className="small">
-          Änderungen ansehen
+          {t('update.viewChanges')}
         </Link>
       )}
-      {!running && data?.phase === 'failed' && <span className="error small">Letztes Update fehlgeschlagen: {data.error ?? 'unbekannter Fehler'}</span>}
+      {/* Update fertig, aber der deutsche Teil fehlt (error ist bei phase 'done' nur dafür gesetzt) */}
+      {!running && data?.phase === 'done' && data.error && <span className="small muted">{t('update.germanIncomplete')}</span>}
+      {!running && data?.phase === 'failed' && (
+        <span className="error small">{t('update.lastFailed', { error: data.error ?? t('update.unknownError') })}</span>
+      )}
       {message && <span className="small muted">{message}</span>}
     </div>
   );

@@ -91,6 +91,7 @@ textarea { width: 100%; resize: vertical; }
 }
 .segmented button + button { border-left: 1px solid var(--border); }
 .segmented button.active { background: var(--surface-2); color: var(--accent); }
+.lang-switch button { padding: 4px 9px; font-size: 0.85rem; font-weight: 600; }
 
 /* ---------- Kopfzeile ---------- */
 .app-header { border-bottom: 1px solid var(--border); background: var(--surface); }
@@ -98,6 +99,7 @@ textarea { width: 100%; resize: vertical; }
   display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px;
   max-width: 1200px; margin: 0 auto; padding: 12px 24px 8px;
 }
+.lang-hint { max-width: 1200px; margin: 0 auto; padding: 0 24px 8px; color: var(--warning); }
 .brand { font-size: 1.25rem; font-weight: 700; color: var(--accent); letter-spacing: 0.02em; }
 .brand:hover { text-decoration: none; }
 .header-stats { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--muted); flex: 1; }

@@ -1,4 +1,4 @@
-import type { GameType, ItemListQuery, ItemView, Rarity, TestStatus } from '../../../shared/types';
+import type { GameType, ItemListQuery, ItemView, Lang, Rarity, TestStatus } from '../../../shared/types';
 
 // Alle Filter der Liste stehen in der URL, damit Links teilbar sind und "Zurück" funktioniert.
 // Standardwerte werden in der URL weggelassen.
@@ -118,8 +118,8 @@ export function toApiQuery(f: ListFilters): string {
 }
 
 /** URL für den Download der gefilterten Liste (alle Treffer, page/pageSize ignoriert der Server). */
-export function exportUrl(f: ListFilters, format: 'csv' | 'json'): string {
-  return `/api/items/export?${toApiQuery(f)}&format=${format}`;
+export function exportUrl(f: ListFilters, format: 'csv' | 'json', lang: Lang): string {
+  return `/api/items/export?${toApiQuery(f)}&lang=${lang}&format=${format}`;
 }
 
 /** Der Filter hideCommon wirkt nur in den Ansichten Consumables und Alle. */

@@ -21,6 +21,9 @@ const changesOf = (updateId: number) =>
 const ftsIds = (match: string) =>
   (db.prepare('SELECT rowid FROM items_fts WHERE items_fts MATCH ? ORDER BY rowid').all(match) as { rowid: number }[]).map((r) => r.rowid);
 
+const deFtsIds = (match: string) =>
+  (db.prepare('SELECT rowid FROM items_fts_de WHERE items_fts_de MATCH ? ORDER BY rowid').all(match) as { rowid: number }[]).map((r) => r.rowid);
+
 describe('Importer', () => {
   beforeEach(async () => {
     api = await startFakeGw2Api(fixtureItems());
@@ -90,6 +93,53 @@ describe('Importer', () => {
     // Dritter Lauf ohne Änderungen: nichts zu tun
     const third = await runImport(importer);
     assert.equal(changesOf(third.updateId!).length, 0);
+  });
+
+  it('speichert deutsche Texte in item_texts und im deutschen Index', async () => {
+    api.german.set(1, { name: 'Mini-Golem-Bausatz', description: 'Beschreibung des Bausatzes.' });
+    const status = await runImport(importer);
+    assert.equal(status.phase, 'done');
+    assert.equal(status.error, null);
+    const text = db.prepare(`SELECT name, description FROM item_texts WHERE item_id = 1 AND lang = 'de'`).get() as Record<string, string>;
+    assert.deepEqual({ ...text }, { name: 'Mini-Golem-Bausatz', description: 'Beschreibung des Bausatzes.' });
+    // Items ohne Übersetzung bekommen den englischen Text
+    const other = db.prepare(`SELECT name FROM item_texts WHERE item_id = 2`).get() as { name: string };
+    assert.equal(other.name, 'Banner of Strength');
+    assert.equal((db.prepare('SELECT COUNT(*) AS n FROM item_texts').get() as { n: number }).n, 7);
+    assert.deepEqual(deFtsIds('"bausatz"*'), [1]);
+    assert.ok(api.requests.some((r) => r.includes('lang=de')));
+  });
+
+  it('reine Übersetzungsänderung erzeugt keine item_change, der deutsche Text wird aktualisiert', async () => {
+    api.german.set(1, { name: 'Mini-Golem-Bausatz' });
+    await runImport(importer);
+    api.german.set(1, { name: 'Mini-Golem-Set' });
+    const second = await runImport(importer);
+    assert.equal(changesOf(second.updateId!).length, 0);
+    const update = db.prepare('SELECT added, changed, removed FROM updates WHERE id = ?').get(second.updateId) as Record<string, number>;
+    assert.deepEqual({ ...update }, { added: 0, changed: 0, removed: 0 });
+    const text = db.prepare(`SELECT name FROM item_texts WHERE item_id = 1`).get() as { name: string };
+    assert.equal(text.name, 'Mini-Golem-Set');
+    assert.deepEqual(deFtsIds('"bausatz"*'), []);
+    assert.deepEqual(deFtsIds('"set"*'), [1]);
+  });
+
+  it('Fehler beim deutschen Teil: englische Daten bleiben, Update ist done mit Hinweis', async () => {
+    api.failGerman = true;
+    const status = await runImport(importer);
+    assert.equal(status.phase, 'done');
+    assert.match(status.error ?? '', /Deutsche Texte nicht vollständig/);
+    const update = db.prepare('SELECT status, error, added FROM updates WHERE id = ?').get(status.updateId) as Record<string, unknown>;
+    assert.equal(update.status, 'done');
+    assert.equal(update.added, 7);
+    assert.match(String(update.error), /Deutsche Texte/);
+    assert.equal((db.prepare('SELECT COUNT(*) AS n FROM item_texts').get() as { n: number }).n, 0);
+
+    // Das nächste Update holt die Texte nach und löscht den Hinweis.
+    api.failGerman = false;
+    const next = await runImport(importer);
+    assert.equal(next.error, null);
+    assert.equal((db.prepare('SELECT COUNT(*) AS n FROM item_texts').get() as { n: number }).n, 7);
   });
 
   it('wiederholt bei 429 und 5xx und kommt mit 206 Partial Content zurecht', async () => {

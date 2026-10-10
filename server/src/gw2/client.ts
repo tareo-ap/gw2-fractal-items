@@ -69,10 +69,10 @@ export class Gw2Client {
    * Details zu bis zu 200 IDs. Unbekannte IDs fehlen einfach in der Antwort
    * (HTTP 206 Partial Content); sind alle unbekannt, antwortet die API mit 404.
    */
-  async getItems(ids: number[]): Promise<Gw2Item[]> {
+  async getItems(ids: number[], lang: 'en' | 'de' = 'en'): Promise<Gw2Item[]> {
     if (ids.length === 0) return [];
     if (ids.length > IDS_PER_REQUEST) throw new Error(`Höchstens ${IDS_PER_REQUEST} IDs pro Request`);
-    const data = await this.getJson(`/v2/items?ids=${ids.join(',')}&lang=en`, { notFoundAsEmpty: true });
+    const data = await this.getJson(`/v2/items?ids=${ids.join(',')}&lang=${lang}`, { notFoundAsEmpty: true });
     if (!Array.isArray(data)) throw new Gw2ApiError('Unerwartete Antwort von /v2/items?ids=', null);
     return data.filter(
       (item): item is Gw2Item => typeof item === 'object' && item !== null && Number.isInteger(item.id),
