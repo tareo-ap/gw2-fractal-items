@@ -66,7 +66,7 @@ Ablauf nach einem Patch:
 1. Lokal aktualisieren (Button „Aktualisieren“) und Teststatus pflegen.
 2. `npm run export:static` schreibt die Daten nach `site-data/` (Ordner wird vorher geleert). Optional mit anderer Datei: `npm run export:static -- pfad/zur.db`. Die Datenbank wird nur lesend geöffnet, der Server darf weiterlaufen. Das Skript nennt Dateizahl und Gesamtgröße (Ziel unter ca. 15 MB unkomprimiert).
 3. `site-data/` committen und nach Forgejo pushen; der Push-Mirror bringt es nach GitHub.
-4. Die GitHub Action `.github/workflows/pages.yml` baut bei jedem Push auf `master` (oder manuell per „Run workflow“) mit `npm run build:pages` und veröffentlicht die Seite.
+4. Die GitHub Action `.github/workflows/pages.yml` baut bei jedem Push auf `main` (oder manuell per „Run workflow“) mit `npm run build:pages` und veröffentlicht die Seite.
 
 Einmalig auf GitHub: Settings → Pages → Source „GitHub Actions“.
 
