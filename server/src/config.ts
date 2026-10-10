@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { parseCheckSchedule } from './importer/checkSchedule.js';
 
 // Alle Einstellungen kommen aus Umgebungsvariablen, mit Defaults für die lokale Entwicklung.
 export const config = {
@@ -8,4 +9,7 @@ export const config = {
   // Gebautes Frontend. Nur in Produktion gesetzt; in der Entwicklung liefert Vite das Frontend aus.
   webDist: process.env.WEB_DIST ?? null,
   gw2ApiBase: process.env.GW2_API_BASE ?? 'https://api.guildwars2.com',
+  // Zeitplan der automatischen Build-Prüfung (UPDATE_CHECK=on); null = aus.
+  updateCheck: parseCheckSchedule(process.env),
 };
+

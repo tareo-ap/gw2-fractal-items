@@ -17,7 +17,8 @@ WORKDIR /app
 ENV NODE_ENV=production \
     PORT=3000 \
     DB_PATH=/data/gw2-items.db \
-    WEB_DIST=/app/web/dist
+    WEB_DIST=/app/web/dist \
+    UPDATE_CHECK=on
 COPY package.json package-lock.json ./
 COPY server/package.json server/
 COPY web/package.json web/

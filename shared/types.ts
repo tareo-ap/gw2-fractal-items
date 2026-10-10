@@ -15,6 +15,28 @@ export interface StatsResponse {
   candidates: { gizmo: number; consumable: number; tonic: number };
   germanTexts: number; // Anzahl Items mit deutschem Namen (item_texts, lang=de); 0 = noch kein Update mit Deutsch
   lastUpdate: UpdateSummary | null;
+  autoCheck: AutoCheckStatus | null; // null = Server hat keinen Watcher (UPDATE_CHECK nicht on)
+}
+
+/** Ergebnis der letzten automatischen Prüfung auf eine neue Game-Build. */
+export type AutoCheckResult = 'unchanged' | 'started' | 'running' | 'error' | 'noBaseline';
+
+/** Zeitplan des Auto-Checks: täglich um dailyAt, dazu im Patch-Fenster alle patchEveryMinutes (Ortszeit in timeZone). */
+export interface AutoCheckSchedule {
+  timeZone: string; // IANA, z. B. Europe/Berlin
+  dailyAt: string; // HH:MM
+  patchWindow: { day: 'Sun' | 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat'; start: string; end: string } | null;
+  patchEveryMinutes: number;
+}
+
+/** Zustand des automatischen Update-Checks (UPDATE_CHECK=on). */
+export interface AutoCheckStatus {
+  enabled: boolean;
+  schedule: AutoCheckSchedule;
+  lastCheckAt: string | null; // ISO-Zeitpunkt
+  lastSeenBuild: number | null;
+  lastResult: AutoCheckResult | null;
+  nextCheckAt: string | null; // ISO-Zeitpunkt
 }
 
 export interface UpdateSummary {

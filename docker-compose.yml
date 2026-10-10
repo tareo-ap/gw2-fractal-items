@@ -4,6 +4,14 @@ services:
     image: gw2-items:latest
     container_name: gw2-items
     restart: unless-stopped
+    environment:
+      # Automatische Prüfung auf neue Game-Builds (Image-Default on, off schaltet sie aus).
+      # Zeitplan, alles optional (Defaults wie gezeigt):
+      # UPDATE_CHECK: "on"
+      # UPDATE_CHECK_TZ: "Europe/Berlin"
+      # UPDATE_CHECK_DAILY_AT: "06:00"
+      # UPDATE_CHECK_PATCH_WINDOW: "Tue 17:00-19:00"
+      # UPDATE_CHECK_PATCH_EVERY_MINUTES: "30"
     ports:
       - "3000:3000"
     volumes:

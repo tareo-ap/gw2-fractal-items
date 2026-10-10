@@ -1,8 +1,31 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api';
-import { errorText, useT } from '../lib/i18n';
+import type { AutoCheckStatus } from '../../../shared/types';
+import { utcStamp } from '../lib/format';
+import { errorText, useT, type I18n } from '../lib/i18n';
 import { Link } from './common';
+
+const utc = (iso: string) => utcStamp(iso).replace('_', ' ');
+
+/** "Auto check: daily 06:00, Tue 17:00–19:00 every 30 min (Europe/Berlin) · next: … · last: …" */
+function describeAutoCheck(a: AutoCheckStatus, t: I18n['t']): string {
+  const { schedule: s } = a;
+  const tz = s.timeZone;
+  const parts = [
+    s.patchWindow
+      ? t('update.autoCheck', {
+          daily: s.dailyAt,
+          window: `${t(`autoCheck.day.${s.patchWindow.day}`)} ${s.patchWindow.start}–${s.patchWindow.end}`,
+          minutes: s.patchEveryMinutes,
+          tz,
+        })
+      : t('update.autoCheckDaily', { daily: s.dailyAt, tz }),
+  ];
+  if (a.nextCheckAt) parts.push(t('update.autoCheckNext', { time: utc(a.nextCheckAt) }));
+  if (a.lastCheckAt && a.lastResult) parts.push(t('update.autoCheckLast', { time: utc(a.lastCheckAt), result: t(`autoCheck.${a.lastResult}`) }));
+  return parts.join(' · ');
+}
 
 // Button "Aktualisieren": startet einen Import und pollt den Status, solange er läuft.
 export function UpdateButton() {
@@ -17,7 +40,12 @@ export function UpdateButton() {
     refetchInterval: (query) => (query.state.data?.running ? 1500 : false),
   });
 
+  // Zustand des Auto-Checks steckt in den Kennzahlen; alle 60 s neu laden, damit "zuletzt" aktuell bleibt.
+  const stats = useQuery({ queryKey: ['stats'], queryFn: api.stats, refetchInterval: 60_000 });
+  const autoCheck = stats.data?.autoCheck?.enabled ? stats.data.autoCheck : null;
+
   const running = status.data?.running ?? false;
+  const autoCheckText = autoCheck ? describeAutoCheck(autoCheck, t) : '';
 
   // Wechsel von "läuft" auf "fertig": Listen, Kennzahlen und Updates neu laden.
   useEffect(() => {
@@ -80,6 +108,11 @@ export function UpdateButton() {
       {!running && data?.phase === 'done' && data.error && <span className="small muted">{t('update.germanIncomplete')}</span>}
       {!running && data?.phase === 'failed' && (
         <span className="error small">{t('update.lastFailed', { error: data.error ?? t('update.unknownError') })}</span>
+      )}
+      {autoCheck && (
+        <span className="small muted">
+          {autoCheckText}
+        </span>
       )}
       {message && <span className="small muted">{message}</span>}
     </div>

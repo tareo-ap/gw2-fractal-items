@@ -15,6 +15,7 @@ import type {
   UpdateCompareResponse,
   UpdateDetail,
 } from '../../shared/types.js';
+import type { BuildWatcher } from './importer/buildWatcher.js';
 import { ImportAlreadyRunningError, type Importer } from './importer/importer.js';
 import {
   exportItems,
@@ -32,7 +33,7 @@ import {
 import { compareUpdates, deleteUpdate, getUpdate, getUpdateChanges, listUpdates, parseUpdateChangesQuery, toUpdateSummary, type UpdateRow } from './routes/updates.js';
 
 // Baut die Hono-App. Getrennt von index.ts, damit sie sich ohne laufenden Server testen lässt.
-export function createApp(db: DatabaseSync, webDist: string | null, importer: Importer): Hono {
+export function createApp(db: DatabaseSync, webDist: string | null, importer: Importer, watcher?: BuildWatcher): Hono {
   const app = new Hono();
 
   app.get('/api/health', (c) => c.json<HealthResponse>({ status: 'ok', version: '0.1.0' }));
@@ -52,6 +53,7 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
       },
       germanTexts: count(`SELECT COUNT(*) AS n FROM item_texts WHERE lang = 'de'`),
       lastUpdate: last ? toUpdateSummary(last) : null,
+      autoCheck: watcher?.getStatus() ?? null,
     });
   });
 

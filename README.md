@@ -66,3 +66,8 @@ Danach läuft die App auf http://localhost:3000. Die Datenbank liegt im Volume `
 | `DB_PATH` | `data/gw2-items.db` (Docker: `/data/gw2-items.db`) | SQLite-Datei |
 | `WEB_DIST` | leer (Docker: `/app/web/dist`) | Gebautes Frontend; leer = Server liefert nur die API |
 | `GW2_API_BASE` | `https://api.guildwars2.com` | Basis-URL der GW2-API |
+| `UPDATE_CHECK` | `off` (Docker-Image: `on`) | Automatische Prüfung auf eine neue Game-Build. Bei neuer Build-ID startet ein Update; solange es noch kein abgeschlossenes Update gibt (erster Vollimport), nie. Ungültige Werte der folgenden Variablen schalten die Prüfung aus |
+| `UPDATE_CHECK_TZ` | `Europe/Berlin` | Zeitzone für alle Zeiten des Zeitplans (IANA-Name, Sommer-/Winterzeit wird berücksichtigt) |
+| `UPDATE_CHECK_DAILY_AT` | `06:00` | Tägliche Prüfung (HH:MM) |
+| `UPDATE_CHECK_PATCH_WINDOW` | `Tue 17:00-19:00` | Patch-Fenster (Wochentag `Mon`…`Sun`, von-bis); neue Patches kommen meist dienstags abends. `off` = kein Fenster |
+| `UPDATE_CHECK_PATCH_EVERY_MINUTES` | `30` | Abstand der Prüfungen im Patch-Fenster (17:00, 17:30, … 19:00). Nach dem Start wird nicht sofort geprüft, sondern zum nächsten Termin |
