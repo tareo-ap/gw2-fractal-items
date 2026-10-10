@@ -117,6 +117,11 @@ export function toApiQuery(f: ListFilters): string {
   return p.toString();
 }
 
+/** URL für den Download der gefilterten Liste (alle Treffer, page/pageSize ignoriert der Server). */
+export function exportUrl(f: ListFilters, format: 'csv' | 'json'): string {
+  return `/api/items/export?${toApiQuery(f)}&format=${format}`;
+}
+
 /** Der Filter hideCommon wirkt nur in den Ansichten Consumables und Alle. */
 export function hasHideCommon(view: ItemView): boolean {
   return view === 'consumable' || view === 'all';

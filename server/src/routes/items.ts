@@ -166,7 +166,8 @@ export function toFtsQuery(input: string): string | null {
 // Abfragen
 // ---------------------------------------------------------------------------
 
-export function listItems(db: DatabaseSync, query: ParsedItemListQuery): ItemListResponse {
+/** WHERE-Klausel samt Parametern für die Filter der Liste (Aliase i und t). Gemeinsam für Liste und Export. */
+function buildWhere(query: ParsedItemListQuery): { whereSql: string; params: SQLInputValue[] } {
   const where: string[] = [];
   const params: SQLInputValue[] = [];
 
@@ -224,7 +225,11 @@ export function listItems(db: DatabaseSync, query: ParsedItemListQuery): ItemLis
   }
   if (!query.includeRemoved) where.push('i.removed = 0');
 
-  const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+  return { whereSql: where.length > 0 ? `WHERE ${where.join(' AND ')}` : '', params };
+}
+
+export function listItems(db: DatabaseSync, query: ParsedItemListQuery): ItemListResponse {
+  const { whereSql, params } = buildWhere(query);
   const { total } = db
     .prepare(`SELECT COUNT(*) AS total FROM items i LEFT JOIN item_tests t ON t.item_id = i.id ${whereSql}`)
     .get(...params) as { total: number };
@@ -239,6 +244,85 @@ export function listItems(db: DatabaseSync, query: ParsedItemListQuery): ItemLis
     .all(...params, query.pageSize, (query.page - 1) * query.pageSize) as unknown as ItemRow[];
 
   return { items: rows.map(toListItem), total, page: query.page, pageSize: query.pageSize };
+}
+
+/** Eine Zeile des Exports (Feldnamen wie in der CSV-Kopfzeile). */
+export interface ExportRow {
+  id: number;
+  name: string;
+  type: string;
+  subtype: string | null;
+  rarity: string;
+  level: number;
+  game_types: GameType[];
+  flags: string[];
+  is_candidate: boolean;
+  removed: boolean;
+  test_status: TestStatus;
+  test_note: string | null;
+  tested_at: string | null;
+  needs_retest: boolean;
+  chat_link: string | null;
+  wiki_url: string;
+  icon: string | null;
+}
+
+export const EXPORT_FIELDS: readonly (keyof ExportRow)[] = [
+  'id', 'name', 'type', 'subtype', 'rarity', 'level', 'game_types', 'flags', 'is_candidate', 'removed',
+  'test_status', 'test_note', 'tested_at', 'needs_retest', 'chat_link', 'wiki_url', 'icon',
+];
+
+/** Alle Treffer der Filter (ohne Paginierung) in der gewählten Sortierung, für den CSV/JSON-Export. */
+export function exportItems(db: DatabaseSync, query: ParsedItemListQuery): ExportRow[] {
+  const { whereSql, params } = buildWhere(query);
+  const direction = query.order === 'desc' ? 'DESC' : 'ASC';
+  const rows = db
+    .prepare(
+      `SELECT i.id, i.name, i.type, i.subtype, i.rarity, i.level, i.icon, i.game_types, i.flags, i.chat_link,
+              i.is_candidate, i.removed, t.status AS test_status, t.note AS test_note, t.tested_at,
+              ${NEEDS_RETEST_SQL} AS needs_retest
+       FROM items i LEFT JOIN item_tests t ON t.item_id = i.id ${whereSql}
+       ORDER BY ${SORT_SQL[query.sort]} ${direction}, i.id ${direction}`,
+    )
+    .all(...params) as unknown as (ItemRow & {
+    flags: string;
+    chat_link: string | null;
+    test_note: string | null;
+    tested_at: string | null;
+  })[];
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    type: row.type,
+    subtype: row.subtype,
+    rarity: row.rarity,
+    level: row.level,
+    game_types: JSON.parse(row.game_types) as GameType[],
+    flags: JSON.parse(row.flags) as string[],
+    is_candidate: row.is_candidate === 1,
+    removed: row.removed === 1,
+    test_status: (row.test_status as TestStatus | null) ?? 'untested',
+    test_note: row.test_note,
+    tested_at: row.tested_at,
+    needs_retest: row.needs_retest === 1,
+    chat_link: row.chat_link,
+    wiki_url: `https://wiki.guildwars2.com/wiki/Special:Search/${encodeURIComponent(row.name)}`,
+    icon: row.icon,
+  }));
+}
+
+/**
+ * CSV für deutsches Excel: Semikolon, CRLF, UTF-8 mit BOM. Arrays werden mit "|" verbunden.
+ * Texte, die mit =, +, -, @ (oder Tab/CR) beginnen, bekommen ein ' vorangestellt (Formel-Injection).
+ */
+export function toCsv(rows: ExportRow[]): string {
+  const cell = (value: ExportRow[keyof ExportRow]): string => {
+    let text = value === null ? '' : Array.isArray(value) ? value.join('|') : String(value);
+    if ((typeof value === 'string' || Array.isArray(value)) && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+    return /[;"\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  const lines = [EXPORT_FIELDS.join(';'), ...rows.map((row) => EXPORT_FIELDS.map((f) => cell(row[f])).join(';'))];
+  return `﻿${lines.join('\r\n')}\r\n`;
 }
 
 export function getItemDetail(db: DatabaseSync, id: number): ItemDetail | null {

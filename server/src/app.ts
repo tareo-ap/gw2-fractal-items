@@ -16,12 +16,15 @@ import type {
 } from '../../shared/types.js';
 import { ImportAlreadyRunningError, type Importer } from './importer/importer.js';
 import {
+  exportItems,
   getItemDetail,
   TONIC_SQL,
   listItems,
+  oneOf,
   parseItemListQuery,
   parseItemTestUpdate,
   saveItemTest,
+  toCsv,
   ValidationError,
 } from './routes/items.js';
 import { getUpdate, getUpdateChanges, listUpdates, parseUpdateChangesQuery, toUpdateSummary, type UpdateRow } from './routes/updates.js';
@@ -52,6 +55,19 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
   // --- Items ---------------------------------------------------------------
 
   app.get('/api/items', (c) => c.json<ItemListResponse>(listItems(db, parseItemListQuery(c.req.query()))));
+
+  // Muss vor /api/items/:id stehen. Exportiert alle Treffer der Filter, page/pageSize werden ignoriert.
+  app.get('/api/items/export', (c) => {
+    const params = c.req.query();
+    const format = oneOf('format', params.format, ['csv', 'json'] as const);
+    if (!format) throw new ValidationError('format muss einer dieser Werte sein: csv, json');
+    const query = parseItemListQuery(params);
+    const rows = exportItems(db, query);
+    const filename = `gw2-items-${query.view}-${new Date().toISOString().slice(0, 10)}.${format}`;
+    const headers = { 'Content-Disposition': `attachment; filename="${filename}"` };
+    if (format === 'json') return c.body(JSON.stringify(rows, null, 2), 200, { ...headers, 'Content-Type': 'application/json' });
+    return c.body(toCsv(rows), 200, { ...headers, 'Content-Type': 'text/csv; charset=utf-8' });
+  });
 
   app.get('/api/items/:id', (c) => {
     const item = getItemDetail(db, parseId(c.req.param('id')));

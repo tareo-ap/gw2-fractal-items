@@ -292,6 +292,69 @@ describe('Teststatus und Updates', () => {
   });
 });
 
+// Läuft nach "Teststatus und Updates": Item 1 und 2 sind dann getestet (broken), Item 3 ist entfernt.
+describe('GET /api/items/export', () => {
+  const exportJson = async (query: string) => {
+    const res = await app.request(`/api/items/export?${query}`);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type'), 'application/json');
+    assert.match(res.headers.get('content-disposition') ?? '', /^attachment; filename="gw2-items-[a-z]+-\d{4}-\d{2}-\d{2}\.json"$/);
+    return (await res.json()) as Record<string, unknown>[];
+  };
+
+  it('JSON: alle Treffer ohne Paginierung, echte Typen', async () => {
+    const rows = await exportJson('format=json&view=all&candidate=all&sort=id&pageSize=1&page=2');
+    assert.deepEqual(rows.map((r) => r.id), [1, 2, 6, 8778]);
+    const kit = rows[0]!;
+    assert.deepEqual(kit.game_types, ['Pve', 'Wvw']);
+    assert.deepEqual(kit.flags, ['NoSell']);
+    assert.equal(kit.is_candidate, false);
+    assert.equal(kit.removed, false);
+    assert.equal(kit.needs_retest, false);
+    assert.equal(kit.test_status, 'broken');
+    assert.equal(kit.test_note, null);
+    assert.equal(typeof kit.tested_at, 'string');
+    assert.equal(kit.chat_link, chatLinkFor(1));
+    assert.equal(kit.wiki_url, 'https://wiki.guildwars2.com/wiki/Special:Search/Mini%20Golem%20Kit');
+    assert.deepEqual(Object.keys(kit), [
+      'id', 'name', 'type', 'subtype', 'rarity', 'level', 'game_types', 'flags', 'is_candidate', 'removed',
+      'test_status', 'test_note', 'tested_at', 'needs_retest', 'chat_link', 'wiki_url', 'icon',
+    ]);
+  });
+
+  it('JSON: respektiert view, testStatus und Sortierung', async () => {
+    const consumables = await exportJson('format=json&view=consumable&hideCommon=false&sort=id&order=desc');
+    assert.deepEqual(consumables.map((r) => r.id), [8778, 5, 4]);
+    const broken = await exportJson('format=json&view=all&candidate=all&testStatus=broken&sort=id');
+    assert.deepEqual(broken.map((r) => r.id), [1, 2]);
+  });
+
+  it('CSV: BOM, Semikolon, Kopfzeile, Quoting und Formel-Absicherung', async () => {
+    await putTest(8778, { status: 'works', note: 'a;b "c"\nzweite Zeile' });
+    await putTest(6, { status: 'works', note: '=1+1' });
+    const res = await app.request('/api/items/export?format=csv&view=all&candidate=all&testStatus=works&sort=id');
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type'), 'text/csv; charset=utf-8');
+    assert.match(res.headers.get('content-disposition') ?? '', /^attachment; filename="gw2-items-all-\d{4}-\d{2}-\d{2}\.csv"$/);
+    // text() würde das BOM verschlucken, daher die Rohbytes prüfen
+    const bytes = Buffer.from(await res.arrayBuffer());
+    assert.deepEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
+    const body = bytes.subarray(3).toString('utf8');
+    const header = 'id;name;type;subtype;rarity;level;game_types;flags;is_candidate;removed;test_status;test_note;tested_at;needs_retest;chat_link;wiki_url;icon';
+    assert.ok(body.startsWith(`${header}\r\n`));
+    assert.ok(body.endsWith('\r\n'));
+    assert.ok(body.includes(';"a;b ""c""\nzweite Zeile";'));
+    assert.ok(body.includes(";'=1+1;"));
+    assert.ok(body.includes(';false;false;works;'));
+  });
+
+  it('ungültiges oder fehlendes format → 400', async () => {
+    await getJson('/api/items/export?format=xml', 400);
+    await getJson('/api/items/export', 400);
+    await getJson('/api/items/export?format=csv&view=foo', 400);
+  });
+});
+
 describe('GET /api/updates/:id/changes (zweite Importrunde)', () => {
   let chApi: FakeGw2Api;
   let chApp: Hono;

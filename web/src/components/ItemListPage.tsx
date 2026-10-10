@@ -3,7 +3,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type { ItemListItem } from '../../../shared/types';
 import { api } from '../api';
 import { formatNumber, rarityClass } from '../lib/format';
-import { PAGE_SIZE, toApiQuery, type ListFilters } from '../lib/filters';
+import { PAGE_SIZE, exportUrl, toApiQuery, type ListFilters } from '../lib/filters';
 import { ErrorBox, GameTypeBadges, ItemIcon, Link, Loading, TestBadge } from './common';
 import { FilterBar, type FilterChange } from './FilterBar';
 
@@ -50,6 +50,16 @@ export function ItemListPage({ filters, onChange }: { filters: ListFilters; onCh
         <span className="muted" aria-live="polite">
           {data ? `${formatNumber(data.total)} Items` : items.isPending ? 'Lade …' : ''}
           {items.isFetching && data && ' · aktualisiere …'}
+        </span>
+        <span className="small muted">
+          Export:{' '}
+          <a href={exportUrl(filters, 'csv')} download title="Aktuelle Liste mit allen Treffern exportieren">
+            CSV
+          </a>
+          {' · '}
+          <a href={exportUrl(filters, 'json')} download title="Aktuelle Liste mit allen Treffern exportieren">
+            JSON
+          </a>
         </span>
         <div className="segmented" role="group" aria-label="Darstellung">
           <button type="button" className={layout === 'table' ? 'active' : ''} aria-pressed={layout === 'table'} onClick={() => changeLayout('table')}>

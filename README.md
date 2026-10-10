@@ -35,6 +35,8 @@ Beim Start schreibt der Server Port und Datenbankpfad ins Log. Ist der Port bele
 Die Daten kommen über den Button „Aktualisieren“: Der erste Lauf lädt alle Items aus der GW2-API
 (mehrere hundert Requests, gedrosselt auf 5 pro Sekunde), spätere Läufe vergleichen mit dem Cache.
 
+Die aktuell gefilterte Liste (alle Treffer, mit Kandidaten und Testergebnissen) lässt sich über die Links „CSV“ und „JSON“ neben der Trefferanzahl herunterladen; die CSV ist für deutsches Excel gedacht (Semikolon, UTF-8 mit BOM).
+
 Die Datenbank landet in der Entwicklung unter `data/gw2-items.db` (per `.gitignore` ausgeschlossen).
 
 ## Docker
