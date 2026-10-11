@@ -1,0 +1,7 @@
+# Generated files: formatting them would only produce huge diffs.
+site-data/
+package-lock.json
+dist/
+data/
+docs/
+sources/
