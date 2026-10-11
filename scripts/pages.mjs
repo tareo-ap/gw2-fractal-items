@@ -14,31 +14,32 @@ const dist = path.join(root, 'web', 'dist');
 const env = { ...process.env, VITE_DATA_MODE: 'static', VITE_BASE: process.env.VITE_BASE ?? '/gw2-fractal-items/' };
 
 function run(command) {
-  // A single command string with shell: npm is a .cmd file on Windows.
-  const result = spawnSync(command, { cwd: root, env, stdio: 'inherit', shell: true });
-  if (result.status !== 0) process.exit(result.status ?? 1);
+    // A single command string with shell: npm is a .cmd file on Windows.
+    const result = spawnSync(command, { cwd: root, env, stdio: 'inherit', shell: true });
+    if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
 function fail(message) {
-  console.error(message);
-  process.exit(1);
+    console.error(message);
+    process.exit(1);
 }
 
 const mode = process.argv[2];
 
 if (mode === 'build') {
-  if (!fs.existsSync(path.join(siteData, 'meta.json'))) {
-    fail('site-data/ is missing or empty. Run "npm run export:static" first and commit the result.');
-  }
-  run('npm run build --workspace web');
-  fs.cpSync(siteData, path.join(dist, 'data'), { recursive: true });
-  // GitHub Pages serves 404.html for unknown paths. As a copy of index.html it starts the app there
-  // and reads the path from the URL: reload and deep links like /gw2_items/items/123 work.
-  fs.copyFileSync(path.join(dist, 'index.html'), path.join(dist, '404.html'));
-  console.log(`Pages build done: ${dist} (base ${env.VITE_BASE}). Preview: npm run preview:pages`);
+    if (!fs.existsSync(path.join(siteData, 'meta.json'))) {
+        fail('site-data/ is missing or empty. Run "npm run export:static" first and commit the result.');
+    }
+    run('npm run build --workspace web');
+    fs.cpSync(siteData, path.join(dist, 'data'), { recursive: true });
+    // GitHub Pages serves 404.html for unknown paths. As a copy of index.html it starts the app there
+    // and reads the path from the URL: reload and deep links like /gw2_items/items/123 work.
+    fs.copyFileSync(path.join(dist, 'index.html'), path.join(dist, '404.html'));
+    console.log(`Pages build done: ${dist} (base ${env.VITE_BASE}). Preview: npm run preview:pages`);
 } else if (mode === 'preview') {
-  if (!fs.existsSync(path.join(dist, 'data', 'meta.json'))) fail('No Pages build found. Run "npm run build:pages" first.');
-  run('npm run preview --workspace web');
+    if (!fs.existsSync(path.join(dist, 'data', 'meta.json')))
+        fail('No Pages build found. Run "npm run build:pages" first.');
+    run('npm run preview --workspace web');
 } else {
-  fail('Usage: node scripts/pages.mjs build|preview');
+    fail('Usage: node scripts/pages.mjs build|preview');
 }

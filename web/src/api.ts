@@ -1,14 +1,14 @@
 import type {
-  ImportStatus,
-  ItemDetail,
-  ItemListResponse,
-  ItemTestUpdate,
-  Lang,
-  StatsResponse,
-  UpdateChangesResponse,
-  UpdateCompareResponse,
-  UpdateDetail,
-  UpdateSummary,
+    ImportStatus,
+    ItemDetail,
+    ItemListResponse,
+    ItemTestUpdate,
+    Lang,
+    StatsResponse,
+    UpdateChangesResponse,
+    UpdateCompareResponse,
+    UpdateDetail,
+    UpdateSummary,
 } from '../../shared/types';
 import { ApiError } from './lib/apiError';
 import { staticApi } from './lib/staticApi';
@@ -19,48 +19,50 @@ export { ApiError };
  * Entry from GET /api/updates. By contract UpdateSummary; if the server also
  * returns the fields from UpdateDetail, the UI displays them.
  */
-export type UpdateListEntry = UpdateSummary & Partial<Pick<UpdateDetail, 'status' | 'dungeonGained' | 'dungeonLost' | 'deletable' | 'deleteBlockedReason'>>;
+export type UpdateListEntry = UpdateSummary &
+    Partial<Pick<UpdateDetail, 'status' | 'dungeonGained' | 'dungeonLost' | 'deletable' | 'deleteBlockedReason'>>;
 
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method,
-      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-  } catch {
-    throw new ApiError('Backend unreachable', 0);
-  }
-  if (!res.ok) {
-    // The server returns errors as { error: "…" }; otherwise the status code is enough.
-    let message = `HTTP ${res.status}`;
+    let res: Response;
     try {
-      const data = (await res.json()) as { error?: unknown };
-      if (typeof data.error === 'string') message = data.error;
+        res = await fetch(url, {
+            method,
+            headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+            body: body === undefined ? undefined : JSON.stringify(body),
+        });
     } catch {
-      /* not JSON */
+        throw new ApiError('Backend unreachable', 0);
     }
-    throw new ApiError(message, res.status);
-  }
-  if (res.status === 204) return undefined as T;
-  const text = await res.text();
-  return (text ? JSON.parse(text) : undefined) as T;
+    if (!res.ok) {
+        // The server returns errors as { error: "…" }; otherwise the status code is enough.
+        let message = `HTTP ${res.status}`;
+        try {
+            const data = (await res.json()) as { error?: unknown };
+            if (typeof data.error === 'string') message = data.error;
+        } catch {
+            /* not JSON */
+        }
+        throw new ApiError(message, res.status);
+    }
+    if (res.status === 204) return undefined as T;
+    const text = await res.text();
+    return (text ? JSON.parse(text) : undefined) as T;
 }
 
 const restApi = {
-  stats: () => request<StatsResponse>('GET', '/api/stats'),
-  items: (queryString: string, lang: Lang) => request<ItemListResponse>('GET', `/api/items?${queryString}&lang=${lang}`),
-  item: (id: number, lang: Lang) => request<ItemDetail>('GET', `/api/items/${id}?lang=${lang}`),
-  setTest: (id: number, update: ItemTestUpdate) => request<unknown>('PUT', `/api/items/${id}/test`, update),
-  updates: () => request<UpdateListEntry[]>('GET', '/api/updates'),
-  updateChanges: (id: number, queryString: string, lang: Lang) =>
-    request<UpdateChangesResponse>('GET', `/api/updates/${id}/changes?${queryString}&lang=${lang}`),
-  compareUpdates: (from: number, to: number, queryString: string, lang: Lang) =>
-    request<UpdateCompareResponse>('GET', `/api/updates/compare?from=${from}&to=${to}&${queryString}&lang=${lang}`),
-  importStatus: () => request<ImportStatus>('GET', '/api/updates/status'),
-  deleteUpdate: (id: number) => request<void>('DELETE', `/api/updates/${id}`),
-  startUpdate: () => request<unknown>('POST', '/api/updates'),
+    stats: () => request<StatsResponse>('GET', '/api/stats'),
+    items: (queryString: string, lang: Lang) =>
+        request<ItemListResponse>('GET', `/api/items?${queryString}&lang=${lang}`),
+    item: (id: number, lang: Lang) => request<ItemDetail>('GET', `/api/items/${id}?lang=${lang}`),
+    setTest: (id: number, update: ItemTestUpdate) => request<unknown>('PUT', `/api/items/${id}/test`, update),
+    updates: () => request<UpdateListEntry[]>('GET', '/api/updates'),
+    updateChanges: (id: number, queryString: string, lang: Lang) =>
+        request<UpdateChangesResponse>('GET', `/api/updates/${id}/changes?${queryString}&lang=${lang}`),
+    compareUpdates: (from: number, to: number, queryString: string, lang: Lang) =>
+        request<UpdateCompareResponse>('GET', `/api/updates/compare?from=${from}&to=${to}&${queryString}&lang=${lang}`),
+    importStatus: () => request<ImportStatus>('GET', '/api/updates/status'),
+    deleteUpdate: (id: number) => request<void>('DELETE', `/api/updates/${id}`),
+    startUpdate: () => request<unknown>('POST', '/api/updates'),
 };
 
 /**

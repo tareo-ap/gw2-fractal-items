@@ -13,7 +13,7 @@ services:
       # UPDATE_CHECK_PATCH_WINDOW: "Tue 17:00-19:00"
       # UPDATE_CHECK_PATCH_EVERY_MINUTES: "30"
     ports:
-      - "3000:3000"
+      - '3000:3000'
     volumes:
       - gw2-items-data:/data
 

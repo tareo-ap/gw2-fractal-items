@@ -7,10 +7,10 @@ const trimmed = (process.env.VITE_BASE ?? '/').replace(/^\/+|\/+$/g, '');
 const base = trimmed ? `/${trimmed}/` : '/';
 
 export default defineConfig({
-  base,
-  plugins: [react()],
-  server: {
-    // In development Vite forwards API calls to the Node server.
-    proxy: { '/api': 'http://localhost:3000' },
-  },
+    base,
+    plugins: [react()],
+    server: {
+        // In development Vite forwards API calls to the Node server.
+        proxy: { '/api': 'http://localhost:3000' },
+    },
 });

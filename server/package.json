@@ -1,24 +1,24 @@
 {
-  "name": "@gw2-items/server",
-  "private": true,
-  "version": "0.1.0",
-  "type": "module",
-  "scripts": {
-    "dev": "node --watch --import tsx src/index.ts",
-    "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --import tsx --test \"src/**/*.test.ts\"",
-    "db:import": "node --import tsx src/cli/importDb.ts",
-    "start": "node dist/server/src/index.js",
-    "export:static": "node --import tsx src/cli/exportStatic.ts"
-  },
-  "dependencies": {
-    "@hono/node-server": "^2.1.4",
-    "hono": "^4.13.13"
-  },
-  "devDependencies": {
-    "@types/node": "^24.0.0",
-    "tsx": "^4.23.15",
-    "typescript": "~5.9.3"
-  }
+    "name": "@gw2-items/server",
+    "private": true,
+    "version": "0.1.0",
+    "type": "module",
+    "scripts": {
+        "dev": "node --watch --import tsx src/index.ts",
+        "build": "tsc -p tsconfig.build.json",
+        "typecheck": "tsc -p tsconfig.json --noEmit",
+        "test": "node --import tsx --test \"src/**/*.test.ts\"",
+        "db:import": "node --import tsx src/cli/importDb.ts",
+        "start": "node dist/server/src/index.js",
+        "export:static": "node --import tsx src/cli/exportStatic.ts"
+    },
+    "dependencies": {
+        "@hono/node-server": "^2.1.4",
+        "hono": "^4.13.13"
+    },
+    "devDependencies": {
+        "@types/node": "^24.0.0",
+        "tsx": "^4.23.15",
+        "typescript": "~5.9.3"
+    }
 }

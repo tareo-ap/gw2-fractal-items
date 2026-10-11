@@ -4,151 +4,151 @@
 // No browser or Node dependencies so a test can compare both sides.
 
 import type {
-  ItemChange,
-  ItemDetail,
-  ItemListItem,
-  ItemListResponse,
-  Lang,
-  Rarity,
-  StatsResponse,
-  TestStatus,
-  UpdateChangeEntry,
-  UpdateChangesResponse,
-  UpdateCompareResponse,
-  UpdateDetail,
+    ItemChange,
+    ItemDetail,
+    ItemListItem,
+    ItemListResponse,
+    Lang,
+    Rarity,
+    StatsResponse,
+    TestStatus,
+    UpdateChangeEntry,
+    UpdateChangesResponse,
+    UpdateCompareResponse,
+    UpdateDetail,
 } from './types.js';
 import type { ExportRow } from './exportFormat.js';
 import type { ParsedItemListQuery, ParsedUpdateChangesQuery } from './params.js';
 import {
-  RARITIES,
-  chatLinkForId,
-  compareNoCase,
-  asciiLower,
-  hideCommonApplies,
-  isCommonConsumable,
-  isPlaceholder,
-  isTonic,
-  itemIdFromChatLink,
-  ICON_PREFIX,
-  wikiUrl,
+    RARITIES,
+    chatLinkForId,
+    compareNoCase,
+    asciiLower,
+    hideCommonApplies,
+    isCommonConsumable,
+    isPlaceholder,
+    isTonic,
+    itemIdFromChatLink,
+    ICON_PREFIX,
+    wikiUrl,
 } from './rules.js';
 import {
-  aggregateRange,
-  compareChangeEntries,
-  countChangeRows,
-  matchesFocus,
-  selectNetChanges,
-  type RangeChange,
+    aggregateRange,
+    compareChangeEntries,
+    countChangeRows,
+    matchesFocus,
+    selectNetChanges,
+    type RangeChange,
 } from './changes.js';
 import type { StaticChange, StaticItem, StaticMeta, StaticUpdate } from './staticTypes.js';
 import { DETAIL_BLOCK_SIZE } from './staticTypes.js';
 
 /** Content of meta.json, items.json, updates.json and changes.json. */
 export interface StaticFiles {
-  meta: StaticMeta;
-  items: StaticItem[];
-  updates: StaticUpdate[];
-  changes: StaticChange[];
+    meta: StaticMeta;
+    items: StaticItem[];
+    updates: StaticUpdate[];
+    changes: StaticChange[];
 }
 
 /** Item with precomputed values so filtering and sorting stay fast in the browser. */
 export interface PreparedItem {
-  src: StaticItem;
-  id: number;
-  nameEn: string;
-  nameDe: string | null; // non-empty; null = use the English name
-  hasDe: boolean; // there is a row in item_texts
-  descriptionEn: string | null;
-  descriptionDe: string | null;
-  subtype: string | null;
-  icon: string | null;
-  flags: string[];
-  testStatus: TestStatus;
-  needsRetest: boolean;
-  placeholder: boolean;
-  tonic: boolean;
-  common: boolean;
-  rarityRank: number;
-  chatLink: string | null;
-  /** Words for the full-text search per column [name, description], computed on the first search. */
-  tokensEn?: string[][];
-  tokensDe?: string[][];
+    src: StaticItem;
+    id: number;
+    nameEn: string;
+    nameDe: string | null; // non-empty; null = use the English name
+    hasDe: boolean; // there is a row in item_texts
+    descriptionEn: string | null;
+    descriptionDe: string | null;
+    subtype: string | null;
+    icon: string | null;
+    flags: string[];
+    testStatus: TestStatus;
+    needsRetest: boolean;
+    placeholder: boolean;
+    tonic: boolean;
+    common: boolean;
+    rarityRank: number;
+    chatLink: string | null;
+    /** Words for the full-text search per column [name, description], computed on the first search. */
+    tokensEn?: string[][];
+    tokensDe?: string[][];
 }
 
 export interface StaticDataset {
-  meta: StaticMeta;
-  items: PreparedItem[]; // sorted by ID
-  byId: Map<number, PreparedItem>;
-  indexById: Map<number, number>; // position in items, determines the block in details/<n>.json
-  updates: StaticUpdate[]; // newest first
-  updatesById: Map<number, StaticUpdate>;
-  baselineId: number | null; // first completed state (full import), whose changes are not exported
-  changes: StaticChange[]; // sorted by itemId, then updateId
-  changesByUpdate: Map<number, StaticChange[]>;
-  summaries: Map<number, Record<string, unknown>>; // item -> summarize() of the API response (from added/removed entries)
+    meta: StaticMeta;
+    items: PreparedItem[]; // sorted by ID
+    byId: Map<number, PreparedItem>;
+    indexById: Map<number, number>; // position in items, determines the block in details/<n>.json
+    updates: StaticUpdate[]; // newest first
+    updatesById: Map<number, StaticUpdate>;
+    baselineId: number | null; // first completed state (full import), whose changes are not exported
+    changes: StaticChange[]; // sorted by itemId, then updateId
+    changesByUpdate: Map<number, StaticChange[]>;
+    summaries: Map<number, Record<string, unknown>>; // item -> summarize() of the API response (from added/removed entries)
 }
 
 export function prepareDataset(files: StaticFiles): StaticDataset {
-  const items = [...files.items].sort((a, b) => a.id - b.id).map(prepareItem);
-  const changes = [...files.changes].sort((a, b) => a.itemId - b.itemId || a.updateId - b.updateId);
-  const changesByUpdate = new Map<number, StaticChange[]>();
-  const summaries = new Map<number, Record<string, unknown>>();
-  for (const change of changes) {
-    let list = changesByUpdate.get(change.updateId);
-    if (!list) changesByUpdate.set(change.updateId, (list = []));
-    list.push(change);
-    if (change.summary && !summaries.has(change.itemId)) summaries.set(change.itemId, change.summary);
-  }
-  const updates = [...files.updates].sort((a, b) => b.id - a.id);
-  return {
-    meta: files.meta,
-    items,
-    byId: new Map(items.map((item) => [item.id, item])),
-    indexById: new Map(items.map((item, index) => [item.id, index])),
-    updates,
-    updatesById: new Map(updates.map((u) => [u.id, u])),
-    baselineId: updates.length > 0 ? updates[updates.length - 1]!.id : null,
-    changes,
-    changesByUpdate,
-    summaries,
-  };
+    const items = [...files.items].sort((a, b) => a.id - b.id).map(prepareItem);
+    const changes = [...files.changes].sort((a, b) => a.itemId - b.itemId || a.updateId - b.updateId);
+    const changesByUpdate = new Map<number, StaticChange[]>();
+    const summaries = new Map<number, Record<string, unknown>>();
+    for (const change of changes) {
+        let list = changesByUpdate.get(change.updateId);
+        if (!list) changesByUpdate.set(change.updateId, (list = []));
+        list.push(change);
+        if (change.summary && !summaries.has(change.itemId)) summaries.set(change.itemId, change.summary);
+    }
+    const updates = [...files.updates].sort((a, b) => b.id - a.id);
+    return {
+        meta: files.meta,
+        items,
+        byId: new Map(items.map((item) => [item.id, item])),
+        indexById: new Map(items.map((item, index) => [item.id, index])),
+        updates,
+        updatesById: new Map(updates.map((u) => [u.id, u])),
+        baselineId: updates.length > 0 ? updates[updates.length - 1]!.id : null,
+        changes,
+        changesByUpdate,
+        summaries,
+    };
 }
 
 function prepareItem(src: StaticItem): PreparedItem {
-  const flags = src.flags ?? [];
-  const subtype = src.subtype ?? null;
-  const icon = src.icon === undefined ? null : src.icon.startsWith('http') ? src.icon : ICON_PREFIX + src.icon;
-  const rule = { name: src.name, type: src.type, subtype, icon, flags };
-  return {
-    src,
-    id: src.id,
-    nameEn: src.name,
-    nameDe: src.de?.name ? src.de.name : null,
-    hasDe: src.de !== undefined,
-    descriptionEn: src.description ?? null,
-    descriptionDe: src.de?.description ?? null,
-    subtype,
-    icon,
-    flags,
-    testStatus: src.test?.status ?? 'untested',
-    needsRetest: src.needsRetest === true,
-    placeholder: isPlaceholder(rule),
-    tonic: isTonic(rule),
-    common: isCommonConsumable(rule),
-    rarityRank: rarityRank(src.rarity),
-    chatLink: src.chatLink === undefined ? chatLinkForId(src.id) : src.chatLink || null,
-  };
+    const flags = src.flags ?? [];
+    const subtype = src.subtype ?? null;
+    const icon = src.icon === undefined ? null : src.icon.startsWith('http') ? src.icon : ICON_PREFIX + src.icon;
+    const rule = { name: src.name, type: src.type, subtype, icon, flags };
+    return {
+        src,
+        id: src.id,
+        nameEn: src.name,
+        nameDe: src.de?.name ? src.de.name : null,
+        hasDe: src.de !== undefined,
+        descriptionEn: src.description ?? null,
+        descriptionDe: src.de?.description ?? null,
+        subtype,
+        icon,
+        flags,
+        testStatus: src.test?.status ?? 'untested',
+        needsRetest: src.needsRetest === true,
+        placeholder: isPlaceholder(rule),
+        tonic: isTonic(rule),
+        common: isCommonConsumable(rule),
+        rarityRank: rarityRank(src.rarity),
+        chatLink: src.chatLink === undefined ? chatLinkForId(src.id) : src.chatLink || null,
+    };
 }
 
 function rarityRank(rarity: string): number {
-  const index = (RARITIES as readonly string[]).indexOf(rarity);
-  return index < 0 ? 99 : index;
+    const index = (RARITIES as readonly string[]).indexOf(rarity);
+    return index < 0 ? 99 : index;
 }
 
 /** Name in the view's language, falling back to English (like COALESCE(NULLIF(d.name, ''), i.name)). */
 const nameOf = (item: PreparedItem, lang: Lang): string => (lang === 'de' && item.nameDe ? item.nameDe : item.nameEn);
 const descriptionOf = (item: PreparedItem, lang: Lang): string | null =>
-  lang === 'de' && item.hasDe ? item.descriptionDe : item.descriptionEn;
+    lang === 'de' && item.hasDe ? item.descriptionDe : item.descriptionEn;
 
 // ---------------------------------------------------------------------------
 // Full-text search (reproduces FTS5 with the unicode61 tokenizer)
@@ -159,7 +159,13 @@ const descriptionOf = (item: PreparedItem, lang: Lang): string | null =>
  * everything else separates; case and accents (ä -> a) do not matter.
  */
 export function tokenize(text: string): string[] {
-  return text.normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase().match(/[\p{L}\p{N}\p{Co}]+/gu) ?? [];
+    return (
+        text
+            .normalize('NFD')
+            .replace(/\p{M}+/gu, '')
+            .toLowerCase()
+            .match(/[\p{L}\p{N}\p{Co}]+/gu) ?? []
+    );
 }
 
 /**
@@ -167,34 +173,34 @@ export function tokenize(text: string): string[] {
  * All words must occur. Empty list = no restriction.
  */
 export function searchPhrases(input: string): string[][] {
-  return input
-    .split(/\s+/)
-    .map((term) => term.replace(/"/g, ''))
-    .filter((term) => /[\p{L}\p{N}]/u.test(term))
-    .map(tokenize)
-    .filter((tokens) => tokens.length > 0);
+    return input
+        .split(/\s+/)
+        .map((term) => term.replace(/"/g, ''))
+        .filter((term) => /[\p{L}\p{N}]/u.test(term))
+        .map(tokenize)
+        .filter((tokens) => tokens.length > 0);
 }
 
 function phraseMatches(tokens: string[], phrase: string[]): boolean {
-  const last = phrase.length - 1;
-  outer: for (let i = 0; i + last < tokens.length; i++) {
-    for (let k = 0; k < last; k++) if (tokens[i + k] !== phrase[k]) continue outer;
-    if (tokens[i + last]!.startsWith(phrase[last]!)) return true;
-  }
-  return false;
+    const last = phrase.length - 1;
+    outer: for (let i = 0; i + last < tokens.length; i++) {
+        for (let k = 0; k < last; k++) if (tokens[i + k] !== phrase[k]) continue outer;
+        if (tokens[i + last]!.startsWith(phrase[last]!)) return true;
+    }
+    return false;
 }
 
 /** All phrases occur (each in name or description). */
 const allPhrasesMatch = (columns: string[][], phrases: string[][]): boolean =>
-  phrases.every((phrase) => columns.some((tokens) => phraseMatches(tokens, phrase)));
+    phrases.every((phrase) => columns.some((tokens) => phraseMatches(tokens, phrase)));
 
 function tokensEn(item: PreparedItem): string[][] {
-  return (item.tokensEn ??= [tokenize(item.nameEn), tokenize(item.descriptionEn ?? '')]);
+    return (item.tokensEn ??= [tokenize(item.nameEn), tokenize(item.descriptionEn ?? '')]);
 }
 
 function tokensDe(item: PreparedItem): string[][] | null {
-  if (!item.hasDe) return null;
-  return (item.tokensDe ??= [tokenize(item.src.de?.name ?? ''), tokenize(item.descriptionDe ?? '')]);
+    if (!item.hasDe) return null;
+    return (item.tokensDe ??= [tokenize(item.src.de?.name ?? ''), tokenize(item.descriptionDe ?? '')]);
 }
 
 // ---------------------------------------------------------------------------
@@ -203,200 +209,217 @@ function tokensDe(item: PreparedItem): string[][] | null {
 
 /** List filter, prepared once. */
 function compileFilter(ds: StaticDataset, query: ParsedItemListQuery): (item: PreparedItem) => boolean {
-  const q = query.q;
-  const phrases = q && !/^\d+$/.test(q) && !q.startsWith('[&') ? searchPhrases(q) : [];
-  const idQuery = q && /^\d+$/.test(q) ? Number(q) : null;
-  const chatQuery = q && q.startsWith('[&') ? { link: q, id: itemIdFromChatLink(q) ?? -1 } : null;
-  const changed = query.updateId !== undefined ? new Set((ds.changesByUpdate.get(query.updateId) ?? []).map((c) => c.itemId)) : null;
-  const hideCommon = query.hideCommon && hideCommonApplies(query.view) && query.view !== 'tonic';
+    const q = query.q;
+    const phrases = q && !/^\d+$/.test(q) && !q.startsWith('[&') ? searchPhrases(q) : [];
+    const idQuery = q && /^\d+$/.test(q) ? Number(q) : null;
+    const chatQuery = q && q.startsWith('[&') ? { link: q, id: itemIdFromChatLink(q) ?? -1 } : null;
+    const changed =
+        query.updateId !== undefined
+            ? new Set((ds.changesByUpdate.get(query.updateId) ?? []).map((c) => c.itemId))
+            : null;
+    const hideCommon = query.hideCommon && hideCommonApplies(query.view) && query.view !== 'tonic';
 
-  return (item) => {
-    if (idQuery !== null) {
-      if (item.id !== idQuery) return false;
-    } else if (chatQuery) {
-      if (item.chatLink !== chatQuery.link && item.id !== chatQuery.id) return false;
-    } else if (phrases.length > 0) {
-      const de = query.lang === 'de' ? tokensDe(item) : null;
-      // German: a hit in the German or the English index is enough (proper names, chat terms).
-      if (!(de && allPhrasesMatch(de, phrases)) && !allPhrasesMatch(tokensEn(item), phrases)) return false;
-    }
+    return (item) => {
+        if (idQuery !== null) {
+            if (item.id !== idQuery) return false;
+        } else if (chatQuery) {
+            if (item.chatLink !== chatQuery.link && item.id !== chatQuery.id) return false;
+        } else if (phrases.length > 0) {
+            const de = query.lang === 'de' ? tokensDe(item) : null;
+            // German: a hit in the German or the English index is enough (proper names, chat terms).
+            if (!(de && allPhrasesMatch(de, phrases)) && !allPhrasesMatch(tokensEn(item), phrases)) return false;
+        }
 
-    if (query.view === 'gizmo' && item.src.type !== 'Gizmo') return false;
-    if (query.view === 'consumable' && item.src.type !== 'Consumable') return false;
-    if (query.view === 'tonic' && !item.tonic) return false;
-    if (query.candidate !== 'all' && item.src.isCandidate !== (query.candidate === 'yes')) return false;
-    // In the tonic view hideCommon does not apply: tonics can have the subtype Food or Utility.
-    if (hideCommon && item.common) return false;
-    if (query.hidePlaceholders && item.placeholder) return false;
-    if (query.rarity.length > 0 && !query.rarity.includes(item.src.rarity)) return false;
-    for (const gameType of query.gameType) if (!item.src.gameTypes.includes(gameType)) return false;
-    if (query.testStatus === 'retest') {
-      if (!item.needsRetest) return false;
-    } else if (query.testStatus && item.testStatus !== query.testStatus) {
-      return false;
-    }
-    if (changed && !changed.has(item.id)) return false;
-    if (!query.includeRemoved && item.src.removed) return false;
-    return true;
-  };
+        if (query.view === 'gizmo' && item.src.type !== 'Gizmo') return false;
+        if (query.view === 'consumable' && item.src.type !== 'Consumable') return false;
+        if (query.view === 'tonic' && !item.tonic) return false;
+        if (query.candidate !== 'all' && item.src.isCandidate !== (query.candidate === 'yes')) return false;
+        // In the tonic view hideCommon does not apply: tonics can have the subtype Food or Utility.
+        if (hideCommon && item.common) return false;
+        if (query.hidePlaceholders && item.placeholder) return false;
+        if (query.rarity.length > 0 && !query.rarity.includes(item.src.rarity)) return false;
+        for (const gameType of query.gameType) if (!item.src.gameTypes.includes(gameType)) return false;
+        if (query.testStatus === 'retest') {
+            if (!item.needsRetest) return false;
+        } else if (query.testStatus && item.testStatus !== query.testStatus) {
+            return false;
+        }
+        if (changed && !changed.has(item.id)) return false;
+        if (!query.includeRemoved && item.src.removed) return false;
+        return true;
+    };
 }
 
 /** All matches in the chosen sort order (without pagination). */
 export function filterItems(ds: StaticDataset, query: ParsedItemListQuery): PreparedItem[] {
-  const matches = ds.items.filter(compileFilter(ds, query));
-  const sign = query.order === 'desc' ? -1 : 1;
-  const lang = query.lang;
-  const compare = (a: PreparedItem, b: PreparedItem): number => {
-    switch (query.sort) {
-      case 'name':
-        return compareNoCase(nameOf(a, lang), nameOf(b, lang));
-      case 'rarity':
-        return a.rarityRank - b.rarityRank;
-      case 'level':
-        return a.src.level - b.src.level;
-      case 'lastChanged':
-        return a.src.lastChanged - b.src.lastChanged;
-      default:
-        return 0; // id: the tie-break below decides
-    }
-  };
-  return matches.sort((a, b) => sign * (compare(a, b) || a.id - b.id));
+    const matches = ds.items.filter(compileFilter(ds, query));
+    const sign = query.order === 'desc' ? -1 : 1;
+    const lang = query.lang;
+    const compare = (a: PreparedItem, b: PreparedItem): number => {
+        switch (query.sort) {
+            case 'name':
+                return compareNoCase(nameOf(a, lang), nameOf(b, lang));
+            case 'rarity':
+                return a.rarityRank - b.rarityRank;
+            case 'level':
+                return a.src.level - b.src.level;
+            case 'lastChanged':
+                return a.src.lastChanged - b.src.lastChanged;
+            default:
+                return 0; // id: the tie-break below decides
+        }
+    };
+    return matches.sort((a, b) => sign * (compare(a, b) || a.id - b.id));
 }
 
 export function toListItem(item: PreparedItem, lang: Lang): ItemListItem {
-  return {
-    id: item.id,
-    name: nameOf(item, lang),
-    nameEn: item.nameEn,
-    type: item.src.type,
-    subtype: item.subtype,
-    rarity: item.src.rarity,
-    level: item.src.level,
-    icon: item.icon,
-    gameTypes: item.src.gameTypes,
-    isCandidate: item.src.isCandidate,
-    removed: item.src.removed === true,
-    testStatus: item.testStatus,
-    needsRetest: item.needsRetest,
-  };
+    return {
+        id: item.id,
+        name: nameOf(item, lang),
+        nameEn: item.nameEn,
+        type: item.src.type,
+        subtype: item.subtype,
+        rarity: item.src.rarity,
+        level: item.src.level,
+        icon: item.icon,
+        gameTypes: item.src.gameTypes,
+        isCandidate: item.src.isCandidate,
+        removed: item.src.removed === true,
+        testStatus: item.testStatus,
+        needsRetest: item.needsRetest,
+    };
 }
 
 export function listStaticItems(ds: StaticDataset, query: ParsedItemListQuery): ItemListResponse {
-  const matches = filterItems(ds, query);
-  const start = (query.page - 1) * query.pageSize;
-  return {
-    items: matches.slice(start, start + query.pageSize).map((item) => toListItem(item, query.lang)),
-    total: matches.length,
-    page: query.page,
-    pageSize: query.pageSize,
-  };
+    const matches = filterItems(ds, query);
+    const start = (query.page - 1) * query.pageSize;
+    return {
+        items: matches.slice(start, start + query.pageSize).map((item) => toListItem(item, query.lang)),
+        total: matches.length,
+        page: query.page,
+        pageSize: query.pageSize,
+    };
 }
 
 /** All matches as rows for CSV/JSON (see exportItems on the server). */
 export function exportStaticItems(ds: StaticDataset, query: ParsedItemListQuery): ExportRow[] {
-  return filterItems(ds, query).map((item) => {
-    const name = nameOf(item, query.lang);
-    return {
-      id: item.id,
-      name,
-      type: item.src.type,
-      subtype: item.subtype,
-      rarity: item.src.rarity,
-      level: item.src.level,
-      game_types: item.src.gameTypes,
-      flags: item.flags,
-      is_candidate: item.src.isCandidate,
-      removed: item.src.removed === true,
-      test_status: item.testStatus,
-      test_note: item.src.test?.note ?? null,
-      tested_at: item.src.test?.testedAt ?? null,
-      needs_retest: item.needsRetest,
-      chat_link: item.chatLink,
-      wiki_url: wikiUrl(query.lang, name),
-      icon: item.icon,
-    };
-  });
+    return filterItems(ds, query).map((item) => {
+        const name = nameOf(item, query.lang);
+        return {
+            id: item.id,
+            name,
+            type: item.src.type,
+            subtype: item.subtype,
+            rarity: item.src.rarity,
+            level: item.src.level,
+            game_types: item.src.gameTypes,
+            flags: item.flags,
+            is_candidate: item.src.isCandidate,
+            removed: item.src.removed === true,
+            test_status: item.testStatus,
+            test_note: item.src.test?.note ?? null,
+            tested_at: item.src.test?.testedAt ?? null,
+            needs_retest: item.needsRetest,
+            chat_link: item.chatLink,
+            wiki_url: wikiUrl(query.lang, name),
+            icon: item.icon,
+        };
+    });
 }
 
 export function staticStats(ds: StaticDataset): StatsResponse {
-  let items = 0;
-  let germanTexts = 0;
-  const candidates = { gizmo: 0, consumable: 0, tonic: 0 };
-  for (const item of ds.items) {
-    if (item.hasDe) germanTexts++;
-    if (item.src.removed) continue;
-    items++;
-    if (!item.src.isCandidate) continue;
-    if (item.src.type === 'Gizmo') candidates.gizmo++;
-    if (item.src.type === 'Consumable') candidates.consumable++;
-    if (item.tonic) candidates.tonic++;
-  }
-  const last = ds.updates[0];
-  return {
-    items,
-    candidates,
-    germanTexts,
-    lastUpdate: last
-      ? { id: last.id, startedAt: last.startedAt, finishedAt: last.finishedAt, buildId: last.buildId, added: last.added, changed: last.changed, removed: last.removed }
-      : null,
-    autoCheck: null,
-  };
+    let items = 0;
+    let germanTexts = 0;
+    const candidates = { gizmo: 0, consumable: 0, tonic: 0 };
+    for (const item of ds.items) {
+        if (item.hasDe) germanTexts++;
+        if (item.src.removed) continue;
+        items++;
+        if (!item.src.isCandidate) continue;
+        if (item.src.type === 'Gizmo') candidates.gizmo++;
+        if (item.src.type === 'Consumable') candidates.consumable++;
+        if (item.tonic) candidates.tonic++;
+    }
+    const last = ds.updates[0];
+    return {
+        items,
+        candidates,
+        germanTexts,
+        lastUpdate: last
+            ? {
+                  id: last.id,
+                  startedAt: last.startedAt,
+                  finishedAt: last.finishedAt,
+                  buildId: last.buildId,
+                  added: last.added,
+                  changed: last.changed,
+                  removed: last.removed,
+              }
+            : null,
+        autoCheck: null,
+    };
 }
 
 // ---------------------------------------------------------------------------
 // Details
 // ---------------------------------------------------------------------------
 
-const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+const isObject = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value);
 
 /** Number of the file details/<n>.json that contains the item; null = unknown ID. */
 export function detailBlockOf(ds: StaticDataset, id: number): number | null {
-  const index = ds.indexById.get(id);
-  return index === undefined ? null : Math.floor(index / DETAIL_BLOCK_SIZE);
+    const index = ds.indexById.get(id);
+    return index === undefined ? null : Math.floor(index / DETAIL_BLOCK_SIZE);
 }
 
 /** History of an item, newest first. */
 function historyOf(ds: StaticDataset, id: number): ItemChange[] {
-  return ds.changes
-    .filter((c) => c.itemId === id)
-    .sort((a, b) => b.updateId - a.updateId)
-    .map((c) => ({
-      updateId: c.updateId,
-      updateStartedAt: ds.updatesById.get(c.updateId)?.startedAt ?? '',
-      kind: c.kind,
-      changedFields: c.changedFields ?? [],
-      gameTypesBefore: c.gameTypesBefore ?? null,
-      gameTypesAfter: c.gameTypesAfter ?? null,
-    }));
+    return ds.changes
+        .filter((c) => c.itemId === id)
+        .sort((a, b) => b.updateId - a.updateId)
+        .map((c) => ({
+            updateId: c.updateId,
+            updateStartedAt: ds.updatesById.get(c.updateId)?.startedAt ?? '',
+            kind: c.kind,
+            changedFields: c.changedFields ?? [],
+            gameTypesBefore: c.gameTypesBefore ?? null,
+            gameTypesAfter: c.gameTypesAfter ?? null,
+        }));
 }
 
 /**
  * Details of an item. rest is the item's entry from details/<n>.json (rest of the API response).
  * Null if the item is not published.
  */
-export function staticItemDetail(ds: StaticDataset, id: number, lang: Lang, rest: Record<string, unknown> | undefined): ItemDetail | null {
-  const item = ds.byId.get(id);
-  if (!item) return null;
-  const raw = rest ?? {};
-  const base = toListItem(item, lang);
-  const test = item.src.test;
-  return {
-    ...base,
-    description: descriptionOf(item, lang),
-    chatLink: item.chatLink,
-    flags: item.flags,
-    restrictions: Array.isArray(raw.restrictions) ? (raw.restrictions as string[]) : [],
-    vendorValue: typeof raw.vendor_value === 'number' ? raw.vendor_value : 0,
-    details: isObject(raw.details) ? raw.details : null,
-    wikiUrl: wikiUrl(lang, base.name),
-    test: {
-      status: item.testStatus,
-      note: test?.note ?? null,
-      testedAt: test?.testedAt ?? null,
-      gameTypesAtTest: test?.gameTypesAtTest ?? null,
-    },
-    history: historyOf(ds, id),
-  };
+export function staticItemDetail(
+    ds: StaticDataset,
+    id: number,
+    lang: Lang,
+    rest: Record<string, unknown> | undefined,
+): ItemDetail | null {
+    const item = ds.byId.get(id);
+    if (!item) return null;
+    const raw = rest ?? {};
+    const base = toListItem(item, lang);
+    const test = item.src.test;
+    return {
+        ...base,
+        description: descriptionOf(item, lang),
+        chatLink: item.chatLink,
+        flags: item.flags,
+        restrictions: Array.isArray(raw.restrictions) ? (raw.restrictions as string[]) : [],
+        vendorValue: typeof raw.vendor_value === 'number' ? raw.vendor_value : 0,
+        details: isObject(raw.details) ? raw.details : null,
+        wikiUrl: wikiUrl(lang, base.name),
+        test: {
+            status: item.testStatus,
+            note: test?.note ?? null,
+            testedAt: test?.testedAt ?? null,
+            gameTypesAtTest: test?.gameTypesAtTest ?? null,
+        },
+        history: historyOf(ds, id),
+    };
 }
 
 // ---------------------------------------------------------------------------
@@ -405,149 +428,177 @@ export function staticItemDetail(ds: StaticDataset, id: number, lang: Lang, rest
 
 /** Conditions on the items (type, placeholders, search); shared by /changes and /compare. */
 function compileChangeItemFilter(query: ParsedUpdateChangesQuery): (item: PreparedItem) => boolean {
-  const q = query.q;
-  // LIKE '%q%' ignoring ASCII case; a plain number also matches the ID.
-  const needle = q ? asciiLower(q) : null;
-  const idQuery = q && /^\d+$/.test(q) ? Number(q) : null;
-  return (item) => {
-    if (query.type === 'gizmo' && item.src.type !== 'Gizmo') return false;
-    if (query.type === 'consumable' && item.src.type !== 'Consumable') return false;
-    if (query.type === 'tonic' && !item.tonic) return false;
-    if (query.hidePlaceholders && item.placeholder) return false;
-    if (needle !== null) {
-      // German: a hit in the German or the English name is enough.
-      const hit = asciiLower(item.nameEn).includes(needle) || (query.lang === 'de' && item.nameDe !== null && asciiLower(item.nameDe).includes(needle));
-      if (!hit && item.id !== idQuery) return false;
-    }
-    return true;
-  };
+    const q = query.q;
+    // LIKE '%q%' ignoring ASCII case; a plain number also matches the ID.
+    const needle = q ? asciiLower(q) : null;
+    const idQuery = q && /^\d+$/.test(q) ? Number(q) : null;
+    return (item) => {
+        if (query.type === 'gizmo' && item.src.type !== 'Gizmo') return false;
+        if (query.type === 'consumable' && item.src.type !== 'Consumable') return false;
+        if (query.type === 'tonic' && !item.tonic) return false;
+        if (query.hidePlaceholders && item.placeholder) return false;
+        if (needle !== null) {
+            // German: a hit in the German or the English name is enough.
+            const hit =
+                asciiLower(item.nameEn).includes(needle) ||
+                (query.lang === 'de' && item.nameDe !== null && asciiLower(item.nameDe).includes(needle));
+            if (!hit && item.id !== idQuery) return false;
+        }
+        return true;
+    };
 }
 
 /** Entry for the table; before/after come from the stored values or the summary depending on the kind. */
 function toEntry(
-  item: PreparedItem,
-  lang: Lang,
-  fields: Pick<UpdateChangeEntry, 'kind' | 'changedFields' | 'gameTypesBefore' | 'gameTypesAfter' | 'before' | 'after'> & { unknownFields?: string[] },
+    item: PreparedItem,
+    lang: Lang,
+    fields: Pick<
+        UpdateChangeEntry,
+        'kind' | 'changedFields' | 'gameTypesBefore' | 'gameTypesAfter' | 'before' | 'after'
+    > & { unknownFields?: string[] },
 ): UpdateChangeEntry {
-  return {
-    id: item.id,
-    name: nameOf(item, lang),
-    nameEn: item.nameEn,
-    type: item.src.type,
-    subtype: item.subtype,
-    rarity: item.src.rarity as Rarity,
-    icon: item.icon,
-    removed: item.src.removed === true,
-    isCandidate: item.src.isCandidate,
-    ...fields,
-  };
+    return {
+        id: item.id,
+        name: nameOf(item, lang),
+        nameEn: item.nameEn,
+        type: item.src.type,
+        subtype: item.subtype,
+        rarity: item.src.rarity as Rarity,
+        icon: item.icon,
+        removed: item.src.removed === true,
+        isCandidate: item.src.isCandidate,
+        ...fields,
+    };
 }
 
 /**
  * Changes of an update (against its predecessor). For the first state (full import) the static
  * version contains no entries; the counters then come from the update itself.
  */
-export function staticUpdateChanges(ds: StaticDataset, update: UpdateDetail, query: ParsedUpdateChangesQuery): UpdateChangesResponse {
-  const rows = ds.changesByUpdate.get(update.id) ?? [];
-  const itemFilter = compileChangeItemFilter(query);
-  const candidates = rows
-    .map((row) => ({ row, item: ds.byId.get(row.itemId) }))
-    .filter((e): e is { row: StaticChange; item: PreparedItem } => e.item !== undefined)
-    .map((e) => ({ ...e, view: toView(e.row) }));
+export function staticUpdateChanges(
+    ds: StaticDataset,
+    update: UpdateDetail,
+    query: ParsedUpdateChangesQuery,
+): UpdateChangesResponse {
+    const rows = ds.changesByUpdate.get(update.id) ?? [];
+    const itemFilter = compileChangeItemFilter(query);
+    const candidates = rows
+        .map((row) => ({ row, item: ds.byId.get(row.itemId) }))
+        .filter((e): e is { row: StaticChange; item: PreparedItem } => e.item !== undefined)
+        .map((e) => ({ ...e, view: toView(e.row) }));
 
-  const selected = candidates
-    .filter(
-      ({ row, item, view }) =>
-        itemFilter(item) && (query.kind.length === 0 || query.kind.includes(row.kind)) && matchesFocus(query.focus, view),
-    )
-    .map((e) => ({ ...e, name: nameOf(e.item, query.lang) }))
-    .sort((a, b) => compareChangeEntries({ ...a.view, name: a.name, itemId: a.row.itemId }, { ...b.view, name: b.name, itemId: b.row.itemId }));
+    const selected = candidates
+        .filter(
+            ({ row, item, view }) =>
+                itemFilter(item) &&
+                (query.kind.length === 0 || query.kind.includes(row.kind)) &&
+                matchesFocus(query.focus, view),
+        )
+        .map((e) => ({ ...e, name: nameOf(e.item, query.lang) }))
+        .sort((a, b) =>
+            compareChangeEntries(
+                { ...a.view, name: a.name, itemId: a.row.itemId },
+                { ...b.view, name: b.name, itemId: b.row.itemId },
+            ),
+        );
 
-  const start = (query.page - 1) * query.pageSize;
-  const items = selected.slice(start, start + query.pageSize).map(({ row, item, view }) => {
-    const summary = row.summary ?? ds.summaries.get(row.itemId) ?? null;
-    return toEntry(item, query.lang, {
-      kind: row.kind,
-      changedFields: view.changedFields ?? [],
-      gameTypesBefore: view.gameTypesBefore,
-      gameTypesAfter: view.gameTypesAfter,
-      // New and removed items: the state is in the summary (for removed ones the last known).
-      before: row.kind === 'removed' ? summary : row.kind === 'changed' ? (row.valuesBefore ?? null) : null,
-      after: row.kind === 'added' ? summary : row.kind === 'changed' ? (row.valuesAfter ?? null) : null,
+    const start = (query.page - 1) * query.pageSize;
+    const items = selected.slice(start, start + query.pageSize).map(({ row, item, view }) => {
+        const summary = row.summary ?? ds.summaries.get(row.itemId) ?? null;
+        return toEntry(item, query.lang, {
+            kind: row.kind,
+            changedFields: view.changedFields ?? [],
+            gameTypesBefore: view.gameTypesBefore,
+            gameTypesAfter: view.gameTypesAfter,
+            // New and removed items: the state is in the summary (for removed ones the last known).
+            before: row.kind === 'removed' ? summary : row.kind === 'changed' ? (row.valuesBefore ?? null) : null,
+            after: row.kind === 'added' ? summary : row.kind === 'changed' ? (row.valuesAfter ?? null) : null,
+        });
     });
-  });
 
-  const isBaseline = update.id === ds.baselineId;
-  return {
-    update,
-    counts: isBaseline
-      ? { added: update.added, changed: update.changed, removed: update.removed, gameTypesChanged: 0, dungeonGained: 0, dungeonLost: 0 }
-      : countChangeRows(rows.map(toView)),
-    items,
-    total: selected.length,
-    page: query.page,
-    pageSize: query.pageSize,
-    legacyValues: rows.some((r) => r.kind === 'changed' && r.valuesBefore === undefined),
-  };
+    const isBaseline = update.id === ds.baselineId;
+    return {
+        update,
+        counts: isBaseline
+            ? {
+                  added: update.added,
+                  changed: update.changed,
+                  removed: update.removed,
+                  gameTypesChanged: 0,
+                  dungeonGained: 0,
+                  dungeonLost: 0,
+              }
+            : countChangeRows(rows.map(toView)),
+        items,
+        total: selected.length,
+        page: query.page,
+        pageSize: query.pageSize,
+        legacyValues: rows.some((r) => r.kind === 'changed' && r.valuesBefore === undefined),
+    };
 }
 
 function toView(row: StaticChange) {
-  return {
-    kind: row.kind,
-    changedFields: row.changedFields ?? null,
-    gameTypesBefore: row.gameTypesBefore ?? null,
-    gameTypesAfter: row.gameTypesAfter ?? null,
-  };
+    return {
+        kind: row.kind,
+        changedFields: row.changedFields ?? null,
+        gameTypesBefore: row.gameTypesBefore ?? null,
+        gameTypesAfter: row.gameTypesAfter ?? null,
+    };
 }
 
 /** State after update from versus state after update to (from < to): changes in the range summarized per item. */
-export function staticCompare(ds: StaticDataset, from: UpdateDetail, to: UpdateDetail, query: ParsedUpdateChangesQuery): UpdateCompareResponse {
-  const itemFilter = compileChangeItemFilter(query);
-  const rows: RangeChange[] = [];
-  for (const change of ds.changes) {
-    if (change.updateId <= from.id || change.updateId > to.id) continue;
-    const item = ds.byId.get(change.itemId);
-    if (!item) continue;
-    rows.push({
-      updateId: change.updateId,
-      itemId: change.itemId,
-      kind: change.kind,
-      changedFields: change.changedFields ?? null,
-      gameTypesBefore: change.gameTypesBefore ?? null,
-      gameTypesAfter: change.gameTypesAfter ?? null,
-      valuesBefore: change.valuesBefore ?? null,
-      valuesAfter: change.valuesAfter ?? null,
-      name: nameOf(item, query.lang),
-      nameEn: item.nameEn,
-      matches: itemFilter(item),
-    });
-  }
+export function staticCompare(
+    ds: StaticDataset,
+    from: UpdateDetail,
+    to: UpdateDetail,
+    query: ParsedUpdateChangesQuery,
+): UpdateCompareResponse {
+    const itemFilter = compileChangeItemFilter(query);
+    const rows: RangeChange[] = [];
+    for (const change of ds.changes) {
+        if (change.updateId <= from.id || change.updateId > to.id) continue;
+        const item = ds.byId.get(change.itemId);
+        if (!item) continue;
+        rows.push({
+            updateId: change.updateId,
+            itemId: change.itemId,
+            kind: change.kind,
+            changedFields: change.changedFields ?? null,
+            gameTypesBefore: change.gameTypesBefore ?? null,
+            gameTypesAfter: change.gameTypesAfter ?? null,
+            valuesBefore: change.valuesBefore ?? null,
+            valuesAfter: change.valuesAfter ?? null,
+            name: nameOf(item, query.lang),
+            nameEn: item.nameEn,
+            matches: itemFilter(item),
+        });
+    }
 
-  const { all, counts } = aggregateRange(rows);
-  const selected = selectNetChanges(all, query);
-  const start = (query.page - 1) * query.pageSize;
-  const items = selected.slice(start, start + query.pageSize).map((n) => {
-    const item = ds.byId.get(n.itemId)!;
-    const summary = ds.summaries.get(n.itemId) ?? null;
-    return toEntry(item, query.lang, {
-      kind: n.kind,
-      changedFields: n.changedFields,
-      gameTypesBefore: n.gameTypesBefore,
-      gameTypesAfter: n.gameTypesAfter,
-      before: n.kind === 'removed' ? summary : n.kind === 'changed' ? n.before : null,
-      after: n.kind === 'added' ? summary : n.kind === 'changed' ? n.after : null,
-      unknownFields: n.unknownFields,
+    const { all, counts } = aggregateRange(rows);
+    const selected = selectNetChanges(all, query);
+    const start = (query.page - 1) * query.pageSize;
+    const items = selected.slice(start, start + query.pageSize).map((n) => {
+        const item = ds.byId.get(n.itemId)!;
+        const summary = ds.summaries.get(n.itemId) ?? null;
+        return toEntry(item, query.lang, {
+            kind: n.kind,
+            changedFields: n.changedFields,
+            gameTypesBefore: n.gameTypesBefore,
+            gameTypesAfter: n.gameTypesAfter,
+            before: n.kind === 'removed' ? summary : n.kind === 'changed' ? n.before : null,
+            after: n.kind === 'added' ? summary : n.kind === 'changed' ? n.after : null,
+            unknownFields: n.unknownFields,
+        });
     });
-  });
 
-  return {
-    from,
-    to,
-    counts,
-    items,
-    total: selected.length,
-    page: query.page,
-    pageSize: query.pageSize,
-    legacyValues: rows.some((r) => r.kind === 'changed' && r.valuesBefore === null),
-  };
+    return {
+        from,
+        to,
+        counts,
+        items,
+        total: selected.length,
+        page: query.page,
+        pageSize: query.pageSize,
+        legacyValues: rows.some((r) => r.kind === 'changed' && r.valuesBefore === null),
+    };
 }

@@ -8,13 +8,13 @@ Public read-only version: https://tareo-ap.github.io/gw2-fractal-items/
 
 ## Structure
 
-| Folder | Contents |
-| --- | --- |
-| `server/` | Node.js backend with [Hono](https://hono.dev), SQLite via the built-in `node:sqlite` |
-| `web/` | React + Vite + TypeScript |
-| `shared/` | Types and shared rules (filters, input validation, CSV format, logic of the static version) used by server and web |
-| `scripts/` | Build of the static version (`build:pages`, `preview:pages`) |
-| `site-data/` | Export for GitHub Pages (JSON, committed; created by `npm run export:static`) |
+| Folder       | Contents                                                                                                           |
+| ------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `server/`    | Node.js backend with [Hono](https://hono.dev), SQLite via the built-in `node:sqlite`                               |
+| `web/`       | React + Vite + TypeScript                                                                                          |
+| `shared/`    | Types and shared rules (filters, input validation, CSV format, logic of the static version) used by server and web |
+| `scripts/`   | Build of the static version (`build:pages`, `preview:pages`)                                                       |
+| `site-data/` | Export for GitHub Pages (JSON, committed; created by `npm run export:static`)                                      |
 
 In production it is a single process: the server serves the API under `/api/*` and the built frontend.
 During development Vite (port 5173) and the server (port 3000) run separately; Vite proxies `/api` to the server.
@@ -89,17 +89,17 @@ The base path is `/gw2-fractal-items/` and can be changed with the environment v
 
 ## Configuration
 
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `PORT` | `3000` | HTTP port |
-| `DB_PATH` | `data/gw2-items.db` (Docker: `/data/gw2-items.db`) | SQLite file |
-| `WEB_DIST` | empty (Docker: `/app/web/dist`) | Built frontend; empty = the server only serves the API |
-| `GW2_API_BASE` | `https://api.guildwars2.com` | Base URL of the GW2 API |
-| `UPDATE_CHECK` | `off` (Docker image: `on`) | Automatic check for a new game build. A new build ID starts an update; never before the first completed update (initial full import). Invalid values of the following variables disable the check |
-| `UPDATE_CHECK_TZ` | `Europe/Berlin` | Time zone for all schedule times (IANA name, daylight saving time is handled) |
-| `UPDATE_CHECK_DAILY_AT` | `06:00` | Daily check (HH:MM) |
-| `UPDATE_CHECK_PATCH_WINDOW` | `Tue 17:00-19:00` | Patch window (weekday `Mon`…`Sun`, from-to); new patches usually arrive on Tuesday evenings. `off` = no window |
-| `UPDATE_CHECK_PATCH_EVERY_MINUTES` | `30` | Interval of checks within the patch window (17:00, 17:30, … 19:00). The server does not check right after startup but at the next scheduled time |
+| Variable                           | Default                                            | Meaning                                                                                                                                                                                           |
+| ---------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                             | `3000`                                             | HTTP port                                                                                                                                                                                         |
+| `DB_PATH`                          | `data/gw2-items.db` (Docker: `/data/gw2-items.db`) | SQLite file                                                                                                                                                                                       |
+| `WEB_DIST`                         | empty (Docker: `/app/web/dist`)                    | Built frontend; empty = the server only serves the API                                                                                                                                            |
+| `GW2_API_BASE`                     | `https://api.guildwars2.com`                       | Base URL of the GW2 API                                                                                                                                                                           |
+| `UPDATE_CHECK`                     | `off` (Docker image: `on`)                         | Automatic check for a new game build. A new build ID starts an update; never before the first completed update (initial full import). Invalid values of the following variables disable the check |
+| `UPDATE_CHECK_TZ`                  | `Europe/Berlin`                                    | Time zone for all schedule times (IANA name, daylight saving time is handled)                                                                                                                     |
+| `UPDATE_CHECK_DAILY_AT`            | `06:00`                                            | Daily check (HH:MM)                                                                                                                                                                               |
+| `UPDATE_CHECK_PATCH_WINDOW`        | `Tue 17:00-19:00`                                  | Patch window (weekday `Mon`…`Sun`, from-to); new patches usually arrive on Tuesday evenings. `off` = no window                                                                                    |
+| `UPDATE_CHECK_PATCH_EVERY_MINUTES` | `30`                                               | Interval of checks within the patch window (17:00, 17:30, … 19:00). The server does not check right after startup but at the next scheduled time                                                  |
 
 ## Legal
 

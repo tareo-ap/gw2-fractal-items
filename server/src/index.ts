@@ -7,12 +7,14 @@ import { BuildWatcher } from './importer/buildWatcher.js';
 import { failOrphanedUpdates, Importer } from './importer/importer.js';
 
 // Print startup parameters immediately so you can see what it was started with even after a crash.
-console.log(`Starting server: port ${config.port}, DB ${config.dbPath}, frontend ${config.webDist ?? '(Vite dev server)'}`);
+console.log(
+    `Starting server: port ${config.port}, DB ${config.dbPath}, frontend ${config.webDist ?? '(Vite dev server)'}`,
+);
 
 // Do not swallow startup errors; print them visibly and exit with an error code.
 process.on('uncaughtException', (err) => {
-  console.error('Server error:', err);
-  process.exit(1);
+    console.error('Server error:', err);
+    process.exit(1);
 });
 
 const db = openDatabase(config.dbPath);
@@ -22,30 +24,29 @@ failOrphanedUpdates(db);
 const client = new Gw2Client({ baseUrl: config.gw2ApiBase });
 const importer = new Importer(db, client);
 // Automatic check for new game builds, only if an interval is set.
-const watcher =
-  config.updateCheck ? new BuildWatcher(db, client, importer, config.updateCheck) : undefined;
+const watcher = config.updateCheck ? new BuildWatcher(db, client, importer, config.updateCheck) : undefined;
 const app = createApp(db, config.webDist, importer, watcher);
 
 const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
-  console.log(`Server running at http://localhost:${info.port} (DB: ${config.dbPath})`);
+    console.log(`Server running at http://localhost:${info.port} (DB: ${config.dbPath})`);
 });
 watcher?.start();
 if (watcher) console.log(`Automatic update check active, next at ${watcher.getStatus().nextCheckAt}`);
 server.on('error', (err: NodeJS.ErrnoException) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`Port ${config.port} is already in use. Is the server already running in another terminal?`);
-  } else {
-    console.error('Server error:', err);
-  }
-  process.exit(1);
+    if (err.code === 'EADDRINUSE') {
+        console.error(`Port ${config.port} is already in use. Is the server already running in another terminal?`);
+    } else {
+        console.error('Server error:', err);
+    }
+    process.exit(1);
 });
 
 // Shut down cleanly so SQLite writes back the WAL file (important for "docker stop").
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  process.on(signal, () => {
-    watcher?.stop();
-    server.close();
-    db.close();
-    process.exit(0);
-  });
+    process.on(signal, () => {
+        watcher?.stop();
+        server.close();
+        db.close();
+        process.exit(0);
+    });
 }

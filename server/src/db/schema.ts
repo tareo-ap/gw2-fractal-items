@@ -3,8 +3,8 @@
 // SQLite tracks which migrations have run in PRAGMA user_version.
 
 export const migrations: string[] = [
-  // 1: base schema
-  `
+    // 1: base schema
+    `
   -- One entry per update run (the first full import is an update too).
   CREATE TABLE updates (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,8 +66,8 @@ export const migrations: string[] = [
   -- Full-text search over name and description. Maintained during import.
   CREATE VIRTUAL TABLE items_fts USING fts5(name, description, content='items', content_rowid='id');
   `,
-  // 2: keep the full-text index in sync via triggers, additional indexes for the filters
-  `
+    // 2: keep the full-text index in sync via triggers, additional indexes for the filters
+    `
   -- items_fts is an "external content" table: it only stores the index, the texts
   -- live in items. On delete/update FTS5 must receive the old values via the special
   -- 'delete' command, otherwise the index becomes inconsistent.
@@ -87,13 +87,13 @@ export const migrations: string[] = [
   CREATE INDEX items_chat_link ON items(chat_link);
   CREATE INDEX item_changes_update ON item_changes(update_id, kind);
   `,
-  // 3: old and new values of the changed top-level fields (JSON objects) for the "Changes" view
-  `
+    // 3: old and new values of the changed top-level fields (JSON objects) for the "Changes" view
+    `
   ALTER TABLE item_changes ADD COLUMN values_before TEXT;
   ALTER TABLE item_changes ADD COLUMN values_after TEXT;
   `,
-  // 4: translated names and descriptions (so far only lang=de), separate from the English state in items
-  `
+    // 4: translated names and descriptions (so far only lang=de), separate from the English state in items
+    `
   -- Hash, diff and item_changes do not know this table: pure translation changes do not count as a change.
   CREATE TABLE item_texts (
     item_id     INTEGER NOT NULL,

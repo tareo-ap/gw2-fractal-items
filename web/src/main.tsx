@@ -9,13 +9,13 @@ import './styles.css';
 const queryClient = new QueryClient();
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <SettingsProvider>
-        <I18nProvider>
-          <App />
-        </I18nProvider>
-      </SettingsProvider>
-    </QueryClientProvider>
-  </StrictMode>,
+    <StrictMode>
+        <QueryClientProvider client={queryClient}>
+            <SettingsProvider>
+                <I18nProvider>
+                    <App />
+                </I18nProvider>
+            </SettingsProvider>
+        </QueryClientProvider>
+    </StrictMode>,
 );
