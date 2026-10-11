@@ -85,6 +85,7 @@ export interface ItemListItem {
     id: number;
     name: string; // in the chosen language (lang), falling back to English
     nameEn: string; // always the English name
+    description: string | null; // in the chosen language (fallback English); may contain GW2 markup such as <c=@flavor>…</c>
     type: ItemType;
     subtype: string | null; // details.type, e.g. Food, Utility, Generic
     rarity: Rarity;
@@ -108,6 +109,9 @@ export interface ItemListQuery {
     candidate?: 'yes' | 'no' | 'all'; // Default 'yes'
     hidePlaceholders?: boolean; // Default true; hides placeholders (empty name, no icon, or name like "((906936))" or "[[913817]]"), in all views
     hideCommon?: boolean; // Default true; does not apply in the tonic view; hides consumables with subtype Food, Utility, Unlock, Transmutation, Currency as well as Mastery Points, Emote Tomes and currency packs
+    hideAutoConsumed?: boolean; // Default true; in all views; hides items whose English description says they are consumed automatically on acquisition
+    itemType?: ('Gizmo' | 'Consumable')[]; // only in the tonic view (ignored elsewhere); empty = both
+    subtype?: string[]; // only in the consumable view (ignored elsewhere); one of CONSUMABLE_SUBTYPES, any of the listed; empty = all
     rarity?: Rarity[];
     gameType?: GameType[]; // item must contain all of the listed ones
     testStatus?: TestStatus | 'retest';
@@ -150,7 +154,6 @@ export interface ItemChange {
 
 /** GET /api/items/:id */
 export interface ItemDetail extends ItemListItem {
-    description: string | null; // in the chosen language; may contain GW2 markup such as <c=@flavor>…</c>
     chatLink: string | null;
     flags: string[];
     restrictions: string[];

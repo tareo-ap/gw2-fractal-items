@@ -2,7 +2,7 @@
 // The server reads the HTTP query with it, the static version in the browser the same query string.
 
 import type { ChangeKind, ItemListQuery, Lang, UpdateChangesQuery } from './types.js';
-import { GAME_TYPES, ITEM_SORTS, RARITIES, TEST_STATUSES } from './rules.js';
+import { CONSUMABLE_SUBTYPES, GAME_TYPES, ITEM_SORTS, ITEM_TYPE_FILTER, RARITIES, TEST_STATUSES } from './rules.js';
 
 // Notes: query parameters arrive as plain strings (or undefined if missing); the helpers below validate
 // them and convert them to typed values. `<T extends string>` is a generic: T is the union of allowed strings.
@@ -73,6 +73,9 @@ export function parseItemListQuery(params: Record<string, string | undefined>): 
         candidate: oneOf('candidate', params.candidate, ['yes', 'no', 'all'] as const) ?? 'yes',
         hideCommon: bool('hideCommon', params.hideCommon) ?? true,
         hidePlaceholders: bool('hidePlaceholders', params.hidePlaceholders) ?? true,
+        hideAutoConsumed: bool('hideAutoConsumed', params.hideAutoConsumed) ?? true,
+        itemType: list('itemType', params.itemType, ITEM_TYPE_FILTER),
+        subtype: list('subtype', params.subtype, CONSUMABLE_SUBTYPES),
         rarity: list('rarity', params.rarity, RARITIES),
         gameType: list('gameType', params.gameType, GAME_TYPES),
         testStatus: oneOf('testStatus', params.testStatus, [...TEST_STATUSES, 'retest'] as const),

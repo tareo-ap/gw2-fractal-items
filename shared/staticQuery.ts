@@ -30,10 +30,13 @@ import {
     compareNoCase,
     asciiLower,
     hideCommonApplies,
+    isAutoConsumed,
     isCommonConsumable,
     isPlaceholder,
     isTonic,
     itemIdFromChatLink,
+    itemTypeFilterApplies,
+    subtypeFilterApplies,
     ICON_PREFIX,
     wikiUrl,
 } from './rules.js';
@@ -73,6 +76,7 @@ export interface PreparedItem {
     placeholder: boolean;
     tonic: boolean;
     common: boolean;
+    autoConsumed: boolean; // English description says the item is consumed on acquisition (see isAutoConsumed)
     rarityRank: number;
     chatLink: string | null;
     /** Words for the full-text search per column [name, description], computed on the first search. */
@@ -145,6 +149,7 @@ function prepareItem(src: StaticItem): PreparedItem {
         placeholder: isPlaceholder(rule),
         tonic: isTonic(rule),
         common: isCommonConsumable(rule),
+        autoConsumed: isAutoConsumed(src.description),
         rarityRank: rarityRank(src.rarity),
         chatLink: src.chatLink === undefined ? chatLinkForId(src.id) : src.chatLink || null,
     };
@@ -242,6 +247,9 @@ function compileFilter(dataset: StaticDataset, query: ParsedItemListQuery): (ite
             ? new Set((dataset.changesByUpdate.get(query.updateId) ?? []).map((change) => change.itemId))
             : null;
     const hideCommon = query.hideCommon && hideCommonApplies(query.view) && query.view !== 'tonic';
+    // Empty lists mean "no restriction"; the filters are ignored in views where they do not apply.
+    const filterItemTypes: readonly string[] = itemTypeFilterApplies(query.view) ? query.itemType : [];
+    const filterSubtypes: readonly string[] = subtypeFilterApplies(query.view) ? query.subtype : [];
 
     return (item) => {
         if (idQuery !== null) {
@@ -262,6 +270,11 @@ function compileFilter(dataset: StaticDataset, query: ParsedItemListQuery): (ite
         // In the tonic view hideCommon does not apply: tonics can have the subtype Food or Utility.
         if (hideCommon && item.common) return false;
         if (query.hidePlaceholders && item.placeholder) return false;
+        if (query.hideAutoConsumed && item.autoConsumed) return false;
+        // Any of the listed types / subtypes; see the matching conditions in buildWhere on the server.
+        if (filterItemTypes.length > 0 && !filterItemTypes.includes(item.src.type)) return false;
+        if (filterSubtypes.length > 0 && (item.subtype === null || !filterSubtypes.includes(item.subtype)))
+            return false;
         if (query.rarity.length > 0 && !query.rarity.includes(item.src.rarity)) return false;
         // The item must contain every requested game type.
         for (const gameType of query.gameType) if (!item.src.gameTypes.includes(gameType)) return false;
@@ -305,6 +318,7 @@ export function toListItem(item: PreparedItem, lang: Lang): ItemListItem {
         id: item.id,
         name: nameOf(item, lang),
         nameEn: item.nameEn,
+        description: descriptionOf(item, lang),
         type: item.src.type,
         subtype: item.subtype,
         rarity: item.src.rarity,
@@ -437,7 +451,6 @@ export function staticItemDetail(
     const test = item.src.test;
     return {
         ...base,
-        description: descriptionOf(item, lang),
         chatLink: item.chatLink,
         flags: item.flags,
         restrictions: Array.isArray(raw.restrictions) ? (raw.restrictions as string[]) : [],

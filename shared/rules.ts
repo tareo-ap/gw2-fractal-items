@@ -30,6 +30,36 @@ export const ITEM_SORTS = ['name', 'id', 'rarity', 'level', 'lastChanged'] as co
 /** hideCommon hides consumables of these subtypes (Food, Utility, Unlock, Transmutation, Currency). */
 export const HIDE_COMMON_SUBTYPES = ['Food', 'Utility', 'Unlock', 'Transmutation', 'Currency'] as const;
 
+/** Is every consumable of this subtype hidden by hideCommon? The UI uses it to grey out such subtype options. */
+export const isHiddenByHideCommon = (subtype: string): boolean =>
+    (HIDE_COMMON_SUBTYPES as readonly string[]).includes(subtype);
+
+/**
+ * Selectable subtypes (`details.type`) of the consumable filter. A fixed list so the URL can be validated the same
+ * way on the server and in the browser; a new subtype after a game patch stays visible when unfiltered
+ * but must be added here before it can be selected.
+ */
+export const CONSUMABLE_SUBTYPES = [
+    'AppearanceChange',
+    'Booze',
+    'ContractNpc',
+    'Currency',
+    'Food',
+    'Generic',
+    'Halloween',
+    'Immediate',
+    'MountRandomUnlock',
+    'RandomUnlock',
+    'TeleportToFriend',
+    'Transmutation',
+    'Unlock',
+    'UpgradeRemoval',
+    'Utility',
+] as const;
+
+/** Item types the tonic view can be narrowed to (tonics exist as Gizmo and as Consumable). */
+export const ITEM_TYPE_FILTER = ['Gizmo', 'Consumable'] as const;
+
 /** Subtype whose items never count as tonics (recipes). */
 export const TONIC_EXCLUDED_SUBTYPE = 'Unlock';
 
@@ -87,7 +117,7 @@ export function isPlaceholder(item: Pick<RuleItem, 'name' | 'icon'>): boolean {
  */
 export function isCommonConsumable(item: Pick<RuleItem, 'name' | 'type' | 'subtype'>): boolean {
     if (item.type !== 'Consumable') return false;
-    if (item.subtype !== null && (HIDE_COMMON_SUBTYPES as readonly string[]).includes(item.subtype)) return true;
+    if (item.subtype !== null && isHiddenByHideCommon(item.subtype)) return true;
     return (
         sqlTrim(item.name) === 'Mastery Point' ||
         asciiLower(item.name).endsWith('emote tome') ||
@@ -95,8 +125,37 @@ export function isCommonConsumable(item: Pick<RuleItem, 'name' | 'type' | 'subty
     );
 }
 
+/**
+ * Lowercase phrases of the English description that mark an item as consumed automatically when it is acquired
+ * (e.g. skins that unlock in the wardrobe, currency-like trophies). The API has no flag for this, so the filter
+ * is text based and deliberately incomplete. Phrases must not contain '%' or '_' (they are used in SQL LIKE
+ * patterns) and use ASCII characters only (LIKE and asciiLower only fold ASCII case).
+ */
+export const AUTO_CONSUMED_PHRASES: readonly string[] = [
+    'consumed automatically when acquired',
+    'consumed immediately when acquired',
+    'immediately consumed on acquisition',
+    'automatically consumed upon receiving',
+    'this item is consumed immediately',
+    // Shortened before "'s vaults" so a typographic apostrophe in a future API text still matches.
+    'will automatically transfer to the consortium',
+];
+
+/** Is the item consumed automatically on acquisition, judging by its English description? */
+export function isAutoConsumed(descriptionEn: string | null | undefined): boolean {
+    if (!descriptionEn) return false;
+    const lowered = asciiLower(descriptionEn);
+    return AUTO_CONSUMED_PHRASES.some((phrase) => lowered.includes(phrase));
+}
+
 /** The hideCommon filter only applies in the Consumables and All views. */
 export const hideCommonApplies = (view: string): boolean => view === 'consumable' || view === 'all';
+
+/** The itemType filter only applies in the Tonics view (tonics are the only list that mixes Gizmo and Consumable). */
+export const itemTypeFilterApplies = (view: string): boolean => view === 'tonic';
+
+/** The subtype filter only applies in the Consumables view. */
+export const subtypeFilterApplies = (view: string): boolean => view === 'consumable';
 
 // ---------------------------------------------------------------------------
 // Wiki link and chat link

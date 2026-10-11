@@ -19,7 +19,7 @@ import { buildStaticExport, type StaticExport } from './cli/exportStatic.js';
 import { exportItems, getItemDetail, listItems, saveItemTest } from './routes/items.js';
 import { compareUpdates, getUpdate, getUpdateChanges, listUpdates } from './routes/updates.js';
 import { startFakeGw2Api, type FakeGw2Api } from './test/fakeGw2Api.js';
-import { chatLinkFor, createTestImporter, fixtureItems, runImport } from './test/fixtures.js';
+import { autoConsumedFixtureItems, chatLinkFor, createTestImporter, fixtureItems, runImport } from './test/fixtures.js';
 
 // Consistency test: the browser logic of the static version (shared/staticQuery.ts, reading from the export)
 // must return the same results as the server's SQL queries (same IDs, same order).
@@ -70,7 +70,26 @@ before(async () => {
         },
         { ...gizmo, id: 303, name: 'zebra gizmo', game_types: ['Pve', 'Pvp'], level: 40 },
         { ...gizmo, id: 304, name: 'Älterer Gizmo', level: 40 },
+        // hideAutoConsumed (404 has the phrase only in German)
+        ...autoConsumedFixtureItems(),
+        // hideAutoConsumed edge cases: no description (NULL), a non-candidate and a placeholder with the phrase
+        { ...consumable, id: 405, name: 'Silent Trophy', description: undefined, game_types: ['Dungeon', 'Pve'] },
+        {
+            ...consumable,
+            id: 406,
+            name: 'Remote Trophy',
+            description: 'Consumed immediately when acquired.',
+            game_types: ['Pve'],
+        },
+        {
+            ...consumable,
+            id: 407,
+            name: '((777))',
+            description: 'Consumed automatically when acquired.',
+            game_types: ['Dungeon'],
+        },
     ]);
+    api.german.set(404, { name: 'Manuelle Trophäe', description: 'Consumed automatically when acquired.' });
     api.german.set(1, { name: 'Mini-Golem-Bausatz', description: 'Beschreibung des Bausatzes.' });
     api.german.set(8778, { name: 'Mini-Golem-Bombe' });
     api.german.set(301, { name: 'Süßer Käse', description: 'Ein leckerer Käse für Ärger.' });
@@ -201,16 +220,141 @@ describe('List: browser logic against server', () => {
                 for (const hideCommon of ['true', 'false']) {
                     for (const hidePlaceholders of ['true', 'false']) {
                         for (const includeRemoved of ['true', 'false']) {
-                            for (const lang of ['en', 'de']) {
-                                checkList(
-                                    `view=${view}&candidate=${candidate}&hideCommon=${hideCommon}&hidePlaceholders=${hidePlaceholders}&includeRemoved=${includeRemoved}&lang=${lang}`,
-                                );
+                            for (const hideAutoConsumed of ['true', 'false']) {
+                                for (const lang of ['en', 'de']) {
+                                    checkList(
+                                        `view=${view}&candidate=${candidate}&hideCommon=${hideCommon}&hidePlaceholders=${hidePlaceholders}&includeRemoved=${includeRemoved}&hideAutoConsumed=${hideAutoConsumed}&lang=${lang}`,
+                                    );
+                                }
                             }
                         }
                     }
                 }
             }
         }
+    });
+
+    it('hideAutoConsumed hides 401-403 (English phrase only), 404 stays', () => {
+        const base = 'view=all&candidate=all&hideCommon=false&sort=id';
+        const idsOf = (queryString: string) => staticList(queryString).map((i) => i.id);
+        for (const lang of ['en', 'de']) {
+            const shown = idsOf(`${base}&hideAutoConsumed=false&lang=${lang}`);
+            const hidden = idsOf(`${base}&lang=${lang}`);
+            assert.deepEqual(
+                shown.filter((id) => !hidden.includes(id)),
+                [401, 402, 403],
+            );
+            assert.ok(hidden.includes(404));
+        }
+    });
+
+    it('hideAutoConsumed edge cases: missing description, non-candidate, placeholder, search, paging, bool values', () => {
+        const base = 'view=all&hideCommon=false&sort=id&lang=en';
+        for (const extra of [
+            'candidate=all',
+            'candidate=no',
+            'candidate=all&hidePlaceholders=false',
+            'candidate=all&includeRemoved=true',
+            'candidate=all&q=trophy',
+            'candidate=all&q=trophy&hideAutoConsumed=false',
+            'candidate=all&pageSize=2&page=2',
+            'candidate=all&hideAutoConsumed=false&pageSize=2&page=2',
+            'candidate=all&hideAutoConsumed=0',
+            'candidate=all&hideAutoConsumed=1',
+            'candidate=all&sort=name&order=desc',
+        ]) {
+            checkList(`${base}&${extra}`);
+        }
+        const idsOf = (queryString: string) => staticList(queryString).map((i) => i.id);
+        // 405 has no description and must stay visible; 407 is a placeholder with the phrase.
+        // The export holds candidates only, so the non-candidate 406 never reaches the static version.
+        const shown = idsOf(`${base}&candidate=all&hidePlaceholders=false`);
+        assert.ok(shown.includes(405));
+        assert.ok(!shown.includes(407));
+        assert.ok(!shown.includes(406));
+        const unfiltered = idsOf(`${base}&candidate=all&hidePlaceholders=false&hideAutoConsumed=false`);
+        assert.ok(unfiltered.includes(407));
+        assert.deepEqual(idsOf(`${base}&candidate=all&hidePlaceholders=false&hideAutoConsumed=0`), unfiltered);
+        assert.deepEqual(idsOf(`${base}&candidate=all&hidePlaceholders=false&hideAutoConsumed=1`), shown);
+    });
+
+    it('itemType and subtype: all views × hideCommon × hideAutoConsumed × languages', () => {
+        for (const view of ['gizmo', 'consumable', 'tonic', 'all']) {
+            for (const filter of [
+                'itemType=Gizmo',
+                'itemType=Consumable',
+                'itemType=Gizmo,Consumable',
+                'subtype=Food',
+                'subtype=Generic,Immediate',
+                'subtype=Unlock,Transmutation,Currency',
+                'itemType=Gizmo&subtype=Generic',
+            ]) {
+                for (const hideCommon of ['true', 'false']) {
+                    for (const hideAutoConsumed of ['true', 'false']) {
+                        for (const lang of ['en', 'de']) {
+                            checkList(
+                                `view=${view}&candidate=all&${filter}&hideCommon=${hideCommon}&hideAutoConsumed=${hideAutoConsumed}&lang=${lang}&sort=id`,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    it('itemType and subtype narrow only their own view', () => {
+        const idsOf = (queryString: string) => staticList(queryString).map((i) => i.id);
+        const tonics = idsOf('view=tonic&candidate=all&sort=id');
+        assert.ok(tonics.includes(201) && tonics.includes(202) && tonics.includes(203));
+        const gizmoTonics = idsOf('view=tonic&candidate=all&itemType=Gizmo&sort=id');
+        assert.ok(gizmoTonics.includes(202) && !gizmoTonics.includes(201) && !gizmoTonics.includes(203));
+        // Tonics of subtype Food stay in the tonic view despite hideCommon, and the subtype filter does not apply there.
+        assert.deepEqual(idsOf('view=tonic&candidate=all&subtype=Utility&sort=id'), tonics);
+        const foods = idsOf('view=consumable&candidate=all&hideCommon=false&subtype=Food&sort=id');
+        assert.ok(foods.includes(4) && foods.includes(203) && !foods.includes(8778));
+        assert.deepEqual(idsOf('view=consumable&candidate=all&subtype=Food&sort=id'), []);
+        assert.deepEqual(
+            idsOf('view=all&candidate=all&hideCommon=false&itemType=Gizmo&sort=id'),
+            idsOf('view=all&candidate=all&hideCommon=false&sort=id'),
+        );
+    });
+
+    it('itemType and subtype edge cases: duplicates, empty elements, search, paging, sorting, removed items', () => {
+        const views = ['consumable', 'tonic'];
+        for (const view of views) {
+            for (const filter of [
+                'subtype=Food,Food',
+                'subtype=Food,',
+                'subtype=,Generic,,Utility',
+                'itemType=Gizmo,Gizmo',
+                'itemType=Consumable,',
+                'itemType=',
+                'subtype=',
+            ]) {
+                for (const extra of [
+                    '',
+                    '&q=tonic',
+                    '&q=kit',
+                    '&pageSize=2&page=2',
+                    '&sort=name&order=desc',
+                    '&sort=rarity&order=asc',
+                    '&includeRemoved=true',
+                    '&hideCommon=false&includeRemoved=true&hidePlaceholders=false',
+                ]) {
+                    checkList(`view=${view}&candidate=all&${filter}${extra}`);
+                    checkList(`view=${view}&candidate=yes&${filter}${extra}&lang=de`);
+                }
+            }
+        }
+        const idsOf = (queryString: string) => staticList(queryString).map((i) => i.id);
+        assert.deepEqual(
+            idsOf('view=consumable&candidate=all&hideCommon=false&subtype=Food,Food&sort=id'),
+            idsOf('view=consumable&candidate=all&hideCommon=false&subtype=Food&sort=id'),
+        );
+        assert.deepEqual(
+            idsOf('view=tonic&candidate=all&itemType=&sort=id'),
+            idsOf('view=tonic&candidate=all&sort=id'),
+        );
     });
 
     it('Sorting (all fields, ascending and descending, both languages)', () => {
@@ -328,6 +472,37 @@ describe('List: browser logic against server', () => {
             staticList('view=all&candidate=all&lang=en&q=kaese').map((i) => i.id),
             [],
         );
+    });
+
+    it('description in the list entries and the description search behave the same in both modes', () => {
+        const all = 'view=all&candidate=all&hideCommon=false&hidePlaceholders=false&includeRemoved=true&sort=id';
+        for (const lang of ['en', 'de']) {
+            const entriesFromStatic = staticList(`${all}&lang=${lang}`);
+            assert.ok(entriesFromStatic.length > 0);
+            assert.deepEqual(
+                entriesFromStatic.map((i) => [i.id, i.description]),
+                serverList(`${all}&lang=${lang}`).map((i) => [i.id, i.description]),
+                `description (${lang})`,
+            );
+        }
+        const descriptionOfItem = (id: number, lang: string) =>
+            staticList(`${all}&lang=${lang}`).find((i) => i.id === id)!.description;
+        assert.equal(descriptionOfItem(1, 'en'), 'Description of Mini Golem Kit.');
+        assert.equal(descriptionOfItem(1, 'de'), 'Beschreibung des Bausatzes.');
+        assert.equal(descriptionOfItem(2, 'de'), 'Description of Banner of Strength.'); // no German row: English
+        assert.equal(descriptionOfItem(8778, 'de'), 'Description of Mini Golem Bomb.'); // German text without own description
+
+        // "description" only occurs in English descriptions, "beschreibung" only in German ones.
+        // lang=en searches only the English index; lang=de searches the German OR the English index.
+        const searchIds = (word: string, lang: string) => staticList(`${all}&lang=${lang}&q=${word}`).map((i) => i.id);
+        assert.deepEqual(searchIds('beschreibung', 'en'), []);
+        assert.deepEqual(searchIds('beschreibung', 'de'), [1, 302]);
+        assert.ok(searchIds('description', 'en').includes(1));
+        assert.ok(searchIds('description', 'de').includes(2)); // item 2 has no German row, so English text counts
+        assert.ok(searchIds('description', 'de').includes(1)); // English index still counts in German
+        for (const word of ['beschreibung', 'description', 'tasty', 'leckerer', 'zweite']) {
+            for (const lang of ['en', 'de']) checkList(`${all}&lang=${lang}&q=${word}`);
+        }
     });
 
     it('Pagination', () => {

@@ -19,6 +19,7 @@ import {
     type ParsedItemListQuery,
 } from '../../../shared/params.js';
 import {
+    AUTO_CONSUMED_PHRASES,
     GAME_TYPES,
     HIDE_COMMON_SUBTYPES,
     ITEM_SORTS,
@@ -26,6 +27,8 @@ import {
     TEST_STATUSES,
     TONIC_EXCLUDED_SUBTYPE,
     itemIdFromChatLink,
+    itemTypeFilterApplies,
+    subtypeFilterApplies,
     wikiUrl,
 } from '../../../shared/rules.js';
 
@@ -93,6 +96,7 @@ interface ItemRow {
     id: number;
     name: string;
     name_en: string;
+    description: string | null;
     type: string;
     subtype: string | null;
     rarity: string;
@@ -107,7 +111,6 @@ interface ItemRow {
 
 // Extra columns that only the detail view needs.
 interface ItemDetailRow extends ItemRow {
-    description: string | null;
     chat_link: string | null;
     flags: string;
     raw_json: string;
@@ -118,7 +121,7 @@ interface ItemDetailRow extends ItemRow {
 
 // Base SELECT for the item list. LEFT JOIN keeps items that have no test row yet.
 const selectItemSql = (lang: Lang) => `
-  SELECT i.id, ${nameSql(lang)} AS name, i.name AS name_en, i.type, i.subtype, i.rarity, i.level, i.icon, i.game_types, i.is_candidate, i.removed,
+  SELECT i.id, ${nameSql(lang)} AS name, i.name AS name_en, ${descriptionSql(lang)} AS description, i.type, i.subtype, i.rarity, i.level, i.icon, i.game_types, i.is_candidate, i.removed,
          t.status AS test_status, ${NEEDS_RETEST_SQL} AS needs_retest
   FROM items i ${textsJoin(lang)} LEFT JOIN item_tests t ON t.item_id = i.id`;
 
@@ -195,6 +198,22 @@ function buildWhere(query: ParsedItemListQuery): { whereSql: string; params: SQL
         );
     }
     if (query.hidePlaceholders) where.push(`NOT ${PLACEHOLDER_SQL}`);
+    if (query.hideAutoConsumed) {
+        // Always checks the English description (i.description), whatever the UI language is.
+        // COALESCE turns a missing description into '' so NOT(...) keeps the row instead of dropping it (NULL).
+        where.push(`NOT (${AUTO_CONSUMED_PHRASES.map(() => `COALESCE(i.description, '') LIKE ?`).join(' OR ')})`);
+        params.push(...AUTO_CONSUMED_PHRASES.map((phrase) => `%${phrase}%`));
+    }
+    // Type filter (tonic view only) and subtype filter (consumable view only); several values mean "any of them".
+    // They combine with hideCommon by AND, so a hidden subtype stays hidden while hideCommon is on.
+    if (itemTypeFilterApplies(query.view) && query.itemType.length > 0) {
+        where.push(`i.type IN (${query.itemType.map(() => '?').join(', ')})`);
+        params.push(...query.itemType);
+    }
+    if (subtypeFilterApplies(query.view) && query.subtype.length > 0) {
+        where.push(`i.subtype IN (${query.subtype.map(() => '?').join(', ')})`);
+        params.push(...query.subtype);
+    }
     if (query.rarity.length > 0) {
         where.push(`i.rarity IN (${query.rarity.map(() => '?').join(', ')})`);
         params.push(...query.rarity);
@@ -314,7 +333,6 @@ export function getItemDetail(db: DatabaseSync, id: number, lang: Lang = 'en'): 
 
     return {
         ...toListItem(row),
-        description: row.description,
         chatLink: row.chat_link,
         flags: JSON.parse(row.flags) as string[],
         restrictions: Array.isArray(rawItem.restrictions) ? (rawItem.restrictions as string[]) : [],
@@ -377,6 +395,7 @@ function toListItem(row: ItemRow): ItemListItem {
         id: row.id,
         name: row.name,
         nameEn: row.name_en,
+        description: row.description,
         type: row.type,
         subtype: row.subtype,
         rarity: row.rarity as Rarity,

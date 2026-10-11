@@ -39,6 +39,34 @@ export const fixtureItems = (): Gw2Item[] => [
     item(6, 'Shiny Rock', 'Trophy', 'Default', 'Junk', ['Pve']),
 ];
 
+/**
+ * Extra candidates for the hideAutoConsumed filter (IDs 401-404), meant to be added to fixtureItems().
+ * 401: plain phrase, 402: skin wording with subtype Transmutation, 403: phrase inside markup (Gizmo),
+ * 404: no phrase in English (set a German text with a phrase to check that only English counts).
+ */
+export const autoConsumedFixtureItems = (): Gw2Item[] => {
+    const base = item(401, 'Volatile Trophy', 'Consumable', 'Immediate', 'Fine', ['Dungeon', 'Pve']);
+    return [
+        { ...base, description: 'Consumed AUTOMATICALLY when acquired.' },
+        {
+            ...base,
+            id: 402,
+            name: 'Skin Unlock',
+            details: { type: 'Transmutation' },
+            description: 'Unlocks the skin. Consumed immediately when acquired.',
+        },
+        {
+            ...base,
+            id: 403,
+            name: 'Marked Up Gizmo',
+            type: 'Gizmo',
+            details: { type: 'Default' },
+            description: 'Rare. <c=@flavor>This item is consumed immediately.</c>',
+        },
+        { ...base, id: 404, name: 'Manual Trophy', description: 'Double-click to use.' },
+    ];
+};
+
 /** In-memory DB plus importer against the fake server, without throttling and with short backoff. */
 // `:memory:` = SQLite database that lives only in RAM and vanishes on close.
 export function createTestImporter(apiUrl: string) {

@@ -13,13 +13,14 @@ import type {
     UpdateCompareResponse,
     UpdateDetail,
 } from '../../shared/types.js';
+import { CONSUMABLE_SUBTYPES } from '../../shared/rules.js';
 import { createApp } from './app.js';
 import { openDatabase } from './db/index.js';
 import { migrations } from './db/schema.js';
 import { Gw2Client } from './gw2/client.js';
 import { Importer } from './importer/importer.js';
 import { startFakeGw2Api, type FakeGw2Api } from './test/fakeGw2Api.js';
-import { chatLinkFor, createTestImporter, fixtureItems, runImport } from './test/fixtures.js';
+import { autoConsumedFixtureItems, chatLinkFor, createTestImporter, fixtureItems, runImport } from './test/fixtures.js';
 
 // End-to-end API tests: the real Hono app and importer run against a fake GW2 API and an in-memory DB.
 // app.request(path) calls a route directly, without opening a network port.
@@ -162,6 +163,315 @@ describe('Placeholder filter', () => {
     it('hideCommon hides Mastery Points, Emote Tomes and currencies', async () => {
         assert.deepEqual(await phIds('?view=consumable&sort=id'), [109, 8778]);
         assert.deepEqual(await phIds('?view=consumable&hideCommon=false&sort=id'), [104, 105, 107, 108, 109, 8778]);
+    });
+});
+
+describe('Auto-consumed filter', () => {
+    let autoApi: FakeGw2Api;
+    let autoApp: Hono;
+
+    before(async () => {
+        autoApi = await startFakeGw2Api([...fixtureItems(), ...autoConsumedFixtureItems()]);
+        // The German text contains a phrase-like text, but only the English description counts.
+        autoApi.german.set(404, { name: 'Manuelle Trophäe', description: 'Consumed automatically when acquired.' });
+        const { db: autoDb, importer: autoImporter } = createTestImporter(autoApi.url);
+        autoApp = createApp(autoDb, null, autoImporter);
+        await runImport(autoImporter);
+    });
+    after(() => autoApi.close());
+
+    const autoIds = async (query: string) =>
+        ((await (await autoApp.request(`/api/items${query}`)).json()) as ItemListResponse).items.map((i) => i.id);
+
+    it('hides auto-consumed items by default in every view and language', async () => {
+        assert.deepEqual(await autoIds('?view=all&hideCommon=false&sort=id'), [1, 3, 4, 5, 404, 8778]);
+        assert.deepEqual(await autoIds('?view=all&hideCommon=false&sort=id&lang=de'), [1, 3, 4, 5, 404, 8778]);
+        assert.deepEqual(await autoIds('?view=gizmo&sort=id'), [1, 3]);
+    });
+
+    it('hideAutoConsumed=false shows them again', async () => {
+        assert.deepEqual(
+            await autoIds('?view=all&hideCommon=false&hideAutoConsumed=false&sort=id'),
+            [1, 3, 4, 5, 401, 402, 403, 404, 8778],
+        );
+        assert.deepEqual(await autoIds('?view=gizmo&hideAutoConsumed=false&sort=id'), [1, 3, 403]);
+    });
+
+    it('an invalid value -> 400', async () => {
+        const res = await autoApp.request('/api/items?hideAutoConsumed=maybe');
+        assert.equal(res.status, 400);
+    });
+});
+
+describe('Type and subtype filter', () => {
+    let typeApi: FakeGw2Api;
+    let typeApp: Hono;
+
+    before(async () => {
+        const gizmo = fixtureItems()[0]!;
+        const consumable = fixtureItems().find((i) => i.id === 8778)!;
+        typeApi = await startFakeGw2Api([
+            ...fixtureItems(),
+            // Tonics: one Gizmo, two Consumables (Generic and Food); the Unlock recipe is no tonic
+            { ...gizmo, id: 202, name: 'Feisty Feline Tonic' },
+            { ...consumable, id: 201, name: 'Belcher Tonic' },
+            { ...consumable, id: 203, name: 'Endless Mystery Tonic', details: { type: 'Food' } },
+            { ...consumable, id: 204, name: 'Recipe: Wolf Tonic', details: { type: 'Unlock' } },
+        ]);
+        const { db: typeDb, importer: typeImporter } = createTestImporter(typeApi.url);
+        typeApp = createApp(typeDb, null, typeImporter);
+        await runImport(typeImporter);
+    });
+    after(() => typeApi.close());
+
+    const typeIds = async (query: string) =>
+        ((await (await typeApp.request(`/api/items${query}`)).json()) as ItemListResponse).items.map((i) => i.id);
+
+    it('itemType narrows the tonic view; empty or both values show all tonics', async () => {
+        assert.deepEqual(await typeIds('?view=tonic&sort=id'), [201, 202, 203]);
+        assert.deepEqual(await typeIds('?view=tonic&itemType=Gizmo&sort=id'), [202]);
+        assert.deepEqual(await typeIds('?view=tonic&itemType=Consumable&sort=id'), [201, 203]);
+        assert.deepEqual(await typeIds('?view=tonic&itemType=Gizmo,Consumable&sort=id'), [201, 202, 203]);
+        assert.deepEqual(await typeIds('?view=tonic&itemType=&sort=id'), [201, 202, 203]);
+    });
+
+    it('subtype narrows the consumable view (any of the listed), together with hideCommon', async () => {
+        assert.deepEqual(
+            await typeIds('?view=consumable&hideCommon=false&subtype=Food,Generic&sort=id'),
+            [4, 201, 203, 8778],
+        );
+        assert.deepEqual(await typeIds('?view=consumable&hideCommon=false&subtype=Utility&sort=id'), [5]);
+        // Food is hidden by hideCommon, so only Generic is left
+        assert.deepEqual(await typeIds('?view=consumable&subtype=Food,Generic&sort=id'), [201, 8778]);
+        assert.deepEqual(await typeIds('?view=consumable&subtype=Food&sort=id'), []);
+    });
+
+    it('the parameters are ignored in other views', async () => {
+        for (const view of ['gizmo', 'consumable', 'all']) {
+            const plain = await typeIds(`?view=${view}&hideCommon=false&sort=id`);
+            assert.deepEqual(await typeIds(`?view=${view}&hideCommon=false&itemType=Gizmo&sort=id`), plain, view);
+        }
+        for (const view of ['gizmo', 'tonic', 'all']) {
+            const plain = await typeIds(`?view=${view}&hideCommon=false&sort=id`);
+            assert.deepEqual(await typeIds(`?view=${view}&hideCommon=false&subtype=Utility&sort=id`), plain, view);
+        }
+    });
+
+    it('unknown values -> 400', async () => {
+        for (const query of ['itemType=Trophy', 'itemType=Gizmo,Foo', 'subtype=Foo', 'subtype=food']) {
+            assert.equal((await typeApp.request(`/api/items?view=all&${query}`)).status, 400, query);
+        }
+    });
+});
+
+describe('Type and subtype filter: edge cases', () => {
+    let edgeApi: FakeGw2Api;
+    let edgeApp: Hono;
+    let edgeDb: DatabaseSync;
+
+    before(async () => {
+        const gizmo = fixtureItems()[0]!;
+        const consumable = fixtureItems().find((i) => i.id === 8778)!;
+        edgeApi = await startFakeGw2Api([
+            ...fixtureItems(),
+            // Tonic recognised by flag only (name has no "tonic"), as Gizmo and as Consumable
+            { ...gizmo, id: 211, name: 'Flag Transformer', flags: ['NoSell', 'Tonic'] },
+            { ...consumable, id: 212, name: 'Flag Potion', flags: ['Tonic'], details: { type: 'Generic' } },
+            // Tonic recognised by name only, upper case, no flag
+            { ...gizmo, id: 213, name: 'LOUD TONIC' },
+            // Not a candidate: tonic by name, but no Dungeon game type
+            { ...consumable, id: 214, name: 'Remote Tonic', game_types: ['Pve'], details: { type: 'Generic' } },
+            // Consumable that will lose its subtype below, and a removed tonic
+            { ...consumable, id: 215, name: 'Nameless Consumable', details: { type: 'Generic' } },
+            { ...gizmo, id: 216, name: 'Vanishing Tonic' },
+        ]);
+        const created = createTestImporter(edgeApi.url);
+        edgeDb = created.db;
+        edgeApp = createApp(edgeDb, null, created.importer);
+        await runImport(created.importer);
+        edgeApi.items.delete(216);
+        edgeApi.buildId = 123457;
+        await runImport(created.importer);
+        edgeDb.exec(`UPDATE items SET subtype = NULL WHERE id = 215`);
+    });
+    after(() => edgeApi.close());
+
+    const list = async (query: string) =>
+        (await (await edgeApp.request(`/api/items${query}`)).json()) as ItemListResponse;
+    const idsOf = async (query: string) => (await list(query)).items.map((i) => i.id);
+
+    it('duplicate and empty list elements behave like the clean list', async () => {
+        const clean = await idsOf('?view=consumable&hideCommon=false&subtype=Food&sort=id');
+        assert.deepEqual(clean, [4]);
+        assert.deepEqual(await idsOf('?view=consumable&hideCommon=false&subtype=Food,Food&sort=id'), clean);
+        assert.deepEqual(
+            await idsOf('?view=tonic&itemType=Gizmo,Gizmo&sort=id'),
+            await idsOf('?view=tonic&itemType=Gizmo&sort=id'),
+        );
+        for (const query of ['subtype=Food,', 'subtype=,Food', 'subtype=Food,,']) {
+            const res = await edgeApp.request(`/api/items?view=consumable&hideCommon=false&${query}&sort=id`);
+            assert.equal(res.status, 200, query);
+            const body = (await res.json()) as ItemListResponse;
+            assert.deepEqual(
+                body.items.map((i) => i.id),
+                clean,
+                query,
+            );
+        }
+    });
+
+    it('tonics are found by flag or by name, independent of the itemType filter', async () => {
+        assert.deepEqual(await idsOf('?view=tonic&itemType=Gizmo&sort=id'), [211, 213]);
+        assert.deepEqual(await idsOf('?view=tonic&itemType=Consumable&sort=id'), [212]);
+        assert.deepEqual(await idsOf('?view=tonic&sort=id'), [211, 212, 213]);
+    });
+
+    it('candidate=all and includeRemoved widen the tonic view, itemType still narrows it', async () => {
+        assert.deepEqual(await idsOf('?view=tonic&candidate=all&sort=id'), [211, 212, 213, 214]);
+        assert.deepEqual(await idsOf('?view=tonic&candidate=all&itemType=Consumable&sort=id'), [212, 214]);
+        assert.deepEqual(await idsOf('?view=tonic&includeRemoved=true&sort=id'), [211, 212, 213, 216]);
+        assert.deepEqual(await idsOf('?view=tonic&includeRemoved=true&itemType=Gizmo&sort=id'), [211, 213, 216]);
+        assert.deepEqual(await idsOf('?view=tonic&includeRemoved=true&itemType=Consumable&sort=id'), [212]);
+    });
+
+    it('consumables without a subtype never match a subtype filter but stay in the unfiltered view', async () => {
+        assert.ok((await idsOf('?view=consumable&candidate=all&hideCommon=false&sort=id')).includes(215));
+        for (const subtype of CONSUMABLE_SUBTYPES) {
+            assert.ok(
+                !(await idsOf(`?view=consumable&candidate=all&hideCommon=false&subtype=${subtype}`)).includes(215),
+                subtype,
+            );
+        }
+    });
+
+    it('subtype combined with q search, candidate=all, total, paging and sorting', async () => {
+        assert.deepEqual(await idsOf('?view=consumable&hideCommon=false&subtype=Generic&q=bomb'), [212, 8778]);
+        assert.deepEqual(await idsOf('?view=consumable&hideCommon=false&subtype=Food&q=bomb'), []);
+        // total counts all matches, independent of the page size; pages partition the result
+        const everything = await list(
+            '?view=consumable&candidate=all&hideCommon=false&subtype=Generic,Food&sort=id&pageSize=100',
+        );
+        assert.equal(everything.total, everything.items.length);
+        assert.ok(everything.total >= 4);
+        const collected: number[] = [];
+        for (let page = 1; page <= everything.total; page++) {
+            const part = await list(
+                `?view=consumable&candidate=all&hideCommon=false&subtype=Generic,Food&sort=id&pageSize=1&page=${page}`,
+            );
+            assert.equal(part.total, everything.total, `page ${page}`);
+            collected.push(...part.items.map((i) => i.id));
+        }
+        assert.deepEqual(
+            collected,
+            everything.items.map((i) => i.id),
+        );
+        // sorting stays correct under the filter
+        const ascending = await idsOf('?view=consumable&hideCommon=false&subtype=Generic,Food&sort=id&order=asc');
+        const descending = await idsOf('?view=consumable&hideCommon=false&subtype=Generic,Food&sort=id&order=desc');
+        assert.deepEqual(descending, [...ascending].reverse());
+        // the tonic view with itemType and a search term
+        assert.deepEqual(await idsOf('?view=tonic&itemType=Gizmo&q=loud'), [213]);
+        assert.deepEqual(await idsOf('?view=tonic&itemType=Consumable&q=loud'), []);
+        assert.equal((await list('?view=tonic&itemType=Gizmo&pageSize=1')).total, 2);
+    });
+});
+
+describe('Auto-consumed filter: edge cases', () => {
+    let edgeApi: FakeGw2Api;
+    let edgeApp: Hono;
+
+    before(async () => {
+        const base = autoConsumedFixtureItems()[0]!; // 401, a candidate with the phrase
+        edgeApi = await startFakeGw2Api([
+            base,
+            { ...base, id: 501, name: 'No Description Trophy', description: undefined },
+            { ...base, id: 502, name: 'Empty Description Trophy', description: '' },
+            { ...base, id: 503, name: 'Not A Candidate Trophy', game_types: ['Pve'] },
+            { ...base, id: 504, name: '((906936))' },
+            { ...base, id: 505, name: 'Mixed Phrase Trophy', description: 'Wait. cOnSuMeD iMmEdIaTeLy WhEn AcQuIrEd' },
+            { ...base, id: 506, name: 'Manual Trophy', description: 'Double-click to use.' },
+            { ...base, id: 507, name: 'Another Manual Trophy', description: 'Use to open.' },
+            { ...base, id: 508, name: 'Third Manual Trophy', description: 'Use to open the chest.' },
+        ]);
+        const { db: edgeDb, importer: edgeImporter } = createTestImporter(edgeApi.url);
+        edgeApp = createApp(edgeDb, null, edgeImporter);
+        await runImport(edgeImporter);
+    });
+    after(() => edgeApi.close());
+
+    const edgeList = async (query: string) =>
+        (await (await edgeApp.request(`/api/items${query}`)).json()) as ItemListResponse;
+    const edgeIds = async (query: string) => (await edgeList(query)).items.map((i) => i.id);
+    const base = '?view=all&hideCommon=false&sort=id';
+
+    it('keeps items with a missing or empty description (NULL must not drop the row)', async () => {
+        assert.deepEqual(await edgeIds(base), [501, 502, 506, 507, 508]);
+    });
+
+    it('is case insensitive in SQL and hides a mixed-case phrase', async () => {
+        const shown = await edgeIds(`${base}&hideAutoConsumed=false`);
+        assert.ok(shown.includes(505));
+        assert.ok(!(await edgeIds(base)).includes(505));
+    });
+
+    it('accepts 0, 1, true and false like the other boolean parameters', async () => {
+        const hiding = await edgeIds(base);
+        for (const value of ['1', 'true']) {
+            assert.deepEqual(await edgeIds(`${base}&hideAutoConsumed=${value}`), hiding, value);
+        }
+        const showing = await edgeIds(`${base}&hideAutoConsumed=false`);
+        assert.deepEqual(await edgeIds(`${base}&hideAutoConsumed=0`), showing);
+        assert.ok(showing.length > hiding.length);
+        // An empty value falls back to the default (hide)
+        assert.deepEqual(await edgeIds(`${base}&hideAutoConsumed=`), hiding);
+        for (const invalid of ['yes']) {
+            assert.equal((await edgeApp.request(`/api/items${base}&hideAutoConsumed=${invalid}`)).status, 400, invalid);
+        }
+    });
+
+    it('combines with candidate=all and candidate=no', async () => {
+        assert.deepEqual(await edgeIds(`${base}&candidate=all`), [501, 502, 506, 507, 508]);
+        assert.deepEqual(await edgeIds(`${base}&candidate=no`), []);
+        assert.deepEqual(await edgeIds(`${base}&candidate=no&hideAutoConsumed=false`), [503]);
+        assert.deepEqual(
+            await edgeIds(`${base}&candidate=all&hideAutoConsumed=false&hidePlaceholders=false`),
+            [401, 501, 502, 503, 504, 505, 506, 507, 508],
+        );
+    });
+
+    it('combines with hidePlaceholders', async () => {
+        // 504 is a placeholder and has the phrase: hidden by either filter, shown only if both are off
+        assert.ok(!(await edgeIds(`${base}&hidePlaceholders=false`)).includes(504));
+        assert.ok(!(await edgeIds(`${base}&hideAutoConsumed=false`)).includes(504));
+        assert.ok((await edgeIds(`${base}&hideAutoConsumed=false&hidePlaceholders=false`)).includes(504));
+    });
+
+    it('combines with the search: only matching, not auto-consumed items', async () => {
+        assert.deepEqual(await edgeIds(`${base}&q=trophy`), [501, 502, 506, 507, 508]);
+        assert.deepEqual(await edgeIds(`${base}&q=manual`), [506, 507, 508]);
+        assert.deepEqual(await edgeIds(`${base}&q=mixed`), []);
+        assert.deepEqual(await edgeIds(`${base}&q=mixed&hideAutoConsumed=false`), [505]);
+    });
+
+    it('total and paging count only the visible items', async () => {
+        const page1 = await edgeList(`${base}&pageSize=2&page=1`);
+        const page3 = await edgeList(`${base}&pageSize=2&page=3`);
+        assert.equal(page1.total, 5);
+        assert.deepEqual(
+            page1.items.map((i) => i.id),
+            [501, 502],
+        );
+        assert.deepEqual(
+            page3.items.map((i) => i.id),
+            [508],
+        );
+        const all = await edgeList(`${base}&candidate=all&hideAutoConsumed=false&hidePlaceholders=false&pageSize=200`);
+        assert.equal(all.total, all.items.length);
+        assert.equal(all.total, 9);
+    });
+
+    it('sorting keeps the filter (descending by name)', async () => {
+        assert.deepEqual(await edgeIds('?view=all&hideCommon=false&sort=name&order=desc'), [508, 501, 506, 502, 507]);
     });
 });
 

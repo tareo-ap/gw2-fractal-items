@@ -66,6 +66,35 @@ describe('Language (lang=de)', () => {
         assert.deepEqual(await idsOf('q=bausatz'), []);
     });
 
+    it('List: description in the chosen language, English fallback without German row', async () => {
+        const descriptions = async (query: string) =>
+            Object.fromEntries(
+                (await get<ItemListResponse>(`/api/items?candidate=all&${query}`)).items.map((i) => [
+                    i.id,
+                    i.description,
+                ]),
+            );
+        assert.deepEqual(await descriptions('lang=en'), {
+            1: 'Description of Mini Golem Kit.',
+            2: 'Description of Banner of Strength.',
+            3: 'Description of Old Gizmo.',
+        });
+        assert.deepEqual(await descriptions('lang=de'), {
+            1: 'Ein Bausatz für Golems.',
+            2: 'Description of Banner of Strength.', // no German row: English
+            3: 'Description of Old Gizmo.', // German row without own description: the fake API (like the real one) returns English
+        });
+    });
+
+    it('Search in the description: lang=en only English text, lang=de German or English text', async () => {
+        // "description" occurs only in the English descriptions, "bausatz" only in the German item 1.
+        assert.deepEqual(await idsOf('candidate=all&lang=en&q=description&sort=id'), [1, 2, 3]);
+        // In German the German OR the English index counts, so English-only words are found there too.
+        assert.deepEqual(await idsOf('candidate=all&lang=de&q=description&sort=id'), [1, 2, 3]);
+        assert.deepEqual(await idsOf('candidate=all&lang=de&q=golems'), [1]); // German-only description word
+        assert.deepEqual(await idsOf('candidate=all&lang=en&q=golems'), []);
+    });
+
     it('Detail: fall back to English without German text', async () => {
         const item = await get<ItemDetail>('/api/items/2?lang=de');
         assert.equal(item.name, 'Banner of Strength');

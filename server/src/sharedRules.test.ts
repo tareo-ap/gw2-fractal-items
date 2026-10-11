@@ -1,13 +1,20 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+    AUTO_CONSUMED_PHRASES,
     chatLinkForId,
     compareNoCase,
+    CONSUMABLE_SUBTYPES,
+    HIDE_COMMON_SUBTYPES,
+    isAutoConsumed,
     isCommonConsumable,
+    isHiddenByHideCommon,
     isPlaceholder,
     isTonic,
     itemIdFromChatLink,
+    itemTypeFilterApplies,
     sqlTrim,
+    subtypeFilterApplies,
 } from '../../shared/rules.js';
 import { searchPhrases, tokenize } from '../../shared/staticQuery.js';
 import { chatLinkFor } from './test/fixtures.js';
@@ -64,6 +71,35 @@ describe('Rules', () => {
         assert.equal(isCommonConsumable(item('300 Geodes', { subtype: 'Generic' })), false);
         assert.equal(isCommonConsumable(item('300Geodes', { subtype: 'Immediate' })), false);
         assert.equal(isCommonConsumable(item('300 Geodes')), false);
+    });
+
+    it('hideCommon subtype helper matches isCommonConsumable; filters apply only in their view', () => {
+        for (const subtype of CONSUMABLE_SUBTYPES) {
+            // With a neutral name the name-based rules do not apply, so both helpers must agree.
+            assert.equal(isHiddenByHideCommon(subtype), isCommonConsumable(item('X', { subtype })), subtype);
+        }
+        for (const subtype of HIDE_COMMON_SUBTYPES) assert.ok(CONSUMABLE_SUBTYPES.includes(subtype), subtype);
+        assert.equal(isHiddenByHideCommon('Immediate'), false);
+        assert.equal(itemTypeFilterApplies('tonic'), true);
+        assert.equal(subtypeFilterApplies('consumable'), true);
+        for (const view of ['gizmo', 'consumable', 'all']) assert.equal(itemTypeFilterApplies(view), false, view);
+        for (const view of ['gizmo', 'tonic', 'all']) assert.equal(subtypeFilterApplies(view), false, view);
+    });
+
+    it('Auto-consumed: every phrase is found, ignoring case, inside longer text', () => {
+        for (const phrase of AUTO_CONSUMED_PHRASES) {
+            assert.equal(isAutoConsumed(phrase), true, phrase);
+            assert.equal(isAutoConsumed(`Intro. <c=@flavor>${phrase.toUpperCase()}</c> Outro.`), true, phrase);
+            // Phrases are used in SQL LIKE patterns, so they must not contain wildcards, and must be lowercase ASCII.
+            assert.ok(!/[%_]/.test(phrase), `wildcard in "${phrase}"`);
+            assert.equal(phrase, phrase.toLowerCase());
+            assert.ok(/^[\x20-\x7e]+$/.test(phrase), `non-ASCII in "${phrase}"`);
+        }
+        assert.equal(isAutoConsumed('Double-click to use.'), false);
+        assert.equal(isAutoConsumed('Wird beim Erwerb automatisch verbraucht.'), false);
+        assert.equal(isAutoConsumed(''), false);
+        assert.equal(isAutoConsumed(null), false);
+        assert.equal(isAutoConsumed(undefined), false);
     });
 
     it('Chat link: round trip as in the game', () => {
