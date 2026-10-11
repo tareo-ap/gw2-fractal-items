@@ -74,6 +74,13 @@ export function parseGw2Markup(text: string): ReactNode[] {
     return root.children;
 }
 
+/** Description without any markup (e.g. for a tooltip): <br> becomes a line break, other tags are removed. */
+export function gw2PlainText(text: string): string {
+    return text.replace(TAG, (_tag, closing: string, name: string) =>
+        !closing && name.toLowerCase() === 'br' ? '\n' : '',
+    );
+}
+
 /** Component wrapper: renders a GW2 description as styled text inside a <span>. */
 export function Gw2Text({ text, className }: { text: string; className?: string }) {
     return <span className={className}>{parseGw2Markup(text)}</span>;

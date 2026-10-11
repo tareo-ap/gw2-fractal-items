@@ -1,11 +1,20 @@
 import type { GameType, ItemListQuery, ItemView, Lang, Rarity, TestStatus } from '../../../shared/types';
-import { GAME_TYPES, ITEM_SORTS, RARITIES, hideCommonApplies } from '../../../shared/rules';
+import {
+    CONSUMABLE_SUBTYPES,
+    GAME_TYPES,
+    ITEM_SORTS,
+    ITEM_TYPE_FILTER,
+    RARITIES,
+    hideCommonApplies,
+    itemTypeFilterApplies,
+    subtypeFilterApplies,
+} from '../../../shared/rules';
 
 // All list filters live in the URL so links are shareable and "Back" works.
 // Default values are omitted from the URL.
 
 // Rarities, game types and sort options come from shared/rules.ts (the same lists as on the server).
-export { GAME_TYPES, RARITIES };
+export { CONSUMABLE_SUBTYPES, GAME_TYPES, ITEM_TYPE_FILTER, RARITIES };
 export const VIEWS: ItemView[] = ['gizmo', 'consumable', 'tonic', 'all'];
 export const SORTS = ITEM_SORTS;
 export const PAGE_SIZE = 50;
@@ -14,6 +23,9 @@ export const PAGE_SIZE = 50;
 // module.
 // Candidate = an item whose game types contain Dungeon (see CLAUDE.md glossary).
 export type Candidate = NonNullable<ItemListQuery['candidate']>;
+// Item types of the tonic filter (Gizmo / Consumable) and consumable subtypes (`details.type`), see shared/rules.ts.
+export type ItemTypeFilter = (typeof ITEM_TYPE_FILTER)[number];
+export type ConsumableSubtype = (typeof CONSUMABLE_SUBTYPES)[number];
 export type TestFilter = TestStatus | 'retest';
 // `typeof SORTS` is the array type; `[number]` is an indexed access type that looks up its element type, i.e. the union
 // of the allowed sort field strings.
@@ -25,6 +37,12 @@ export interface ListFilters {
     candidate: Candidate;
     hideCommon: boolean;
     hidePlaceholders: boolean;
+    // Hide items whose English description says they are consumed automatically when acquired.
+    hideAutoConsumed: boolean;
+    // Only used in the Tonics view (empty = both types).
+    itemType: ItemTypeFilter[];
+    // Only used in the Consumables view (empty = all subtypes).
+    subtype: ConsumableSubtype[];
     rarity: Rarity[];
     gameType: GameType[];
     testStatus: TestFilter | null;
@@ -41,6 +59,9 @@ export const DEFAULT_FILTERS: ListFilters = {
     candidate: 'yes',
     hideCommon: true,
     hidePlaceholders: true,
+    hideAutoConsumed: true,
+    itemType: [],
+    subtype: [],
     rarity: [],
     gameType: [],
     testStatus: null,
@@ -80,6 +101,9 @@ export function parseFilters(params: URLSearchParams): ListFilters {
         candidate: oneOf(params.get('candidate'), ['yes', 'no', 'all'] as const) ?? defaults.candidate,
         hideCommon: params.get('hideCommon') !== 'false',
         hidePlaceholders: params.get('hidePlaceholders') !== 'false',
+        hideAutoConsumed: params.get('hideAutoConsumed') !== 'false',
+        itemType: listOf(params.get('itemType'), ITEM_TYPE_FILTER),
+        subtype: listOf(params.get('subtype'), CONSUMABLE_SUBTYPES),
         rarity: listOf(params.get('rarity'), RARITIES),
         gameType: listOf(params.get('gameType'), GAME_TYPES),
         testStatus: oneOf(params.get('testStatus'), ['untested', 'works', 'broken', 'retest'] as const) ?? null,
@@ -100,6 +124,11 @@ export function filtersToParams(filters: ListFilters): URLSearchParams {
     if (filters.candidate !== defaults.candidate) params.set('candidate', filters.candidate);
     if (!filters.hideCommon) params.set('hideCommon', 'false');
     if (!filters.hidePlaceholders) params.set('hidePlaceholders', 'false');
+    if (!filters.hideAutoConsumed) params.set('hideAutoConsumed', 'false');
+    // itemType and subtype are left out in views where they do not apply, so links stay clean.
+    if (filters.itemType.length && itemTypeFilterApplies(filters.view))
+        params.set('itemType', filters.itemType.join(','));
+    if (filters.subtype.length && subtypeFilterApplies(filters.view)) params.set('subtype', filters.subtype.join(','));
     if (filters.rarity.length) params.set('rarity', filters.rarity.join(','));
     if (filters.gameType.length) params.set('gameType', filters.gameType.join(','));
     if (filters.testStatus) params.set('testStatus', filters.testStatus);
@@ -124,6 +153,7 @@ export function toApiQuery(filters: ListFilters): string {
     params.set('candidate', filters.candidate);
     params.set('hideCommon', String(filters.hideCommon));
     params.set('hidePlaceholders', String(filters.hidePlaceholders));
+    params.set('hideAutoConsumed', String(filters.hideAutoConsumed));
     params.set('page', String(filters.page));
     params.set('pageSize', String(PAGE_SIZE));
     return params.toString();
@@ -139,15 +169,28 @@ export function hasHideCommon(view: ItemView): boolean {
     return hideCommonApplies(view);
 }
 
+/** The item type filter is only shown in the Tonics view. */
+export function hasItemTypeFilter(view: ItemView): boolean {
+    return itemTypeFilterApplies(view);
+}
+
+/** The subtype filter is only shown in the Consumables view. */
+export function hasSubtypeFilter(view: ItemView): boolean {
+    return subtypeFilterApplies(view);
+}
+
 /** Number of active filters in the collapsible section (shown on the button). */
 export function countExtraFilters(filters: ListFilters): number {
     let count = 0;
     if (filters.rarity.length) count++;
+    if (filters.itemType.length && itemTypeFilterApplies(filters.view)) count++;
+    if (filters.subtype.length && subtypeFilterApplies(filters.view)) count++;
     if (filters.gameType.length) count++;
     if (filters.testStatus) count++;
     if (filters.updateId !== null) count++;
     if (filters.includeRemoved) count++;
     if (hasHideCommon(filters.view) && !filters.hideCommon) count++;
     if (!filters.hidePlaceholders) count++;
+    if (!filters.hideAutoConsumed) count++;
     return count;
 }

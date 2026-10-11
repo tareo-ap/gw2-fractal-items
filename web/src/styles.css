@@ -525,6 +525,17 @@ textarea {
     border-color: var(--rc, var(--accent));
     background: color-mix(in srgb, var(--rc, var(--accent)) 18%, var(--bg));
 }
+.chip:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.chip:disabled:hover {
+    border-color: var(--border);
+}
+.chip-group .field-hint {
+    flex-basis: 100%;
+    color: var(--muted);
+}
 .chip-clear {
     color: var(--muted);
     border-style: dashed;
@@ -649,6 +660,23 @@ textarea {
 }
 .item-table .col-level {
     width: 60px;
+}
+/* Description column: bounded width so it cannot push the other columns off narrow screens. */
+.item-table .col-description {
+    width: 32%;
+    min-width: 160px;
+    max-width: 380px;
+}
+/* Shows at most 3 lines. The text is inline spans and <br>, so the clamp cuts through markup without breaking it. */
+.description-clamp {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    font-size: 0.85rem;
+    color: var(--muted);
 }
 
 /* Removed items grayed out */
@@ -1123,6 +1151,10 @@ li.removed .item-name {
     }
     .item-table .col-icon {
         width: 44px;
+    }
+    .item-table .col-description {
+        width: auto;
+        min-width: 120px;
     }
     .item-grid {
         grid-template-columns: minmax(0, 1fr);

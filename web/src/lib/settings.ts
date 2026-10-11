@@ -21,6 +21,8 @@ export interface Settings {
     /** 'default' = gold, otherwise an entry from ACCENTS */
     accent: string;
     width: WidthSetting;
+    /** Show the description column in the table layout of the item list. */
+    showDescription: boolean;
 }
 
 export const THEMES: ThemeSetting[] = ['dark', 'light', 'system'];
@@ -43,7 +45,12 @@ export const ACCENTS = [
 // Record<K, V> = object type with keys K and values V (like Map<K, V> but a plain object).
 const WIDTH_VALUES: Record<WidthSetting, string> = { normal: '1200px', wide: '1600px', wider: '2000px', full: '100%' };
 
-export const DEFAULT_SETTINGS: Settings = { theme: 'dark', accent: DEFAULT_ACCENT.id, width: 'normal' };
+export const DEFAULT_SETTINGS: Settings = {
+    theme: 'dark',
+    accent: DEFAULT_ACCENT.id,
+    width: 'normal',
+    showDescription: true,
+};
 
 // localStorage key (all other settings live inside this one JSON value).
 const KEY = 'gw2items.settings';
@@ -59,6 +66,8 @@ export function parseSettings(json: string | null): Settings {
             theme: THEMES.find((value) => value === raw.theme) ?? DEFAULT_SETTINGS.theme,
             accent: ACCENTS.find((accent) => accent.id === raw.accent)?.id ?? DEFAULT_SETTINGS.accent,
             width: WIDTHS.find((value) => value === raw.width) ?? DEFAULT_SETTINGS.width,
+            // Settings saved before this field existed have no value, so only an explicit false hides the column.
+            showDescription: typeof raw.showDescription === 'boolean' ? raw.showDescription : true,
         };
     } catch {
         return DEFAULT_SETTINGS;

@@ -1,14 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { describeUpdate } from '../lib/format';
 import { useT } from '../lib/i18n';
+import { isHiddenByHideCommon } from '../../../shared/rules';
 import {
+    CONSUMABLE_SUBTYPES,
     GAME_TYPES,
+    ITEM_TYPE_FILTER,
     RARITIES,
     SORTS,
     countExtraFilters,
     hasHideCommon,
+    hasItemTypeFilter,
+    hasSubtypeFilter,
     type Candidate,
     type ListFilters,
     type SortField,
@@ -77,6 +82,31 @@ export function FilterBar({ filters, onChange }: { filters: ListFilters; onChang
                     {extraCount > 0 && <span className="tab-count">{extraCount}</span>}
                 </summary>
                 <div className="filter-groups">
+                    {hasItemTypeFilter(filters.view) && (
+                        <ChipGroup
+                            label={t('filter.itemType')}
+                            options={ITEM_TYPE_FILTER}
+                            selected={filters.itemType}
+                            onChange={(itemType) => onChange({ itemType })}
+                        />
+                    )}
+                    {hasSubtypeFilter(filters.view) && (
+                        <ChipGroup
+                            label={t('filter.subtype')}
+                            options={CONSUMABLE_SUBTYPES}
+                            selected={filters.subtype}
+                            onChange={(subtype) => onChange({ subtype })}
+                            optionLabel={(subtype) => t(`subtype.${subtype}`)}
+                            // hideCommon removes these subtypes completely, so selecting them would give 0 results.
+                            // Already selected ones stay clickable so the user can still deselect them.
+                            disabledHint={
+                                filters.hideCommon
+                                    ? t('filter.subtypeHiddenByHideCommon', { option: t('filter.hideCommon') })
+                                    : undefined
+                            }
+                            isDisabled={(subtype) => filters.hideCommon && isHiddenByHideCommon(subtype)}
+                        />
+                    )}
                     <ChipGroup
                         label={t('filter.rarity')}
                         options={RARITIES}
@@ -127,6 +157,14 @@ export function FilterBar({ filters, onChange }: { filters: ListFilters; onChang
                                 onChange={(event) => onChange({ hidePlaceholders: event.target.checked })}
                             />
                             {t('filter.hidePlaceholders')}
+                        </label>
+                        <label className="check">
+                            <input
+                                type="checkbox"
+                                checked={filters.hideAutoConsumed}
+                                onChange={(event) => onChange({ hideAutoConsumed: event.target.checked })}
+                            />
+                            {t('filter.hideAutoConsumed')}
                         </label>
                         <label className="check">
                             <input
@@ -194,14 +232,25 @@ function ChipGroup<T extends string>({
     selected,
     onChange,
     chipClass,
+    optionLabel,
+    isDisabled,
+    disabledHint,
 }: {
     label: string;
     options: readonly T[];
     selected: T[];
     onChange: (values: T[]) => void;
     chipClass?: (value: T) => string;
+    // Text shown on the chip instead of the raw option value (e.g. translated subtype names).
+    optionLabel?: (value: T) => string;
+    // Options that cannot be newly selected. A selected option stays clickable so it can be removed again.
+    isDisabled?: (value: T) => boolean;
+    // Explanation for affected options (tooltip on disabled chips and a short text below the chips). It also applies to
+    // an already selected affected option, which stays clickable but gives no results.
+    disabledHint?: string;
 }) {
     const { t } = useT();
+    const hintId = useId(); // links the hint text to the affected chips via aria-describedby
     const toggle = (value: T) => {
         // Keep the order as in options so the URL stays stable.
         const next = selected.includes(value)
@@ -212,17 +261,29 @@ function ChipGroup<T extends string>({
     return (
         <fieldset className="chip-group">
             <legend className="field-label">{label}</legend>
-            {options.map((option) => (
-                <button
-                    key={option}
-                    type="button"
-                    className={`chip ${chipClass?.(option) ?? ''} ${selected.includes(option) ? 'selected' : ''}`}
-                    aria-pressed={selected.includes(option)}
-                    onClick={() => toggle(option)}
-                >
-                    {option}
-                </button>
-            ))}
+            {options.map((option) => {
+                const affected = !!isDisabled?.(option);
+                const disabled = !selected.includes(option) && affected;
+                return (
+                    <button
+                        key={option}
+                        type="button"
+                        className={`chip ${chipClass?.(option) ?? ''} ${selected.includes(option) ? 'selected' : ''}`}
+                        aria-pressed={selected.includes(option)}
+                        disabled={disabled}
+                        title={disabled ? disabledHint : undefined}
+                        aria-describedby={affected && disabledHint ? hintId : undefined}
+                        onClick={() => toggle(option)}
+                    >
+                        {optionLabel ? optionLabel(option) : option}
+                    </button>
+                );
+            })}
+            {disabledHint && options.some((option) => isDisabled?.(option)) && (
+                <small id={hintId} className="field-hint">
+                    {disabledHint}
+                </small>
+            )}
             {selected.length > 0 && (
                 <button type="button" className="chip chip-clear" onClick={() => onChange([])}>
                     {t('filter.clear')}

@@ -7,6 +7,8 @@ import { rarityClass, wikiSearchUrl } from '../lib/format';
 import { errorText, useT } from '../lib/i18n';
 import { PAGE_SIZE, exportUrl, toApiQuery, type ListFilters } from '../lib/filters';
 import { ErrorBox, GameTypeBadges, ItemIcon, Link, Loading, TestBadge } from './common';
+import { Gw2Text, gw2PlainText } from './Gw2Text';
+import { useSettings } from '../lib/settings';
 import { FilterBar, type FilterChange } from './FilterBar';
 
 // Display mode of the result list; the choice is remembered in localStorage.
@@ -35,6 +37,7 @@ function saveLayout(layout: Layout) {
 /** List page (route "/"): filter bar, result table or grid, export links and pagination. */
 export function ItemListPage({ filters, onChange }: { filters: ListFilters; onChange: FilterChange }) {
     const { t, lang, formatNumber } = useT();
+    const { settings, update: updateSettings } = useSettings();
     const [layout, setLayout] = useState<Layout>(loadLayout); // passing the function (not calling it) runs it only on the first render
 
     const query = toApiQuery(filters); // query string for the API, also used as part of the cache key
@@ -113,6 +116,16 @@ export function ItemListPage({ filters, onChange }: { filters: ListFilters; onCh
                         {t('list.grid')}
                     </button>
                 </div>
+                {layout === 'table' && (
+                    <label className="check small">
+                        <input
+                            type="checkbox"
+                            checked={settings.showDescription}
+                            onChange={(event) => updateSettings({ showDescription: event.target.checked })}
+                        />
+                        {t('list.showDescription')}
+                    </label>
+                )}
             </div>
 
             {items.isError && (
@@ -125,7 +138,11 @@ export function ItemListPage({ filters, onChange }: { filters: ListFilters; onCh
             {data && data.items.length === 0 && <p className="empty">{t('list.empty')}</p>}
             {data && data.items.length > 0 && (
                 <div className={items.isPlaceholderData ? 'results stale' : 'results'}>
-                    {layout === 'table' ? <ItemTable items={data.items} /> : <ItemGrid items={data.items} />}
+                    {layout === 'table' ? (
+                        <ItemTable items={data.items} showDescription={settings.showDescription} />
+                    ) : (
+                        <ItemGrid items={data.items} />
+                    )}
                 </div>
             )}
             {data && (
@@ -161,7 +178,7 @@ function TypeText({ item }: { item: ItemListItem }) {
 }
 
 /** Result list as a table, one row per item. */
-function ItemTable({ items }: { items: ItemListItem[] }) {
+function ItemTable({ items, showDescription }: { items: ItemListItem[]; showDescription: boolean }) {
     const { t, lang } = useT();
     return (
         <table className="item-table">
@@ -171,6 +188,7 @@ function ItemTable({ items }: { items: ItemListItem[] }) {
                     <th>{t('col.name')}</th>
                     <th className="col-type">{t('col.type')}</th>
                     <th className="col-level">{t('col.level')}</th>
+                    {showDescription && <th className="col-description">{t('col.description')}</th>}
                     <th>Game Types</th>
                     <th>{t('col.test')}</th>
                 </tr>
@@ -211,6 +229,16 @@ function ItemTable({ items }: { items: ItemListItem[] }) {
                             <TypeText item={item} />
                         </td>
                         <td className="col-level">{item.level}</td>
+                        {showDescription && (
+                            <td className="col-description">
+                                {item.description && (
+                                    // The clamp hides long texts, so the full text without markup is in the tooltip.
+                                    <div className="description-clamp" title={gw2PlainText(item.description)}>
+                                        <Gw2Text text={item.description} />
+                                    </div>
+                                )}
+                            </td>
+                        )}
                         <td>
                             <GameTypeBadges gameTypes={item.gameTypes} />
                         </td>
