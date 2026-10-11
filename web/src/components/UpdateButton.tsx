@@ -6,35 +6,44 @@ import { utcStamp } from '../lib/format';
 import { errorText, useT, type I18n } from '../lib/i18n';
 import { Link } from './common';
 
+// ISO timestamp -> "YYYY-MM-DD HH:MM" in UTC.
 const utc = (iso: string) => utcStamp(iso).replace('_', ' ');
 
+// The auto check is the server's scheduled look for a new game build (patch) that triggers an update.
 /** "Auto check: daily 06:00, Tue 17:00–19:00 every 30 min (Europe/Berlin) · next: … · last: …" */
-function describeAutoCheck(a: AutoCheckStatus, t: I18n['t']): string {
-    const { schedule: s } = a;
-    const tz = s.timeZone;
+function describeAutoCheck(autoCheck: AutoCheckStatus, t: I18n['t']): string {
+    const { schedule } = autoCheck;
+    const timeZone = schedule.timeZone;
     const parts = [
-        s.patchWindow
+        schedule.patchWindow
             ? t('update.autoCheck', {
-                  daily: s.dailyAt,
-                  window: `${t(`autoCheck.day.${s.patchWindow.day}`)} ${s.patchWindow.start}–${s.patchWindow.end}`,
-                  minutes: s.patchEveryMinutes,
-                  tz,
+                  daily: schedule.dailyAt,
+                  window: `${t(`autoCheck.day.${schedule.patchWindow.day}`)} ${schedule.patchWindow.start}–${schedule.patchWindow.end}`,
+                  minutes: schedule.patchEveryMinutes,
+                  tz: timeZone,
               })
-            : t('update.autoCheckDaily', { daily: s.dailyAt, tz }),
+            : t('update.autoCheckDaily', { daily: schedule.dailyAt, tz: timeZone }),
     ];
-    if (a.nextCheckAt) parts.push(t('update.autoCheckNext', { time: utc(a.nextCheckAt) }));
-    if (a.lastCheckAt && a.lastResult)
-        parts.push(t('update.autoCheckLast', { time: utc(a.lastCheckAt), result: t(`autoCheck.${a.lastResult}`) }));
+    if (autoCheck.nextCheckAt) parts.push(t('update.autoCheckNext', { time: utc(autoCheck.nextCheckAt) }));
+    if (autoCheck.lastCheckAt && autoCheck.lastResult)
+        parts.push(
+            t('update.autoCheckLast', {
+                time: utc(autoCheck.lastCheckAt),
+                result: t(`autoCheck.${autoCheck.lastResult}`),
+            }),
+        );
     return parts.join(' · ');
 }
 
-// "Update" button: starts an import and polls the status while it runs.
+// "Update" button: starts an import (reloads all items from the GW2 API) and polls the status while it runs.
 export function UpdateButton() {
     const { t, formatNumber } = useT();
     const queryClient = useQueryClient();
     const [message, setMessage] = useState<string | null>(null);
+    // Remembers the previous `running` value between renders to detect the running -> done transition.
     const wasRunning = useRef(false);
 
+    // refetchInterval makes TanStack Query poll: every 1.5 s while an import runs, otherwise not at all (false).
     const status = useQuery({
         queryKey: ['importStatus'],
         queryFn: api.importStatus,
@@ -49,8 +58,11 @@ export function UpdateButton() {
     const autoCheckText = autoCheck ? describeAutoCheck(autoCheck, t) : '';
 
     // Transition from "running" to "done": reload lists, key figures and updates.
+    // useEffect with [running, queryClient]: runs after a render in which one of them changed.
     useEffect(() => {
         if (wasRunning.current && !running) {
+            // invalidateQueries marks all cached queries whose key starts with `[key]` as stale and refetches the
+            // active ones.
             for (const key of ['items', 'item', 'stats', 'updates']) {
                 void queryClient.invalidateQueries({ queryKey: [key] });
             }
@@ -58,6 +70,7 @@ export function UpdateButton() {
         wasRunning.current = running;
     }, [running, queryClient]);
 
+    // Mutation = write request; 409 Conflict means an import is already running (e.g. started in another tab).
     const start = useMutation({
         mutationFn: api.startUpdate,
         onMutate: () => setMessage(null),
@@ -76,6 +89,7 @@ export function UpdateButton() {
     });
 
     const data = status.data;
+    // Progress in percent, or null while the total is not known yet (shows an indeterminate bar).
     const percent = data && data.total > 0 ? Math.min(100, Math.round((data.processed / data.total) * 100)) : null;
 
     return (

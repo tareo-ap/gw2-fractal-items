@@ -10,6 +10,7 @@ let api: FakeGw2Api;
 let db: DatabaseSync;
 let importer: Importer;
 
+// item_changes rows of one update, as stored.
 const changesOf = (updateId: number) =>
     db
         .prepare(
@@ -22,19 +23,21 @@ const changesOf = (updateId: number) =>
         game_types_before: string | null;
         game_types_after: string | null;
     }[];
+// Item IDs found in the English full-text index (FTS5 MATCH query).
 const ftsIds = (match: string) =>
     (
         db.prepare('SELECT rowid FROM items_fts WHERE items_fts MATCH ? ORDER BY rowid').all(match) as {
             rowid: number;
         }[]
-    ).map((r) => r.rowid);
+    ).map((row) => row.rowid);
 
+// Item IDs found in the German full-text index.
 const deFtsIds = (match: string) =>
     (
         db.prepare('SELECT rowid FROM items_fts_de WHERE items_fts_de MATCH ? ORDER BY rowid').all(match) as {
             rowid: number;
         }[]
-    ).map((r) => r.rowid);
+    ).map((row) => row.rowid);
 
 describe('Importer', () => {
     beforeEach(async () => {

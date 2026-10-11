@@ -22,8 +22,9 @@ export { ApiError };
 export type UpdateListEntry = UpdateSummary &
     Partial<Pick<UpdateDetail, 'status' | 'dungeonGained' | 'dungeonLost' | 'deletable' | 'deleteBlockedReason'>>;
 
+/** Sends a JSON request and returns the parsed response body. Throws ApiError on network or HTTP errors. */
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
-    let res: Response;
+    let res: Response; // declared outside try so it is usable afterwards
     try {
         res = await fetch(url, {
             method,
@@ -49,6 +50,7 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
     return (text ? JSON.parse(text) : undefined) as T;
 }
 
+// All backend calls in one place; components never call fetch directly. queryString is an already built "a=b&c=d".
 const restApi = {
     stats: () => request<StatsResponse>('GET', '/api/stats'),
     items: (queryString: string, lang: Lang) =>
@@ -69,4 +71,5 @@ const restApi = {
  * Data source of the app, fixed at build time (VITE_DATA_MODE): "api" (default) queries the server, "static" reads the
  * JSON files of the Pages version. The condition is written right here so Vite drops the other branch.
  */
+// `typeof restApi` makes the static variant satisfy the same shape, so callers do not care which one is active.
 export const api: typeof restApi = import.meta.env.VITE_DATA_MODE === 'static' ? staticApi : restApi;

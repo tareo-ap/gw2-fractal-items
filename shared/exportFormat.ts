@@ -24,6 +24,7 @@ export interface ExportRow {
     icon: string | null;
 }
 
+/** Column order of the export. `keyof ExportRow` = union of the property names of ExportRow. */
 export const EXPORT_FIELDS: readonly (keyof ExportRow)[] = [
     'id',
     'name',
@@ -49,12 +50,17 @@ export const EXPORT_FIELDS: readonly (keyof ExportRow)[] = [
  * Texts starting with =, +, -, @ (or tab/CR) get a ' prepended (formula injection).
  */
 export function toCsv(rows: ExportRow[]): string {
+    // Formats one value as a CSV cell (quoting and escaping).
     const cell = (value: ExportRow[keyof ExportRow]): string => {
         let text = value === null ? '' : Array.isArray(value) ? value.join('|') : String(value);
         if ((typeof value === 'string' || Array.isArray(value)) && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
         return /[;"\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
     };
-    const lines = [EXPORT_FIELDS.join(';'), ...rows.map((row) => EXPORT_FIELDS.map((f) => cell(row[f])).join(';'))];
+    // The BOM (U+FEFF) at the start of the returned text makes Excel read the file as UTF-8.
+    const lines = [
+        EXPORT_FIELDS.join(';'),
+        ...rows.map((row) => EXPORT_FIELDS.map((field) => cell(row[field])).join(';')),
+    ];
     return `﻿${lines.join('\r\n')}\r\n`;
 }
 

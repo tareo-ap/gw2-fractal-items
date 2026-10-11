@@ -5,6 +5,7 @@ import { config } from '../config.js';
 import { openDatabase } from '../db/index.js';
 import { migrations } from '../db/schema.js';
 
+// `isServerRunning` and `log` are injectable so tests do not need a real server or console output.
 export interface ImportDbOptions {
     /** File to import. */
     sourcePath: string;
@@ -41,11 +42,11 @@ export async function importDatabase(options: ImportDbOptions): Promise<number> 
 
     if (fs.existsSync(dbPath)) {
         // Write back the WAL so the .db file alone contains the complete state.
-        const old = new DatabaseSync(dbPath);
+        const oldDb = new DatabaseSync(dbPath);
         try {
-            old.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+            oldDb.exec('PRAGMA wal_checkpoint(TRUNCATE)');
         } finally {
-            old.close();
+            oldDb.close();
         }
         // Timestamp without colons (Windows file names), e.g. 2026-10-10T120000.
         const stamp = new Date()
@@ -56,6 +57,7 @@ export async function importDatabase(options: ImportDbOptions): Promise<number> 
         fs.renameSync(dbPath, backupPath);
         log(`Previous database backed up: ${backupPath}`);
     }
+    // Leftover WAL/SHM files of the old database must not be applied to the new file.
     fs.rmSync(`${dbPath}-wal`, { force: true });
     fs.rmSync(`${dbPath}-shm`, { force: true });
     fs.renameSync(tmpPath, dbPath);
@@ -79,7 +81,8 @@ function checkSourceFile(sourcePath: string): void {
         db = new DatabaseSync(sourcePath, { readOnly: true });
         const tables = (
             db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`).all() as { name: string }[]
-        ).map((t) => t.name);
+        ).map((table) => table.name);
+        // A valid GW2 items database has at least these two tables; anything else is some other SQLite file.
         for (const required of ['items', 'updates']) {
             if (!tables.includes(required)) {
                 throw new ImportDbError(`The file contains no table "${required}", so it is not a GW2 items database.`);
@@ -99,6 +102,7 @@ function checkSourceFile(sourcePath: string): void {
     }
 }
 
+// The server is running if its health endpoint answers (any HTTP status counts).
 async function serverIsRunning(): Promise<boolean> {
     try {
         await fetch(`http://localhost:${config.port}/api/health`, { signal: AbortSignal.timeout(1500) });
@@ -108,6 +112,7 @@ async function serverIsRunning(): Promise<boolean> {
     }
 }
 
+// Entry point of `npm run db:import -- <file.db>`.
 async function main(): Promise<void> {
     if (!process.argv[2]) {
         console.error('Usage: npm run db:import -- <file.db>');

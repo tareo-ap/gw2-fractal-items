@@ -7,8 +7,9 @@ name: Pages
 on:
   push:
     branches: [main]
-  workflow_dispatch:
+  workflow_dispatch: # allows starting the workflow manually from the Actions tab
 
+# Minimal token rights; pages: write and id-token: write are required by actions/deploy-pages.
 permissions:
   contents: read
   pages: write
@@ -33,6 +34,7 @@ jobs:
         env:
           # Project site at https://<account>.github.io/<repo>/. Repo name: gw2-fractal-items.
           VITE_BASE: /${{ github.event.repository.name }}/
+      # Prepare the Pages environment, then hand web/dist to the deploy job as an artifact.
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

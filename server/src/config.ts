@@ -2,6 +2,7 @@ import path from 'node:path';
 import { parseCheckSchedule } from './importer/checkSchedule.js';
 
 // All settings come from environment variables, with defaults for local development.
+// Read once at startup; imported by index.ts.
 export const config = {
     port: Number(process.env.PORT ?? 3000),
     // SQLite file. In the container it lives in the /data volume.

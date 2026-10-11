@@ -8,6 +8,7 @@ export function chatLinkFor(id: number): string {
     return `[&${bytes.toString('base64')}]`;
 }
 
+// Builds a minimal GW2 API item for the fixtures below.
 function item(id: number, name: string, type: string, subtype: string, rarity: string, gameTypes: string[]): Gw2Item {
     return {
         name,
@@ -26,6 +27,8 @@ function item(id: number, name: string, type: string, subtype: string, rarity: s
     };
 }
 
+// A function (not a constant) so every test gets fresh objects it may modify.
+// Candidates (game type Dungeon): 1, 3, 8778, 4, 5. Not candidates: 2, 6 (6 is also not a Gizmo/Consumable).
 export const fixtureItems = (): Gw2Item[] => [
     item(1, 'Mini Golem Kit', 'Gizmo', 'Default', 'Rare', ['Pve', 'Dungeon', 'Wvw']),
     item(2, 'Banner of Strength', 'Gizmo', 'Default', 'Exotic', ['Pve', 'Wvw']),
@@ -37,6 +40,7 @@ export const fixtureItems = (): Gw2Item[] => [
 ];
 
 /** In-memory DB plus importer against the fake server, without throttling and with short backoff. */
+// `:memory:` = SQLite database that lives only in RAM and vanishes on close.
 export function createTestImporter(apiUrl: string) {
     const db = openDatabase(':memory:');
     const client = new Gw2Client({ baseUrl: apiUrl, minIntervalMs: 0, retryBaseDelayMs: 1 });

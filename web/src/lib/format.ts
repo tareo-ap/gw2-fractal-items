@@ -8,8 +8,8 @@ export function rarityClass(rarity: Rarity | string): string {
     return `rarity-${rarity.toLowerCase()}`;
 }
 
-/** Short description of an update for the dropdown, e.g. "10.10.2026, 14:03 · 12 new · 30 changed". */
 /** Wiki search for the item name (same function as on the server, see shared/rules.ts). */
+// Re-exported under a UI-facing name.
 export const wikiSearchUrl = wikiUrl;
 
 /** Time in UTC as "YYYY-MM-DD_HH:MM", independent of the browser's language and time zone. */
@@ -20,25 +20,28 @@ export function utcStamp(iso: string): string {
 }
 
 /** Name of a state: "<YYYY-MM-DD>_<HH:MM UTC>_<game build>", e.g. "2026-10-10_11:23_208039". */
-export function stateName(u: { startedAt: string; buildId: number | null }): string {
-    return `${utcStamp(u.startedAt)}_${u.buildId ?? '?'}`;
+export function stateName(update: { startedAt: string; buildId: number | null }): string {
+    return `${utcStamp(update.startedAt)}_${update.buildId ?? '?'}`;
 }
 
-/** Select entry: name of the state, with a note for running or failed updates. */
-export function describeUpdate(u: UpdateListEntry, { t }: Pick<I18n, 't'>): string {
-    if (u.status === 'running') return `${stateName(u)} · ${t('update.describeRunning')}`;
-    if (u.status === 'failed') return `${stateName(u)} · ${t('update.describeFailed')}`;
-    return stateName(u);
+/**
+ * Select entry: name of the state (a "state" = one stored snapshot of the item database, created by an update run),
+ * with a note for running or failed updates.
+ */
+export function describeUpdate(update: UpdateListEntry, { t }: Pick<I18n, 't'>): string {
+    if (update.status === 'running') return `${stateName(update)} · ${t('update.describeRunning')}`;
+    if (update.status === 'failed') return `${stateName(update)} · ${t('update.describeFailed')}`;
+    return stateName(update);
 }
 
 /** Vendor value in copper -> "1g 2s 3c". */
 export function formatCoins(copper: number): string {
-    const g = Math.floor(copper / 10000);
-    const s = Math.floor((copper % 10000) / 100);
-    const c = copper % 100;
+    const gold = Math.floor(copper / 10000);
+    const silver = Math.floor((copper % 10000) / 100);
+    const copperRest = copper % 100;
     const parts: string[] = [];
-    if (g) parts.push(`${g}g`);
-    if (s) parts.push(`${s}s`);
-    if (c || parts.length === 0) parts.push(`${c}c`);
+    if (gold) parts.push(`${gold}g`);
+    if (silver) parts.push(`${silver}s`);
+    if (copperRest || parts.length === 0) parts.push(`${copperRest}c`);
     return parts.join(' ');
 }

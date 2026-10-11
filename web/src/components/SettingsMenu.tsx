@@ -2,25 +2,33 @@ import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import { useT, type Key } from '../lib/i18n';
 import { ACCENTS, DEFAULT_ACCENT, THEMES, WIDTHS, useSettings } from '../lib/settings';
 
+// Default accent first, then the GW2 class colors (spread operator `...` copies array elements into the new array).
 const ACCENT_CHOICES = [{ id: DEFAULT_ACCENT.id, color: DEFAULT_ACCENT.color }, ...ACCENTS];
 
-/** Gear in the header: popover with color scheme, accent color and content width. Closes on outside click and Escape. */
+/**
+ * Gear in the header: popover with color scheme, accent color and content width. Closes on outside click and Escape.
+ */
 export function SettingsMenu() {
     const { t } = useT();
     const { settings, update } = useSettings();
+    // useState: [value, setter]. `open` = popover visible, `hovered` = accent under the mouse (live preview of its
+    // name).
     const [open, setOpen] = useState(false);
     const [hovered, setHovered] = useState<string | null>(null);
+    // useRef<T>(null) holds a reference to a DOM element once rendered (attached below via ref={...}).
     const rootRef = useRef<HTMLDivElement>(null);
     const buttonRef = useRef<HTMLButtonElement>(null);
-    const panelId = useId();
+    const panelId = useId(); // unique, stable id to link the button (aria-controls) to the panel
 
+    // Register global listeners only while the popover is open; the returned cleanup removes them again.
+    // The dependency array [open] makes the effect re-run whenever `open` changes.
     useEffect(() => {
         if (!open) return;
-        const onPointerDown = (e: MouseEvent) => {
-            if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+        const onPointerDown = (event: MouseEvent) => {
+            if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
         };
-        const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
                 setOpen(false);
                 buttonRef.current?.focus();
             }
@@ -33,6 +41,7 @@ export function SettingsMenu() {
         };
     }, [open]);
 
+    // Display name of an accent: the default is translated, class names stay English.
     const accentName = (id: string) => (id === DEFAULT_ACCENT.id ? t('accent.default') : id);
     const shown = hovered ?? settings.accent;
 
@@ -71,20 +80,21 @@ export function SettingsMenu() {
                     </div>
                     <div className="field">
                         <span className="field-label">{t('settings.accent')}</span>
+                        {/* The `as CSSProperties` cast below is needed because React's style type does not know custom CSS properties (--swatch). */}
                         <div className="swatches" role="group" aria-label={t('settings.accent')}>
-                            {ACCENT_CHOICES.map((a) => (
+                            {ACCENT_CHOICES.map((accent) => (
                                 <button
-                                    key={a.id}
+                                    key={accent.id}
                                     type="button"
-                                    className={a.id === settings.accent ? 'swatch selected' : 'swatch'}
-                                    style={{ '--swatch': a.color } as CSSProperties}
-                                    aria-pressed={a.id === settings.accent}
-                                    aria-label={accentName(a.id)}
-                                    title={accentName(a.id)}
-                                    onClick={() => update({ accent: a.id })}
-                                    onMouseEnter={() => setHovered(a.id)}
+                                    className={accent.id === settings.accent ? 'swatch selected' : 'swatch'}
+                                    style={{ '--swatch': accent.color } as CSSProperties}
+                                    aria-pressed={accent.id === settings.accent}
+                                    aria-label={accentName(accent.id)}
+                                    title={accentName(accent.id)}
+                                    onClick={() => update({ accent: accent.id })}
+                                    onMouseEnter={() => setHovered(accent.id)}
                                     onMouseLeave={() => setHovered(null)}
-                                    onFocus={() => setHovered(a.id)}
+                                    onFocus={() => setHovered(accent.id)}
                                     onBlur={() => setHovered(null)}
                                 />
                             ))}

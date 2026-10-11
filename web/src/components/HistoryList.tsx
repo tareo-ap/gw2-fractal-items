@@ -9,8 +9,10 @@ export function HistoryList({ history }: { history: ItemChange[] }) {
     if (history.length === 0) return <p className="small muted">{t('history.empty')}</p>;
     return (
         <ol className="history">
+            {/* One list entry per change; the comparisons below decide what to highlight. */}
             {history.map((change) => {
                 const gameTypesChanged = change.changedFields.includes('game_types') || change.kind !== 'changed';
+                // True if Dungeon was gained or lost, i.e. the item became or stopped being a Fractal candidate.
                 const dungeonChanged =
                     (change.gameTypesBefore?.includes('Dungeon') ?? false) !==
                     (change.gameTypesAfter?.includes('Dungeon') ?? false);

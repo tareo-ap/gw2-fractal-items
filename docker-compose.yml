@@ -13,9 +13,9 @@ services:
       # UPDATE_CHECK_PATCH_WINDOW: "Tue 17:00-19:00"
       # UPDATE_CHECK_PATCH_EVERY_MINUTES: "30"
     ports:
-      - '3000:3000'
+      - '3000:3000' # host:container
     volumes:
-      - gw2-items-data:/data
+      - gw2-items-data:/data # named volume, holds the SQLite database
 
 volumes:
   gw2-items-data:

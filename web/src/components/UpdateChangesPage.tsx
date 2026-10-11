@@ -25,6 +25,7 @@ import { ErrorBox, GameTypeBadges, GameTypeDiff, ItemIcon, Link, Loading } from 
 import { Gw2Text } from './Gw2Text';
 import { Pagination } from './ItemListPage';
 
+// Same lists as in lib/changes.ts / lib/filters.ts, used for the filter buttons below.
 const FOCUSES: ChangeFocus[] = ['all', 'gameTypes', 'dungeonGained', 'dungeonLost'];
 const TYPES: ItemView[] = ['gizmo', 'consumable', 'tonic', 'all'];
 
@@ -32,8 +33,12 @@ const TYPES: ItemView[] = ['gizmo', 'consumable', 'tonic', 'all'];
 export function UpdatesRedirect() {
     const { t } = useT();
     const updates = useQuery({ queryKey: ['updates'], queryFn: api.updates });
-    const latest = updates.data?.find((u) => u.status === undefined || u.status === 'done');
+    // Latest completed update; `status` is missing in older API responses, which counts as done.
+    const latest = updates.data?.find(
+        (updateEntry) => updateEntry.status === undefined || updateEntry.status === 'done',
+    );
 
+    // Redirect as a side effect after render (navigating during render would be a React error).
     useEffect(() => {
         if (latest) navigate(changesUrl(latest.id), { replace: true });
     }, [latest]);
@@ -58,7 +63,8 @@ export function UpdatesRedirect() {
 }
 
 /**
- * "Manage states" section: all update runs with a delete button. Whether a state can be deleted is decided by the server
+ * "Manage states" section: all update runs with a delete button. Whether a state can be deleted is decided by the
+ * server
  * (deletable / deleteBlockedReason); non-deletable ones have a disabled button with the reason as tooltip.
  * shownIds: states currently displayed; if one is deleted, navigate back to /updates.
  */
@@ -68,10 +74,12 @@ function ManageStates({ updates, shownIds }: { updates: UpdateListEntry[]; shown
     const queryClient = useQueryClient();
     const [error, setError] = useState<string | null>(null);
 
+    // useMutation = write request, triggered with remove.mutate(id). onSuccess receives (result, variables).
     const remove = useMutation({
         mutationFn: api.deleteUpdate,
         onMutate: () => setError(null),
         onSuccess: (_data, id) => {
+            // Mark all cached reads that may now be outdated as stale so they are re-fetched.
             for (const key of ['updates', 'stats', 'updateChanges', 'items', 'item']) {
                 void queryClient.invalidateQueries({ queryKey: [key] });
             }
@@ -81,8 +89,9 @@ function ManageStates({ updates, shownIds }: { updates: UpdateListEntry[]; shown
     });
 
     if (updates.length === 0) return null;
-    const confirmDelete = (u: UpdateListEntry) => {
-        if (window.confirm(t('manage.confirm', { name: stateName(u) }))) remove.mutate(u.id);
+    // Native confirm dialog before the irreversible delete.
+    const confirmDelete = (updateEntry: UpdateListEntry) => {
+        if (window.confirm(t('manage.confirm', { name: stateName(updateEntry) }))) remove.mutate(updateEntry.id);
     };
 
     return (
@@ -95,43 +104,44 @@ function ManageStates({ updates, shownIds }: { updates: UpdateListEntry[]; shown
                 </div>
             )}
             <ul className="state-list">
-                {updates.map((u) => {
-                    const blocked = u.deleteBlockedReason
-                        ? t(`manage.blocked.${u.deleteBlockedReason}` as Key)
+                {/* One row per stored state (update run). */}
+                {updates.map((updateEntry) => {
+                    const blocked = updateEntry.deleteBlockedReason
+                        ? t(`manage.blocked.${updateEntry.deleteBlockedReason}` as Key)
                         : undefined;
-                    const failed = u.status === 'failed';
-                    const empty = u.added + u.changed + u.removed === 0;
+                    const failed = updateEntry.status === 'failed';
+                    const empty = updateEntry.added + updateEntry.changed + updateEntry.removed === 0;
                     return (
-                        <li key={u.id} className="state-row">
+                        <li key={updateEntry.id} className="state-row">
                             <span className="state-name">
-                                {u.status === 'running' || failed ? (
-                                    describeUpdate(u, i18n)
+                                {updateEntry.status === 'running' || failed ? (
+                                    describeUpdate(updateEntry, i18n)
                                 ) : (
-                                    <Link href={changesUrl(u.id)}>{stateName(u)}</Link>
+                                    <Link href={changesUrl(updateEntry.id)}>{stateName(updateEntry)}</Link>
                                 )}
-                                <span className="small muted"> · #{u.id}</span>
+                                <span className="small muted"> · #{updateEntry.id}</span>
                             </span>
                             <span className="small muted">
-                                {u.status === 'running'
+                                {updateEntry.status === 'running'
                                     ? t('changes.statusRunning')
                                     : failed
                                       ? t('changes.statusFailed')
                                       : t('changes.statusDone')}
-                                {!failed && u.status !== 'running' && (
+                                {!failed && updateEntry.status !== 'running' && (
                                     <>
                                         {' · '}
                                         {empty
                                             ? t('manage.noChanges')
-                                            : `${t('update.describeNew', { n: i18n.formatNumber(u.added) })}, ${t('update.describeChanged', { n: i18n.formatNumber(u.changed) })}, ${t('update.describeRemoved', { n: i18n.formatNumber(u.removed) })}`}
+                                            : `${t('update.describeNew', { n: i18n.formatNumber(updateEntry.added) })}, ${t('update.describeChanged', { n: i18n.formatNumber(updateEntry.changed) })}, ${t('update.describeRemoved', { n: i18n.formatNumber(updateEntry.removed) })}`}
                                     </>
                                 )}
                             </span>
                             <button
                                 type="button"
                                 className="btn btn-small btn-danger"
-                                disabled={!u.deletable || remove.isPending}
+                                disabled={!updateEntry.deletable || remove.isPending}
                                 title={blocked}
-                                onClick={() => confirmDelete(u)}
+                                onClick={() => confirmDelete(updateEntry)}
                             >
                                 {t('manage.delete')}
                             </button>
@@ -143,8 +153,9 @@ function ManageStates({ updates, shownIds }: { updates: UpdateListEntry[]; shown
     );
 }
 
-function same<T>(a: T[], b: T[]): boolean {
-    return a.length === b.length && a.every((v, i) => v === b[i]);
+// Element-wise equality of two arrays (generic <T>: works for any element type).
+function same<T>(first: T[], second: T[]): boolean {
+    return first.length === second.length && first.every((value, index) => value === second[index]);
 }
 
 /** "/updates/compare?from=A&to=B": reads the two update IDs from the URL. */
@@ -163,10 +174,14 @@ export function CompareRoute({ params }: { params: URLSearchParams }) {
     return <UpdateChangesPage source={{ from, to }} params={params} />;
 }
 
+// Where the changes come from: one update (compared to its predecessor) or two chosen states.
+// A union type: `'from' in source` below tells the variants apart (type narrowing).
 type Source = { id: number } | { from: number; to: number };
+// API response, unified for both sources. Omit<T, K> = T without key K; `from` is null for a single update.
 type Page = Omit<UpdateCompareResponse, 'from' | 'to'> & { from: UpdateDetail | null; to: UpdateDetail };
 
-const isDone = (u: { status?: string }) => u.status === undefined || u.status === 'done';
+// Done = completed update; `status` may be missing in older responses, which counts as done.
+const isDone = (updateEntry: { status?: string }) => updateEntry.status === undefined || updateEntry.status === 'done';
 
 /**
  * Changes: either of one update (/updates/:id, against its predecessor) or of two freely chosen states
@@ -177,23 +192,32 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
     const { t, lang, formatNumber, formatDateTime } = i18n;
     const filters = parseChangesFilters(params);
     const query = toChangesApiQuery(filters);
+    // queryKey contains everything the result depends on, so a change of source, language or filters re-fetches.
+    // placeholderData: keepPreviousData shows the previous page (dimmed) while the next one loads.
     const changes = useQuery({
         queryKey: ['updateChanges', source, lang, query],
         queryFn: async (): Promise<Page> => {
             if ('from' in source) return api.compareUpdates(source.from, source.to, query, lang);
+            // Object rest: `rest` = all properties except `update`; reshaped to the same Page type as the compare
+            // response.
             const { update, ...rest } = await api.updateChanges(source.id, query, lang);
             return { ...rest, from: null, to: update };
         },
         placeholderData: keepPreviousData, // keep the old page until the new one is there
     });
     const updates = useQuery({ queryKey: ['updates'], queryFn: api.updates });
+    // Id of the newer state (the "to" side).
     const toId = 'from' in source ? source.to : source.id;
 
     // Predecessor for /updates/:id: the last completed update before it.
-    const predecessor = 'from' in source ? undefined : updates.data?.find((u) => u.id < source.id && isDone(u));
+    const predecessor =
+        'from' in source
+            ? undefined
+            : updates.data?.find((updateEntry) => updateEntry.id < source.id && isDone(updateEntry));
     const fromId = 'from' in source ? source.from : predecessor?.id;
-    const pageUrl = (f: ChangesFilters) =>
-        'from' in source ? compareUrl(source.from, source.to, f) : changesUrl(source.id, f);
+    // URL of this same page with other filters.
+    const pageUrl = (pageFilters: ChangesFilters) =>
+        'from' in source ? compareUrl(source.from, source.to, pageFilters) : changesUrl(source.id, pageFilters);
 
     // Every filter change jumps to page 1, except when paging itself (patch.page).
     const change = (patch: Partial<ChangesFilters>, options: { replace?: boolean } = {}) =>
@@ -218,10 +242,15 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
     const data = changes.data;
     const { to: update, counts } = data;
     // The oldest update is the full import: everything is new there, a comparison is only worthwhile from the second.
-    const isFirst = !('from' in source) && updates.data !== undefined && updates.data.every((u) => u.id >= update.id);
+    const isFirst =
+        !('from' in source) &&
+        updates.data !== undefined &&
+        updates.data.every((updateEntry) => updateEntry.id >= update.id);
     const fromUpdate = data.from ?? predecessor ?? null;
     const doneUpdates = (updates.data ?? []).filter(isDone);
 
+    // Clickable count tiles above the list; clicking one sets the matching filter. `as Partial<...>` is a type
+    // assertion needed because the literals would otherwise be widened to string.
     const kindTile = (kind: ChangeKind, count: number, className: string) => ({
         label: t(`change.${kind}`),
         count,
@@ -236,6 +265,7 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
         active: filters.focus === focus,
         className,
     });
+    // Tile order as displayed.
     const tiles = [
         kindTile('added', counts.added, 'change-added'),
         kindTile('changed', counts.changed, 'change-changed'),
@@ -248,7 +278,9 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
     // Keep the order as in CHANGE_KINDS so the URL stays stable.
     const toggleKind = (kind: ChangeKind) =>
         change({
-            kind: CHANGE_KINDS.filter((k) => (k === kind ? !filters.kind.includes(k) : filters.kind.includes(k))),
+            kind: CHANGE_KINDS.filter((candidateKind) =>
+                candidateKind === kind ? !filters.kind.includes(candidateKind) : filters.kind.includes(candidateKind),
+            ),
         });
 
     return (
@@ -275,14 +307,16 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
                     <select
                         value={fromId ?? ''}
                         disabled={fromId === undefined}
-                        onChange={(e) => navigate(compareUrl(Number(e.target.value), toId, { ...filters, page: 1 }))}
+                        onChange={(event) =>
+                            navigate(compareUrl(Number(event.target.value), toId, { ...filters, page: 1 }))
+                        }
                     >
                         {fromId === undefined && <option value="">–</option>}
                         {doneUpdates
-                            .filter((u) => u.id < toId)
-                            .map((u) => (
-                                <option key={u.id} value={u.id}>
-                                    {describeUpdate(u, i18n)}
+                            .filter((updateEntry) => updateEntry.id < toId)
+                            .map((updateEntry) => (
+                                <option key={updateEntry.id} value={updateEntry.id}>
+                                    {describeUpdate(updateEntry, i18n)}
                                 </option>
                             ))}
                     </select>
@@ -292,16 +326,18 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
                     <select
                         value={toId}
                         disabled={fromId === undefined}
-                        onChange={(e) => navigate(compareUrl(fromId!, Number(e.target.value), { ...filters, page: 1 }))}
+                        onChange={(event) =>
+                            navigate(compareUrl(fromId!, Number(event.target.value), { ...filters, page: 1 }))
+                        }
                     >
                         {doneUpdates
-                            .filter((u) => u.id > (fromId ?? 0) || u.id === toId)
-                            .map((u) => (
-                                <option key={u.id} value={u.id}>
-                                    {describeUpdate(u, i18n)}
+                            .filter((updateEntry) => updateEntry.id > (fromId ?? 0) || updateEntry.id === toId)
+                            .map((updateEntry) => (
+                                <option key={updateEntry.id} value={updateEntry.id}>
+                                    {describeUpdate(updateEntry, i18n)}
                                 </option>
                             ))}
-                        {!doneUpdates.some((u) => u.id === toId) && (
+                        {!doneUpdates.some((updateEntry) => updateEntry.id === toId) && (
                             <option value={toId}>{t('filter.updateN', { id: toId })}</option>
                         )}
                     </select>
@@ -394,7 +430,7 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
                             type="search"
                             key={`${toId}-${filters.q}`}
                             defaultValue={filters.q}
-                            onChange={(e) => change({ q: e.target.value }, { replace: true })}
+                            onChange={(event) => change({ q: event.target.value }, { replace: true })}
                             placeholder={t('changes.searchPlaceholder')}
                             autoComplete="off"
                         />
@@ -403,7 +439,7 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
                         <input
                             type="checkbox"
                             checked={filters.hidePlaceholders}
-                            onChange={(e) => change({ hidePlaceholders: e.target.checked })}
+                            onChange={(event) => change({ hidePlaceholders: event.target.checked })}
                         />
                         {t('changes.hidePlaceholders')}
                     </label>
@@ -448,8 +484,10 @@ export function UpdateChangesPage({ source, params }: { source: Source; params: 
     );
 }
 
+// Longer text values are truncated to this many characters.
 const MAX_TEXT = 160;
 
+// One table row of a changed item: one field with its old and new value (or a single spanning message).
 interface FieldRowData {
     name: string;
     before?: ReactNode; // missing = cell is spanned by "message"
@@ -457,6 +495,7 @@ interface FieldRowData {
     message?: string;
 }
 
+// Muted placeholder text for a value that does not exist.
 const Missing = ({ text }: { text: string }) => <span className="muted">{text}</span>;
 
 /** Rows of an entry: game_types always first, then the other fields in API order. */
@@ -495,14 +534,16 @@ function buildRows(item: UpdateChangeEntry, t: TFunction): FieldRowData[] {
     }
 
     if (kind === 'changed' && item.before === null) {
-        const others = item.changedFields.filter((n) => n !== 'game_types');
+        const others = item.changedFields.filter((fieldName) => fieldName !== 'game_types');
         if (others.length > 0) rows.push({ name: others.join(', '), message: notStored });
         return rows;
     }
 
+    // Fields to show: the changed ones, or all stored fields for added/removed items.
     const names =
         kind === 'changed' ? item.changedFields : Object.keys((kind === 'added' ? item.after : item.before) ?? {});
-    for (const name of names.filter((n) => n !== 'game_types')) {
+    // One row per field; fields whose values were not recorded get a message instead of values.
+    for (const name of names.filter((fieldName) => fieldName !== 'game_types')) {
         if (item.unknownFields?.includes(name)) {
             rows.push({ name, message: notStored });
             continue;
@@ -532,6 +573,7 @@ function buildRows(item: UpdateChangeEntry, t: TFunction): FieldRowData[] {
     return rows;
 }
 
+/** Table of changed items; each item brings its own <tbody> via ChangeRows. */
 function ChangesTable({
     items,
     oldLabel,
@@ -564,6 +606,7 @@ function ChangeRows({ item, oldLabel, newLabel }: { item: UpdateChangeEntry; old
     const { t } = useT();
     const dungeonChanged =
         (item.gameTypesBefore?.includes('Dungeon') ?? false) !== (item.gameTypesAfter?.includes('Dungeon') ?? false);
+    // CSS classes: highlight changes of Dungeon (= Fractal candidate status) and removed items.
     const classes = [item.kind === 'changed' && dungeonChanged ? 'dungeon-change' : '', item.removed ? 'removed' : '']
         .filter(Boolean)
         .join(' ');
@@ -599,9 +642,9 @@ function ChangeRows({ item, oldLabel, newLabel }: { item: UpdateChangeEntry; old
                     </td>
                 </tr>
             )}
-            {rows.map((row, i) => (
+            {rows.map((row, rowIndex) => (
                 <tr key={row.name} className="field-row">
-                    {i === 0 && itemCell}
+                    {rowIndex === 0 && itemCell}
                     <td className="field-name small">
                         <code>{row.name}</code>
                     </td>
@@ -633,9 +676,9 @@ function ValueView({ value }: { value: unknown }) {
         if (value.length === 0) return <span className="muted">{t('common.empty')}</span>;
         return (
             <span className="badges">
-                {value.map((v, i) => (
-                    <span key={i} className="badge">
-                        {typeof v === 'string' ? v : JSON.stringify(v)}
+                {value.map((item, index) => (
+                    <span key={index} className="badge">
+                        {typeof item === 'string' ? item : JSON.stringify(item)}
                     </span>
                 ))}
             </span>
@@ -646,13 +689,13 @@ function ValueView({ value }: { value: unknown }) {
         if (entries.length === 0) return <span className="muted">{t('common.empty')}</span>;
         return (
             <dl className="kv">
-                {entries.map(([key, v]) => (
+                {entries.map(([key, item]) => (
                     <div key={key}>
                         <dt className="muted">{key}:</dt>{' '}
                         <dd>
-                            {typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean'
-                                ? String(v)
-                                : JSON.stringify(v)}
+                            {typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean'
+                                ? String(item)
+                                : JSON.stringify(item)}
                         </dd>
                     </div>
                 ))}

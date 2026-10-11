@@ -11,6 +11,7 @@ import { ImportAlreadyRunningError, type Importer } from './importer.js';
  * The checks run as a setTimeout chain so they never overlap. Errors are logged, never thrown.
  */
 export class BuildWatcher {
+    // Handle of the pending setTimeout, so stop() can cancel it.
     private timer: NodeJS.Timeout | null = null;
     private stopped = true;
     private lastCheckAt: string | null = null;
@@ -25,12 +26,14 @@ export class BuildWatcher {
         private readonly schedule: CheckScheduleConfig,
     ) {}
 
+    /** Schedules the first check. Does nothing if already started. */
     start(): void {
         if (!this.stopped) return;
         this.stopped = false;
         this.scheduleNext(new Date());
     }
 
+    /** Cancels the pending check. */
     stop(): void {
         this.stopped = true;
         if (this.timer) clearTimeout(this.timer);
@@ -38,6 +41,7 @@ export class BuildWatcher {
         this.nextCheckAt = null;
     }
 
+    /** Current state for the dashboard (GET /api/stats -> autoCheck). */
     getStatus(): AutoCheckStatus {
         return {
             enabled: !this.stopped,
@@ -63,6 +67,8 @@ export class BuildWatcher {
         return result;
     }
 
+    // One check: compare the live build ID with the build ID of the last completed update.
+    // Build ID = version number of the game client; a new one means a patch.
     private async check(): Promise<AutoCheckResult> {
         const build = await this.client.getBuildId();
         if (build === null) {
@@ -71,6 +77,7 @@ export class BuildWatcher {
         }
         this.lastSeenBuild = build;
 
+        // Baseline = build ID of the last successful update. Without one, there is nothing to compare to.
         const baseline = this.db
             .prepare(
                 `SELECT build_id FROM updates WHERE status = 'done' AND build_id IS NOT NULL ORDER BY id DESC LIMIT 1`,
@@ -90,18 +97,20 @@ export class BuildWatcher {
         return 'started';
     }
 
+    // Plans the next check with setTimeout; after it ran, the next one is planned (chain, no overlap).
     private scheduleNext(after: Date): void {
-        const at = nextCheckAt(after, this.schedule);
-        this.nextCheckAt = at.toISOString();
+        const plannedAt = nextCheckAt(after, this.schedule);
+        this.nextCheckAt = plannedAt.toISOString();
         this.timer = setTimeout(
             () => {
-                // Timers can fire slightly early: keep scheduling from the planned time, otherwise there would be a double check.
+                // Timers can fire slightly early: keep scheduling from the planned time, otherwise there would be a
+                // double check.
                 void this.checkNow().finally(() => {
-                    if (!this.stopped) this.scheduleNext(new Date(Math.max(Date.now(), at.getTime())));
+                    if (!this.stopped) this.scheduleNext(new Date(Math.max(Date.now(), plannedAt.getTime())));
                 });
             },
-            Math.max(0, at.getTime() - Date.now()),
+            Math.max(0, plannedAt.getTime() - Date.now()),
         );
-        this.timer.unref(); // does not keep the process alive
+        this.timer.unref(); // a pending timer alone does not keep the Node process alive
     }
 }

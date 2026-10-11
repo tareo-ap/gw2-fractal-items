@@ -12,7 +12,8 @@ import {
 import { searchPhrases, tokenize } from '../../shared/staticQuery.js';
 import { chatLinkFor } from './test/fixtures.js';
 
-// Rules from shared/ that the browser evaluates instead of SQL. staticConsistency.test.ts checks that they match the server.
+// Rules from shared/ that the browser evaluates instead of SQL. staticConsistency.test.ts checks that they match the
+// server.
 
 describe('Rules', () => {
     const item = (

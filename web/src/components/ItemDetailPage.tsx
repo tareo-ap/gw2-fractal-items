@@ -9,12 +9,15 @@ import { Gw2Text } from './Gw2Text';
 import { HistoryList } from './HistoryList';
 import { TestInfo, TestPanel } from './TestPanel';
 
+/** Detail view of one item (route /items/:id): tooltip-like card, raw API details, test form and change history. */
 export function ItemDetailPage({ id, backHref }: { id: number; backHref: string }) {
     const { t, lang } = useT();
+    // queryKey identifies the cached result: including `lang` re-fetches when the language changes.
+    // `retry` decides whether a failed request is repeated: never on 404 (item does not exist), otherwise up to twice.
     const item = useQuery({
         queryKey: ['item', id, lang],
         queryFn: () => api.item(id, lang),
-        retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
+        retry: (failureCount, error) => !(error instanceof ApiError && error.status === 404) && failureCount < 2,
     });
 
     return (
@@ -94,6 +97,7 @@ function Tooltip({ item }: { item: ItemDetail }) {
                 <dt>Game Types</dt>
                 <dd>
                     <GameTypeBadges gameTypes={item.gameTypes} />
+                    {/* Candidate = game types contain Dungeon, so the item might work in Fractals. */}
                     {item.isCandidate && <span className="small candidate-hint"> {t('detail.candidate')}</span>}
                 </dd>
                 <dt>Flags</dt>
@@ -114,8 +118,10 @@ function Tooltip({ item }: { item: ItemDetail }) {
     );
 }
 
+/** Chat link code (pasteable in the game chat to link the item) with a copy-to-clipboard button. */
 function ChatLink({ code }: { code: string }) {
     const { t } = useT();
+    // Feedback state of the copy button; resets to null after 2 s.
     const [copied, setCopied] = useState<'ok' | 'fail' | null>(null);
 
     const copy = async () => {
@@ -130,7 +136,7 @@ function ChatLink({ code }: { code: string }) {
 
     return (
         <span className="chat-link">
-            <code onFocus={(e) => window.getSelection()?.selectAllChildren(e.currentTarget)} tabIndex={0}>
+            <code onFocus={(event) => window.getSelection()?.selectAllChildren(event.currentTarget)} tabIndex={0}>
                 {code}
             </code>
             <button type="button" className="btn btn-small" onClick={() => void copy()}>
@@ -140,6 +146,7 @@ function ChatLink({ code }: { code: string }) {
     );
 }
 
+/** Collapsible raw `details` object from the GW2 API (type-specific fields), as formatted JSON. */
 function RawDetails({ details }: { details: Record<string, unknown> | null }) {
     const { t } = useT();
     if (!details) return null;

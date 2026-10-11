@@ -3,6 +3,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Gw2Item } from '../gw2/client.js';
 
+/** Handle to the fake server: configure its behavior through the fields, inspect `requests` afterwards. */
 export interface FakeGw2Api {
     url: string;
     items: Map<number, Gw2Item>;
@@ -19,6 +20,7 @@ export interface FakeGw2Api {
     close(): Promise<void>;
 }
 
+/** Starts the fake API on a random free port (listen(0)) and returns its handle. */
 export async function startFakeGw2Api(items: Gw2Item[]): Promise<FakeGw2Api> {
     const api: FakeGw2Api = {
         url: '',
@@ -36,17 +38,18 @@ export async function startFakeGw2Api(items: Gw2Item[]): Promise<FakeGw2Api> {
             }),
     };
 
-    const server = http.createServer((req, res) => {
-        api.requests.push(req.url ?? '');
+    const server = http.createServer((request, response) => {
+        api.requests.push(request.url ?? '');
         const send = (status: number, body: unknown) => {
-            res.writeHead(status, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(body));
+            response.writeHead(status, { 'Content-Type': 'application/json' });
+            response.end(JSON.stringify(body));
         };
 
+        // Consume one queued failure status first, if any (shift() removes the first array element).
         const failure = api.failures.shift();
         if (failure !== undefined) return send(failure, { text: 'simulated failure' });
 
-        const url = new URL(req.url ?? '/', 'http://localhost');
+        const url = new URL(request.url ?? '/', 'http://localhost');
         if (url.pathname === '/v2/build') {
             return api.buildId === null ? send(500, { text: 'no build' }) : send(200, { id: api.buildId });
         }

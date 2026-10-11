@@ -5,21 +5,24 @@ import { api } from '../api';
 import { errorText, useT } from '../lib/i18n';
 import { GameTypeDiff, TestBadge } from './common';
 
+// Selectable test results. "Retest" is not a status: it is derived when game types changed after the test.
 const STATUSES: TestStatus[] = ['untested', 'works', 'broken'];
 
 /** Set the test status with a note (PUT /api/items/:id/test). */
 export function TestPanel({ item }: { item: ItemDetail }) {
     const { t, formatDateTime } = useT();
-    const queryClient = useQueryClient();
+    const queryClient = useQueryClient(); // access to the shared TanStack Query cache
     const [status, setStatus] = useState<TestStatus>(item.test.status);
     const [note, setNote] = useState(item.test.note ?? '');
     const [saved, setSaved] = useState(false);
 
+    // useMutation = a write request (unlike useQuery, it only runs when .mutate() is called).
     const save = useMutation({
         mutationFn: () => api.setTest(item.id, { status, note: note.trim() || null }),
         onMutate: () => setSaved(false),
         onSuccess: async () => {
             setSaved(true);
+            // Mark cached reads of this item and of all lists as stale so they are re-fetched with the new status.
             await Promise.all([
                 queryClient.invalidateQueries({ queryKey: ['item', item.id] }),
                 queryClient.invalidateQueries({ queryKey: ['items'] }),
@@ -27,6 +30,7 @@ export function TestPanel({ item }: { item: ItemDetail }) {
         },
     });
 
+    // True if the form differs from the stored test result.
     const dirty = status !== item.test.status || note.trim() !== (item.test.note ?? '').trim();
 
     return (
@@ -45,25 +49,25 @@ export function TestPanel({ item }: { item: ItemDetail }) {
             </p>
 
             <form
-                onSubmit={(e) => {
-                    e.preventDefault();
+                onSubmit={(event) => {
+                    event.preventDefault();
                     save.mutate();
                 }}
             >
                 <div className="segmented status-choice" role="radiogroup" aria-label={t('testPanel.status')}>
-                    {STATUSES.map((s) => (
+                    {STATUSES.map((statusOption) => (
                         <button
-                            key={s}
+                            key={statusOption}
                             type="button"
                             role="radio"
-                            aria-checked={status === s}
-                            className={status === s ? `active test-${s}` : ''}
+                            aria-checked={status === statusOption}
+                            className={status === statusOption ? `active test-${statusOption}` : ''}
                             onClick={() => {
-                                setStatus(s);
+                                setStatus(statusOption);
                                 setSaved(false);
                             }}
                         >
-                            {t(`test.${s}`)}
+                            {t(`test.${statusOption}`)}
                         </button>
                     ))}
                 </div>
@@ -72,8 +76,8 @@ export function TestPanel({ item }: { item: ItemDetail }) {
                     <textarea
                         value={note}
                         rows={3}
-                        onChange={(e) => {
-                            setNote(e.target.value);
+                        onChange={(event) => {
+                            setNote(event.target.value);
                             setSaved(false);
                         }}
                         placeholder={t('testPanel.notePlaceholder')}

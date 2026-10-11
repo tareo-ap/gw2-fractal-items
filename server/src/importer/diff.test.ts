@@ -13,6 +13,7 @@ const base: Gw2Item = {
     details: { type: 'Default', b: 1, a: 2 },
 };
 
+// Builds the StoredItem (previous DB state) that an earlier import of `item` would have saved.
 function stored(item: Gw2Item, removed = false): StoredItem {
     return {
         hash: hashItem(item),

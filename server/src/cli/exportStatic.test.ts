@@ -12,6 +12,7 @@ import { createTestImporter, fixtureItems, runImport } from '../test/fixtures.js
 import { buildStaticExport, describeWritten, openForExport, writeStaticExport } from './exportStatic.js';
 
 const gizmo = fixtureItems()[0]!;
+// Temp folders created by tests; removed in the `after` hook below.
 const tmpDirs: string[] = [];
 const tmpDir = () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gw2-items-static-'));

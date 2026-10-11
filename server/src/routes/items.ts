@@ -29,6 +29,7 @@ import {
     wikiUrl,
 } from '../../../shared/rules.js';
 
+// `export { ... }` re-exports names from shared/ so other server files import everything from here.
 // The rules themselves (constants, input validation, CSV format) live in shared/ so the static version
 // in the browser uses the same ones. The SQL versions stay here; other modules keep importing from here.
 export {
@@ -45,8 +46,10 @@ export {
     itemIdFromChatLink,
     wikiUrl,
 };
+// `export type` re-exports types only; they vanish at compile time.
 export type { ExportRow, ParsedItemListQuery };
 
+// SQL fragments below use the aliases i = items, t = item_tests, d = item_texts (translations).
 // "Retest": there is a test result, but game_types differ today from when it was tested.
 // Both columns contain sorted JSON arrays (see normalizeGameTypes), so a
 // string comparison is enough for the set comparison.
@@ -61,7 +64,8 @@ export const TONIC_SQL = `(i.type IN ('Gizmo', 'Consumable')
 // Placeholders: empty name, no icon, or internal name such as "((906936))" or "[[913817]]". Expects the alias i.
 export const PLACEHOLDER_SQL = `(trim(i.name) = '' OR i.icon IS NULL OR i.name GLOB '((*))' OR i.name GLOB '[[][[]*]]')`;
 
-const RARITY_RANK_SQL = `CASE i.rarity ${RARITIES.map((r, idx) => `WHEN '${r}' THEN ${idx}`).join(' ')} ELSE 99 END`;
+// Sorts rarity by quality (Junk first ... Legendary last) instead of alphabetically.
+const RARITY_RANK_SQL = `CASE i.rarity ${RARITIES.map((rarity, rank) => `WHEN '${rarity}' THEN ${rank}`).join(' ')} ELSE 99 END`;
 
 // Language: for 'de', name and description come from item_texts (alias d, via LEFT JOIN), otherwise from items.
 // If the German text is missing, the English one is used. Placeholder/tonic checks stay on the English name.
@@ -72,6 +76,9 @@ export const nameSql = (lang: Lang) => (lang === 'de' ? `COALESCE(NULLIF(d.name,
 const descriptionSql = (lang: Lang) =>
     lang === 'de' ? `CASE WHEN d.item_id IS NOT NULL THEN d.description ELSE i.description END` : 'i.description';
 
+// Maps each allowed sort key to its ORDER BY expression. Keys come from a fixed list, never from user text.
+// `(typeof ITEM_SORTS)[number]` is an indexed access type: `typeof` takes the array type,
+// `[number]` looks up its element type, giving the union of all allowed sort keys.
 const sortSql = (lang: Lang): Record<(typeof ITEM_SORTS)[number], string> => ({
     name: `${nameSql(lang)} COLLATE NOCASE`,
     id: 'i.id',
@@ -80,6 +87,8 @@ const sortSql = (lang: Lang): Record<(typeof ITEM_SORTS)[number], string> => ({
     lastChanged: 'i.last_changed_update',
 });
 
+// Row shape as returned by SQLite (snake_case column names). JSON columns arrive as strings,
+// booleans as 0/1. toListItem converts it to the API shape.
 interface ItemRow {
     id: number;
     name: string;
@@ -96,6 +105,7 @@ interface ItemRow {
     needs_retest: number;
 }
 
+// Extra columns that only the detail view needs.
 interface ItemDetailRow extends ItemRow {
     description: string | null;
     chat_link: string | null;
@@ -106,6 +116,7 @@ interface ItemDetailRow extends ItemRow {
     game_types_at_test: string | null;
 }
 
+// Base SELECT for the item list. LEFT JOIN keeps items that have no test row yet.
 const selectItemSql = (lang: Lang) => `
   SELECT i.id, ${nameSql(lang)} AS name, i.name AS name_en, i.type, i.subtype, i.rarity, i.level, i.icon, i.game_types, i.is_candidate, i.removed,
          t.status AS test_status, ${NEEDS_RETEST_SQL} AS needs_retest
@@ -133,7 +144,9 @@ export function toFtsQuery(input: string): string | null {
 // ---------------------------------------------------------------------------
 
 /** WHERE clause with parameters for the list filters (aliases i and t). Shared by list and export. */
+// User values are never pasted into the SQL: they go into `params` and are bound to the `?` placeholders.
 function buildWhere(query: ParsedItemListQuery): { whereSql: string; params: SQLInputValue[] } {
+    // Conditions are collected and later joined with AND.
     const where: string[] = [];
     const params: SQLInputValue[] = [];
 
@@ -145,17 +158,17 @@ function buildWhere(query: ParsedItemListQuery): { whereSql: string; params: SQL
             where.push('(i.chat_link = ? OR i.id = ?)');
             params.push(query.q, itemIdFromChatLink(query.q) ?? -1);
         } else {
-            const fts = toFtsQuery(query.q);
-            if (fts) {
+            const ftsQuery = toFtsQuery(query.q);
+            if (ftsQuery) {
                 if (query.lang === 'de') {
                     // German: a hit in the German or the English index is enough (proper names, chat terms).
                     where.push(
                         '(i.id IN (SELECT rowid FROM items_fts_de WHERE items_fts_de MATCH ?) OR i.id IN (SELECT rowid FROM items_fts WHERE items_fts MATCH ?))',
                     );
-                    params.push(fts, fts);
+                    params.push(ftsQuery, ftsQuery);
                 } else {
                     where.push('i.id IN (SELECT rowid FROM items_fts WHERE items_fts MATCH ?)');
-                    params.push(fts);
+                    params.push(ftsQuery);
                 }
             }
         }
@@ -167,8 +180,11 @@ function buildWhere(query: ParsedItemListQuery): { whereSql: string; params: SQL
     if (query.candidate !== 'all') where.push(`i.is_candidate = ${query.candidate === 'yes' ? 1 : 0}`);
     // In the tonic view hideCommon does not apply: tonics can have the subtype Food or Utility.
     if (query.hideCommon && query.view !== 'tonic') {
+        // Hides consumable subtypes that are rarely useful in Fractals (HIDE_COMMON_SUBTYPES). The explicit
+        // `subtype IS NOT NULL` makes the inner condition false instead of NULL for rows without subtype, so NOT(...)
+        // keeps them (NOT NULL would be NULL and SQLite would drop the row).
         where.push(
-            `NOT (i.type = 'Consumable' AND i.subtype IS NOT NULL AND i.subtype IN (${HIDE_COMMON_SUBTYPES.map((v) => `'${v}'`).join(', ')}))`,
+            `NOT (i.type = 'Consumable' AND i.subtype IS NOT NULL AND i.subtype IN (${HIDE_COMMON_SUBTYPES.map((subtype) => `'${subtype}'`).join(', ')}))`,
         );
         // Mastery Points and Emote Tomes are unlocks with no use in the fractals, but of subtype
         // Immediate or Generic. Many Mastery Points are named " Mastery Point" with a leading space.
@@ -183,6 +199,7 @@ function buildWhere(query: ParsedItemListQuery): { whereSql: string; params: SQL
         where.push(`i.rarity IN (${query.rarity.map(() => '?').join(', ')})`);
         params.push(...query.rarity);
     }
+    // One EXISTS per selected game type, so an item must have all of them. json_each iterates a JSON array column.
     for (const gameType of query.gameType) {
         where.push('EXISTS (SELECT 1 FROM json_each(i.game_types) WHERE value = ?)');
         params.push(gameType);
@@ -204,8 +221,10 @@ function buildWhere(query: ParsedItemListQuery): { whereSql: string; params: SQL
     return { whereSql: where.length > 0 ? `WHERE ${where.join(' AND ')}` : '', params };
 }
 
+/** One page of the item list plus the total number of matches. */
 export function listItems(db: DatabaseSync, query: ParsedItemListQuery): ItemListResponse {
     const { whereSql, params } = buildWhere(query);
+    // .get(...params) binds the values to the ? placeholders and returns the first row.
     const { total } = db
         .prepare(`SELECT COUNT(*) AS total FROM items i LEFT JOIN item_tests t ON t.item_id = i.id ${whereSql}`)
         .get(...params) as { total: number };
@@ -261,6 +280,7 @@ export function exportItems(db: DatabaseSync, query: ParsedItemListQuery): Expor
     }));
 }
 
+/** Full detail of one item including test result and change history, or null if the ID is unknown. */
 export function getItemDetail(db: DatabaseSync, id: number, lang: Lang = 'en'): ItemDetail | null {
     const row = db
         .prepare(
@@ -274,7 +294,8 @@ export function getItemDetail(db: DatabaseSync, id: number, lang: Lang = 'en'): 
         .get(id) as ItemDetailRow | undefined;
     if (!row) return null;
 
-    const raw = JSON.parse(row.raw_json) as Record<string, unknown>;
+    // raw_json is the unmodified GW2 API response; some fields are only read from there.
+    const rawItem = JSON.parse(row.raw_json) as Record<string, unknown>;
     const history = db
         .prepare(
             `SELECT c.update_id, u.started_at, c.kind, c.changed_fields, c.game_types_before, c.game_types_after
@@ -296,9 +317,9 @@ export function getItemDetail(db: DatabaseSync, id: number, lang: Lang = 'en'): 
         description: row.description,
         chatLink: row.chat_link,
         flags: JSON.parse(row.flags) as string[],
-        restrictions: Array.isArray(raw.restrictions) ? (raw.restrictions as string[]) : [],
-        vendorValue: typeof raw.vendor_value === 'number' ? raw.vendor_value : 0,
-        details: isObject(raw.details) ? raw.details : null,
+        restrictions: Array.isArray(rawItem.restrictions) ? (rawItem.restrictions as string[]) : [],
+        vendorValue: typeof rawItem.vendor_value === 'number' ? rawItem.vendor_value : 0,
+        details: isObject(rawItem.details) ? rawItem.details : null,
         wikiUrl: wikiUrl(lang, row.name),
         test: {
             status: (row.test_status as TestStatus | null) ?? 'untested',
@@ -306,13 +327,13 @@ export function getItemDetail(db: DatabaseSync, id: number, lang: Lang = 'en'): 
             testedAt: row.tested_at,
             gameTypesAtTest: row.game_types_at_test ? (JSON.parse(row.game_types_at_test) as GameType[]) : null,
         },
-        history: history.map((h) => ({
-            updateId: h.update_id,
-            updateStartedAt: h.started_at,
-            kind: h.kind,
-            changedFields: h.changed_fields ? (JSON.parse(h.changed_fields) as string[]) : [],
-            gameTypesBefore: h.game_types_before ? (JSON.parse(h.game_types_before) as GameType[]) : null,
-            gameTypesAfter: h.game_types_after ? (JSON.parse(h.game_types_after) as GameType[]) : null,
+        history: history.map((entry) => ({
+            updateId: entry.update_id,
+            updateStartedAt: entry.started_at,
+            kind: entry.kind,
+            changedFields: entry.changed_fields ? (JSON.parse(entry.changed_fields) as string[]) : [],
+            gameTypesBefore: entry.game_types_before ? (JSON.parse(entry.game_types_before) as GameType[]) : null,
+            gameTypesAfter: entry.game_types_after ? (JSON.parse(entry.game_types_after) as GameType[]) : null,
         })),
     };
 }
@@ -332,7 +353,10 @@ export function parseItemTestUpdate(body: unknown): ItemTestUpdate {
     return { status, note: trimmed ? trimmed : null };
 }
 
-/** Stores the test result. Remembers the current game_types for the "retest" check. */
+/**
+ * Stores the test result (upsert: insert, or update if the item already has a row).
+ * Remembers the current game_types for the "retest" check. Returns false if the item does not exist.
+ */
 export function saveItemTest(db: DatabaseSync, id: number, update: ItemTestUpdate): boolean {
     const result = db
         .prepare(
@@ -342,10 +366,12 @@ export function saveItemTest(db: DatabaseSync, id: number, update: ItemTestUpdat
          status = excluded.status, note = excluded.note,
          tested_at = excluded.tested_at, game_types_at_test = excluded.game_types_at_test`,
         )
+        // .run() returns { changes } = number of affected rows; 0 means the SELECT found no such item.
         .run(update.status, update.note ?? null, new Date().toISOString(), id);
     return result.changes > 0;
 }
 
+// Converts a DB row (snake_case, JSON strings, 0/1) to the API type (camelCase, parsed values, booleans).
 function toListItem(row: ItemRow): ItemListItem {
     return {
         id: row.id,
@@ -364,6 +390,7 @@ function toListItem(row: ItemRow): ItemListItem {
     };
 }
 
+// Type guard: after `isObject(x)` returns true, TypeScript treats x as Record<string, unknown>.
 function isObject(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

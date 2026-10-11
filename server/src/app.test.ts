@@ -21,18 +21,23 @@ import { Importer } from './importer/importer.js';
 import { startFakeGw2Api, type FakeGw2Api } from './test/fakeGw2Api.js';
 import { chatLinkFor, createTestImporter, fixtureItems, runImport } from './test/fixtures.js';
 
+// End-to-end API tests: the real Hono app and importer run against a fake GW2 API and an in-memory DB.
+// app.request(path) calls a route directly, without opening a network port.
 let api: FakeGw2Api;
 let db: DatabaseSync;
 let importer: Importer;
 let app: Hono;
 
+// GET a path, assert the status code and return the parsed JSON body (T = expected shape, only for typing).
 async function getJson<T>(path: string, expectedStatus = 200): Promise<T> {
     const res = await app.request(path);
     assert.equal(res.status, expectedStatus, `${path} → ${res.status}`);
     return (await res.json()) as T;
 }
+// IDs of the items returned by /api/items for a query string like '?view=tonic'.
 const ids = async (query: string) =>
     (await getJson<ItemListResponse>(`/api/items${query}`)).items.map((item) => item.id);
+// PUT a test result for an item; body may be a raw string to send invalid JSON.
 const putTest = (id: number | string, body: unknown) =>
     app.request(`/api/items/${id}/test`, {
         method: 'PUT',
@@ -40,6 +45,7 @@ const putTest = (id: number | string, body: unknown) =>
         body: typeof body === 'string' ? body : JSON.stringify(body),
     });
 
+// node:test hooks: `before` runs once before all tests of this file, `after` once at the end.
 before(async () => {
     api = await startFakeGw2Api(fixtureItems());
     ({ db, importer } = createTestImporter(api.url));
@@ -333,7 +339,7 @@ describe('GET /api/items/export', () => {
     it('JSON: all matches without pagination, real types', async () => {
         const rows = await exportJson('format=json&view=all&candidate=all&sort=id&pageSize=1&page=2');
         assert.deepEqual(
-            rows.map((r) => r.id),
+            rows.map((row) => row.id),
             [1, 2, 6, 8778],
         );
         const kit = rows[0]!;
@@ -371,12 +377,12 @@ describe('GET /api/items/export', () => {
     it('JSON: respects view, testStatus and sorting', async () => {
         const consumables = await exportJson('format=json&view=consumable&hideCommon=false&sort=id&order=desc');
         assert.deepEqual(
-            consumables.map((r) => r.id),
+            consumables.map((row) => row.id),
             [8778, 5, 4],
         );
         const broken = await exportJson('format=json&view=all&candidate=all&testStatus=broken&sort=id');
         assert.deepEqual(
-            broken.map((r) => r.id),
+            broken.map((row) => row.id),
             [1, 2],
         );
     });

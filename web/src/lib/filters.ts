@@ -10,8 +10,13 @@ export const VIEWS: ItemView[] = ['gizmo', 'consumable', 'tonic', 'all'];
 export const SORTS = ITEM_SORTS;
 export const PAGE_SIZE = 50;
 
+// NonNullable<T> removes null/undefined from T; `ListFilters[...]['x']` style lookups reuse types from the shared
+// module.
+// Candidate = an item whose game types contain Dungeon (see CLAUDE.md glossary).
 export type Candidate = NonNullable<ItemListQuery['candidate']>;
 export type TestFilter = TestStatus | 'retest';
+// `typeof SORTS` is the array type; `[number]` is an indexed access type that looks up its element type, i.e. the union
+// of the allowed sort field strings.
 export type SortField = (typeof SORTS)[number];
 
 export interface ListFilters {
@@ -46,28 +51,33 @@ export const DEFAULT_FILTERS: ListFilters = {
     page: 1,
 };
 
+// Returns value if it is one of the allowed strings, otherwise undefined (guards against hand-edited URLs).
 function oneOf<T extends string>(value: string | null, allowed: readonly T[]): T | undefined {
-    return allowed.find((a) => a === value);
+    return allowed.find((option) => option === value);
 }
 
+// Parses a comma-separated list, keeping only allowed entries (in the order of `allowed`).
 function listOf<T extends string>(value: string | null, allowed: readonly T[]): T[] {
     if (!value) return [];
     const parts = value.split(',');
-    return allowed.filter((a) => parts.includes(a));
+    return allowed.filter((option) => parts.includes(option));
 }
 
+// Parses a positive integer; anything else (empty, negative, decimal, text) gives null.
 function positiveInt(value: string | null): number | null {
     if (!value || !/^\d+$/.test(value)) return null;
-    const n = Number(value);
-    return n > 0 ? n : null;
+    const parsed = Number(value);
+    return parsed > 0 ? parsed : null;
 }
 
+/** Builds ListFilters from URL parameters; every missing or invalid value falls back to its default. */
+// `as const` below makes the array a readonly tuple of literal types instead of string[].
 export function parseFilters(params: URLSearchParams): ListFilters {
-    const d = DEFAULT_FILTERS;
+    const defaults = DEFAULT_FILTERS;
     return {
-        view: oneOf(params.get('view'), VIEWS) ?? d.view,
+        view: oneOf(params.get('view'), VIEWS) ?? defaults.view,
         q: params.get('q') ?? '',
-        candidate: oneOf(params.get('candidate'), ['yes', 'no', 'all'] as const) ?? d.candidate,
+        candidate: oneOf(params.get('candidate'), ['yes', 'no', 'all'] as const) ?? defaults.candidate,
         hideCommon: params.get('hideCommon') !== 'false',
         hidePlaceholders: params.get('hidePlaceholders') !== 'false',
         rarity: listOf(params.get('rarity'), RARITIES),
@@ -75,52 +85,53 @@ export function parseFilters(params: URLSearchParams): ListFilters {
         testStatus: oneOf(params.get('testStatus'), ['untested', 'works', 'broken', 'retest'] as const) ?? null,
         updateId: positiveInt(params.get('updateId')),
         includeRemoved: params.get('includeRemoved') === 'true',
-        sort: oneOf(params.get('sort'), SORTS) ?? d.sort,
+        sort: oneOf(params.get('sort'), SORTS) ?? defaults.sort,
         order: params.get('order') === 'desc' ? 'desc' : 'asc',
         page: positiveInt(params.get('page')) ?? 1,
     };
 }
 
 /** URL parameters for the address bar (without default values). */
-export function filtersToParams(f: ListFilters): URLSearchParams {
-    const d = DEFAULT_FILTERS;
-    const p = new URLSearchParams();
-    if (f.view !== d.view) p.set('view', f.view);
-    if (f.q.trim()) p.set('q', f.q.trim());
-    if (f.candidate !== d.candidate) p.set('candidate', f.candidate);
-    if (!f.hideCommon) p.set('hideCommon', 'false');
-    if (!f.hidePlaceholders) p.set('hidePlaceholders', 'false');
-    if (f.rarity.length) p.set('rarity', f.rarity.join(','));
-    if (f.gameType.length) p.set('gameType', f.gameType.join(','));
-    if (f.testStatus) p.set('testStatus', f.testStatus);
-    if (f.updateId !== null) p.set('updateId', String(f.updateId));
-    if (f.includeRemoved) p.set('includeRemoved', 'true');
-    if (f.sort !== d.sort) p.set('sort', f.sort);
-    if (f.order !== d.order) p.set('order', f.order);
-    if (f.page > 1) p.set('page', String(f.page));
-    return p;
+export function filtersToParams(filters: ListFilters): URLSearchParams {
+    const defaults = DEFAULT_FILTERS;
+    const params = new URLSearchParams();
+    if (filters.view !== defaults.view) params.set('view', filters.view);
+    if (filters.q.trim()) params.set('q', filters.q.trim());
+    if (filters.candidate !== defaults.candidate) params.set('candidate', filters.candidate);
+    if (!filters.hideCommon) params.set('hideCommon', 'false');
+    if (!filters.hidePlaceholders) params.set('hidePlaceholders', 'false');
+    if (filters.rarity.length) params.set('rarity', filters.rarity.join(','));
+    if (filters.gameType.length) params.set('gameType', filters.gameType.join(','));
+    if (filters.testStatus) params.set('testStatus', filters.testStatus);
+    if (filters.updateId !== null) params.set('updateId', String(filters.updateId));
+    if (filters.includeRemoved) params.set('includeRemoved', 'true');
+    if (filters.sort !== defaults.sort) params.set('sort', filters.sort);
+    if (filters.order !== defaults.order) params.set('order', filters.order);
+    if (filters.page > 1) params.set('page', String(filters.page));
+    return params;
 }
 
-export function listUrl(f: ListFilters): string {
-    const qs = filtersToParams(f).toString();
-    return qs ? `/?${qs}` : '/';
+/** In-app path of the list page for these filters, e.g. "/?view=tonic&page=2". */
+export function listUrl(filters: ListFilters): string {
+    const queryString = filtersToParams(filters).toString();
+    return queryString ? `/?${queryString}` : '/';
 }
 
 /** Query string for GET /api/items: all values explicit so the server does not have to guess defaults. */
-export function toApiQuery(f: ListFilters): string {
-    const p = filtersToParams(f);
-    p.set('view', f.view);
-    p.set('candidate', f.candidate);
-    p.set('hideCommon', String(f.hideCommon));
-    p.set('hidePlaceholders', String(f.hidePlaceholders));
-    p.set('page', String(f.page));
-    p.set('pageSize', String(PAGE_SIZE));
-    return p.toString();
+export function toApiQuery(filters: ListFilters): string {
+    const params = filtersToParams(filters);
+    params.set('view', filters.view);
+    params.set('candidate', filters.candidate);
+    params.set('hideCommon', String(filters.hideCommon));
+    params.set('hidePlaceholders', String(filters.hidePlaceholders));
+    params.set('page', String(filters.page));
+    params.set('pageSize', String(PAGE_SIZE));
+    return params.toString();
 }
 
 /** URL for downloading the filtered list (all matches; the server ignores page/pageSize). */
-export function exportUrl(f: ListFilters, format: 'csv' | 'json', lang: Lang): string {
-    return `/api/items/export?${toApiQuery(f)}&lang=${lang}&format=${format}`;
+export function exportUrl(filters: ListFilters, format: 'csv' | 'json', lang: Lang): string {
+    return `/api/items/export?${toApiQuery(filters)}&lang=${lang}&format=${format}`;
 }
 
 /** The hideCommon filter only applies in the Consumables and All views. */
@@ -129,14 +140,14 @@ export function hasHideCommon(view: ItemView): boolean {
 }
 
 /** Number of active filters in the collapsible section (shown on the button). */
-export function countExtraFilters(f: ListFilters): number {
-    let n = 0;
-    if (f.rarity.length) n++;
-    if (f.gameType.length) n++;
-    if (f.testStatus) n++;
-    if (f.updateId !== null) n++;
-    if (f.includeRemoved) n++;
-    if (hasHideCommon(f.view) && !f.hideCommon) n++;
-    if (!f.hidePlaceholders) n++;
-    return n;
+export function countExtraFilters(filters: ListFilters): number {
+    let count = 0;
+    if (filters.rarity.length) count++;
+    if (filters.gameType.length) count++;
+    if (filters.testStatus) count++;
+    if (filters.updateId !== null) count++;
+    if (filters.includeRemoved) count++;
+    if (hasHideCommon(filters.view) && !filters.hideCommon) count++;
+    if (!filters.hidePlaceholders) count++;
+    return count;
 }

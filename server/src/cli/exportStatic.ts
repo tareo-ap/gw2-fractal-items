@@ -37,6 +37,7 @@ export interface StaticExport {
     detailBlocks: StaticDetailBlock[];
 }
 
+// Row of the big item query in buildStaticExport (items + test result + German texts, snake_case columns).
 interface ItemRow {
     id: number;
     name: string;
@@ -63,6 +64,7 @@ interface ItemRow {
     de_description: string | null;
 }
 
+// Row of the changes query; raw_json is needed to summarize added/removed items.
 interface ChangeRowSql {
     update_id: number;
     item_id: number;
@@ -84,7 +86,8 @@ interface ChangeRowSql {
  */
 export function buildStaticExport(db: DatabaseSync, now: Date = new Date()): StaticExport {
     const updates: StaticUpdate[] = listUpdates(db)
-        .filter((u) => u.status === 'done')
+        .filter((update) => update.status === 'done')
+        // Rest destructuring: drops the two server-only fields, keeps everything else in `rest`.
         .map(({ deletable: _deletable, deleteBlockedReason: _reason, ...rest }) => rest);
     // listUpdates returns the newest first; the full import is the last one.
     const baselineId = updates.length > 0 ? updates[updates.length - 1]!.id : -1;
@@ -104,11 +107,14 @@ export function buildStaticExport(db: DatabaseSync, now: Date = new Date()): Sta
         )
         .all(baselineId) as unknown as ItemRow[];
 
+    // Items go into one list; their bulky raw data is split into numbered blocks of DETAIL_BLOCK_SIZE
+    // items, which the static site loads lazily.
     const items: StaticItem[] = [];
     const detailBlocks: StaticDetailBlock[] = [];
     for (const [index, row] of itemRows.entries()) {
         items.push(toStaticItem(row));
         const block = Math.floor(index / DETAIL_BLOCK_SIZE);
+        // `??=` creates the block object on first use.
         (detailBlocks[block] ??= {})[row.id] = restOfRaw(row.raw_json);
     }
 
@@ -149,6 +155,7 @@ export function buildStaticExport(db: DatabaseSync, now: Date = new Date()): Sta
     return { meta, items, updates, changes, detailBlocks };
 }
 
+// Converts a DB row to the compact static format: optional fields are only set when they carry information.
 function toStaticItem(row: ItemRow): StaticItem {
     const item: StaticItem = {
         id: row.id,
@@ -190,6 +197,7 @@ function restOfRaw(rawJson: string): Record<string, unknown> {
     return raw;
 }
 
+// Converts an item_changes row (JSON strings) to the static format.
 function toStaticChange(row: ChangeRowSql): StaticChange {
     const change: StaticChange = { updateId: row.update_id, itemId: row.item_id, kind: row.kind };
     if (row.changed_fields) change.changedFields = JSON.parse(row.changed_fields) as string[];
@@ -202,6 +210,7 @@ function toStaticChange(row: ChangeRowSql): StaticChange {
     return change;
 }
 
+/** What writeStaticExport wrote: file paths relative to the output folder and their sizes. */
 export interface WrittenFiles {
     files: { path: string; bytes: number }[];
     totalBytes: number;
@@ -220,15 +229,16 @@ export function writeStaticExport(data: StaticExport, outDir: string): WrittenFi
     };
     write('meta.json', data.meta);
     write('items.json', data.items);
-    data.detailBlocks.forEach((block, n) => write(`details/${n}.json`, block));
+    data.detailBlocks.forEach((block, blockIndex) => write(`details/${blockIndex}.json`, block));
     write('updates.json', data.updates);
     write('changes.json', data.changes);
-    return { files, totalBytes: files.reduce((sum, f) => sum + f.bytes, 0) };
+    return { files, totalBytes: files.reduce((sum, file) => sum + file.bytes, 0) };
 }
 
 /** Opens the database read-only (a running server does not interfere) and checks the schema. */
 export function openForExport(dbPath: string): DatabaseSync {
     if (!fs.existsSync(dbPath)) throw new Error(`Database not found: ${dbPath}`);
+    // PRAGMA user_version holds the number of applied migrations (see db/index.ts).
     const db = new DatabaseSync(dbPath, { readOnly: true });
     const { user_version: version } = db.prepare('PRAGMA user_version').get() as { user_version: number };
     if (version !== migrations.length) {
@@ -242,17 +252,19 @@ export function openForExport(dbPath: string): DatabaseSync {
     return db;
 }
 
+// 1536 -> "1.5 KB", larger than 1 MiB -> "x.xx MB".
 const formatBytes = (bytes: number) =>
     bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(2)} MB` : `${(bytes / 1024).toFixed(1)} KB`;
 
+/** Human-readable summary lines for the console output. */
 export function describeWritten(data: StaticExport, written: WrittenFiles, outDir: string): string[] {
-    const details = written.files.filter((f) => f.path.startsWith('details/'));
+    const details = written.files.filter((file) => file.path.startsWith('details/'));
     const lines = [
         `Export done: ${data.items.length} items, ${data.updates.length} states, ${data.changes.length} changes in ${outDir}`,
         ...written.files
-            .filter((f) => !f.path.startsWith('details/'))
-            .map((f) => `  ${f.path}: ${formatBytes(f.bytes)}`),
-        `  details/ (${details.length} files): ${formatBytes(details.reduce((sum, f) => sum + f.bytes, 0))}`,
+            .filter((file) => !file.path.startsWith('details/'))
+            .map((file) => `  ${file.path}: ${formatBytes(file.bytes)}`),
+        `  details/ (${details.length} files): ${formatBytes(details.reduce((sum, file) => sum + file.bytes, 0))}`,
         `Total: ${written.files.length} files, ${formatBytes(written.totalBytes)} (uncompressed)`,
     ];
     if (written.totalBytes > SIZE_WARNING_BYTES)
@@ -260,6 +272,7 @@ export function describeWritten(data: StaticExport, written: WrittenFiles, outDi
     return lines;
 }
 
+// Entry point of `npm run export:static`.
 function main(): void {
     // npm starts the script in the server/ folder; relative paths are resolved from the folder where npm was invoked.
     const arg = process.argv[2];

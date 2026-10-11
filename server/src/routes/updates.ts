@@ -17,6 +17,7 @@ import { nameSql, PLACEHOLDER_SQL, textsJoin, TONIC_SQL } from './items.js';
 
 export { parseUpdateChangesQuery, type ParsedUpdateChangesQuery };
 
+// Row of the `updates` table. An "update" is one import run; its result is a "state" of the item database.
 export interface UpdateRow {
     id: number;
     started_at: string;
@@ -29,9 +30,11 @@ export interface UpdateRow {
     removed: number;
 }
 
+// SQL helpers on item_changes (alias c). json_each(...) turns a JSON array column into rows we can search.
 // Only changed items (kind = 'changed') are counted where "Dungeon" was added to or removed from
 // game_types. New and removed items are already in added/removed;
 // otherwise every candidate would be a "Dungeon gained" on the first full import.
+// Checks whether the given JSON game_types column contains "Dungeon" (= candidate for Fractals).
 const HAS_DUNGEON = (column: string) => `EXISTS (SELECT 1 FROM json_each(c.${column}) WHERE value = 'Dungeon')`;
 
 const DUNGEON_GAINED_SQL = `c.kind = 'changed' AND ${HAS_DUNGEON('game_types_after')} AND NOT ${HAS_DUNGEON('game_types_before')}`;
@@ -41,6 +44,7 @@ const DUNGEON_LOST_SQL = `c.kind = 'changed' AND ${HAS_DUNGEON('game_types_befor
 const GAME_TYPES_CHANGED_SQL = `c.kind = 'changed' AND EXISTS (SELECT 1 FROM json_each(c.changed_fields) WHERE value = 'game_types')
   AND c.game_types_before IS NOT c.game_types_after`;
 
+// `A & B` = intersection type: all fields of UpdateRow plus the counters computed in selectUpdates.
 type UpdateRowWithDungeon = UpdateRow & {
     dungeon_gained: number;
     dungeon_lost: number;
@@ -52,6 +56,7 @@ type UpdateRowWithDungeon = UpdateRow & {
  * Deletion rule for states: failed ones always, completed ones only without changes, running ones never.
  * If an item or an item_changes entry still references the state, it stays; otherwise the history would be corrupted.
  */
+// `Pick<T, keys>` is a utility type: a type with only the listed fields of T.
 function deleteState(row: UpdateRowWithDungeon): Pick<UpdateDetail, 'deletable' | 'deleteBlockedReason'> {
     const blocked = (reason: NonNullable<UpdateDetail['deleteBlockedReason']>) => ({
         deletable: false,
@@ -64,6 +69,7 @@ function deleteState(row: UpdateRowWithDungeon): Pick<UpdateDetail, 'deletable' 
     return { deletable: true, deleteBlockedReason: null };
 }
 
+// Loads all updates (newest first) or one by id, with change counters and the delete rule applied.
 function selectUpdates(db: DatabaseSync, id?: number): UpdateDetail[] {
     const rows = db
         .prepare(
@@ -88,16 +94,20 @@ function selectUpdates(db: DatabaseSync, id?: number): UpdateDetail[] {
     }));
 }
 
+/** All updates, newest first. */
 export function listUpdates(db: DatabaseSync): UpdateDetail[] {
     return selectUpdates(db);
 }
 
+/** One update by ID, or null if it does not exist. */
 export function getUpdate(db: DatabaseSync, id: number): UpdateDetail | null {
     return selectUpdates(db, id)[0] ?? null;
 }
 
+// Discriminated union: check `ok` to know which of the two shapes you have.
 export type DeleteUpdateResult = { ok: true } | { ok: false; status: 404 | 409; error: string };
 
+// `as const` keeps the keys and texts as literal types, so BLOCKED_MESSAGES[reason] is type-checked.
 const BLOCKED_MESSAGES = {
     running: 'The state is still running and cannot be deleted',
     hasChanges: 'The state contains changes; deleting it would corrupt the history',
@@ -106,6 +116,7 @@ const BLOCKED_MESSAGES = {
 
 /** Deletes a state with its item_changes in one transaction, if the rule (deleteState) allows it. */
 export function deleteUpdate(db: DatabaseSync, id: number): DeleteUpdateResult {
+    // BEGIN IMMEDIATE takes the write lock right away, so no import can start between check and delete.
     db.exec('BEGIN IMMEDIATE');
     try {
         const update = getUpdate(db, id);
@@ -131,6 +142,7 @@ export function deleteUpdate(db: DatabaseSync, id: number): DeleteUpdateResult {
 // Changes of an update
 // ---------------------------------------------------------------------------
 
+// Row shape of the /changes query (item_changes joined with items).
 interface ChangeRow {
     item_id: number;
     kind: ChangeKind;
@@ -150,6 +162,7 @@ interface ChangeRow {
     is_candidate: number;
 }
 
+// Shared FROM/JOIN part of the changes queries (alias c = item_changes, i = items).
 const fromChangesSql = (lang: Lang) => `FROM item_changes c JOIN items i ON i.id = c.item_id ${textsJoin(lang)}`;
 
 /** Conditions on the items (type, placeholders, search); shared by /changes and /compare. Alias i. */
@@ -162,7 +175,7 @@ function itemFilter(query: ParsedUpdateChangesQuery): { conditions: string[]; pa
     if (query.hidePlaceholders) conditions.push(`NOT ${PLACEHOLDER_SQL}`);
     if (query.q) {
         // %, _ and \ are special characters in LIKE and are escaped with \. A plain number also matches the ID.
-        const pattern = `%${query.q.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+        const pattern = `%${query.q.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
         // German: a hit in the German or the English name is enough.
         const nameLike =
             query.lang === 'de'
@@ -180,6 +193,7 @@ function itemFilter(query: ParsedUpdateChangesQuery): { conditions: string[]; pa
     return { conditions, params };
 }
 
+/** Paginated, filtered list of the changes recorded by one update, plus counters over the whole update. */
 export function getUpdateChanges(
     db: DatabaseSync,
     update: UpdateDetail,
@@ -247,7 +261,8 @@ export function getUpdateChanges(
                   : null,
     }));
 
-    const legacy = db
+    // Updates recorded before values_before/values_after existed (migration 3) have no old/new values.
+    const legacyCheck = db
         .prepare(
             `SELECT EXISTS (SELECT 1 FROM item_changes WHERE update_id = ? AND kind = 'changed' AND values_before IS NULL) AS legacy`,
         )
@@ -259,7 +274,7 @@ export function getUpdateChanges(
         total,
         page: query.page,
         pageSize: query.pageSize,
-        legacyValues: legacy.legacy === 1,
+        legacyValues: legacyCheck.legacy === 1,
     };
 }
 
@@ -267,6 +282,7 @@ export function getUpdateChanges(
 // Comparison of two states (update A versus update B)
 // ---------------------------------------------------------------------------
 
+// Row shape of the /compare query: one change of one update, plus whether the item matches the filter.
 interface RangeRow {
     update_id: number;
     item_id: number;
@@ -281,6 +297,7 @@ interface RangeRow {
     matches: number;
 }
 
+// Parse a nullable JSON column into a typed value.
 const parseTypes = (json: string | null) => (json ? (JSON.parse(json) as GameType[]) : null);
 const parseValues = (json: string | null) => (json ? (JSON.parse(json) as Record<string, unknown>) : null);
 
@@ -296,7 +313,7 @@ export function compareUpdates(
     query: ParsedUpdateChangesQuery,
 ): UpdateCompareResponse {
     const filter = itemFilter(query);
-    const dbRows = db
+    const rangeRows = db
         .prepare(
             `SELECT c.update_id, c.item_id, c.kind, c.changed_fields, c.game_types_before, c.game_types_after,
               c.values_before, c.values_after, ${nameSql(query.lang)} AS name, i.name AS name_en, (${filter.conditions.join(' AND ') || '1'}) AS matches
@@ -305,58 +322,70 @@ export function compareUpdates(
        ORDER BY c.item_id, c.update_id`,
         )
         .all(...filter.params, from.id, to.id) as unknown as RangeRow[];
-    const rows: RangeChange[] = dbRows.map((r) => ({
-        updateId: r.update_id,
-        itemId: r.item_id,
-        kind: r.kind,
-        changedFields: r.changed_fields ? (JSON.parse(r.changed_fields) as string[]) : null,
-        gameTypesBefore: parseTypes(r.game_types_before),
-        gameTypesAfter: parseTypes(r.game_types_after),
-        valuesBefore: parseValues(r.values_before),
-        valuesAfter: parseValues(r.values_after),
-        name: r.name,
-        nameEn: r.name_en,
-        matches: r.matches === 1,
+    const rows: RangeChange[] = rangeRows.map((rangeRow) => ({
+        updateId: rangeRow.update_id,
+        itemId: rangeRow.item_id,
+        kind: rangeRow.kind,
+        changedFields: rangeRow.changed_fields ? (JSON.parse(rangeRow.changed_fields) as string[]) : null,
+        gameTypesBefore: parseTypes(rangeRow.game_types_before),
+        gameTypesAfter: parseTypes(rangeRow.game_types_after),
+        valuesBefore: parseValues(rangeRow.values_before),
+        valuesAfter: parseValues(rangeRow.values_after),
+        name: rangeRow.name,
+        nameEn: rangeRow.name_en,
+        matches: rangeRow.matches === 1,
     }));
 
     // Group (rows are sorted by item_id), summarize and count (unfiltered).
     const { all, counts } = aggregateRange(rows);
     const selected = selectNetChanges(all, query);
 
+    // "Net change" = all changes of one item within the range, merged into a single result.
     const pageNets = selected.slice((query.page - 1) * query.pageSize, query.page * query.pageSize);
-    const info = new Map<number, ItemInfoRow>();
+    const itemInfoById = new Map<number, ItemInfoRow>();
     if (pageNets.length > 0) {
         const infoRows = db
             .prepare(
                 `SELECT id, type, subtype, rarity, icon, removed, is_candidate, raw_json FROM items WHERE id IN (${pageNets.map(() => '?').join(', ')})`,
             )
-            .all(...pageNets.map((n) => n.itemId)) as unknown as ItemInfoRow[];
-        for (const row of infoRows) info.set(row.id, row);
+            .all(...pageNets.map((netChange) => netChange.itemId)) as unknown as ItemInfoRow[];
+        // Index by item ID for the lookup below.
+        for (const row of infoRows) itemInfoById.set(row.id, row);
     }
 
-    const items: UpdateChangeEntry[] = pageNets.map((n) => {
-        const row = info.get(n.itemId)!;
+    const items: UpdateChangeEntry[] = pageNets.map((netChange) => {
+        const row = itemInfoById.get(netChange.itemId)!;
         return {
-            id: n.itemId,
-            name: n.name,
-            nameEn: n.nameEn,
+            id: netChange.itemId,
+            name: netChange.name,
+            nameEn: netChange.nameEn,
             type: row.type,
             subtype: row.subtype,
             rarity: row.rarity as Rarity,
             icon: row.icon,
             removed: row.removed === 1,
             isCandidate: row.is_candidate === 1,
-            kind: n.kind,
-            changedFields: n.changedFields,
-            gameTypesBefore: n.gameTypesBefore,
-            gameTypesAfter: n.gameTypesAfter,
-            before: n.kind === 'removed' ? summarizeJson(row.raw_json) : n.kind === 'changed' ? n.before : null,
-            after: n.kind === 'added' ? summarizeJson(row.raw_json) : n.kind === 'changed' ? n.after : null,
-            unknownFields: n.unknownFields,
+            kind: netChange.kind,
+            changedFields: netChange.changedFields,
+            gameTypesBefore: netChange.gameTypesBefore,
+            gameTypesAfter: netChange.gameTypesAfter,
+            before:
+                netChange.kind === 'removed'
+                    ? summarizeJson(row.raw_json)
+                    : netChange.kind === 'changed'
+                      ? netChange.before
+                      : null,
+            after:
+                netChange.kind === 'added'
+                    ? summarizeJson(row.raw_json)
+                    : netChange.kind === 'changed'
+                      ? netChange.after
+                      : null,
+            unknownFields: netChange.unknownFields,
         };
     });
 
-    const legacy = db
+    const legacyCheck = db
         .prepare(
             `SELECT EXISTS (SELECT 1 FROM item_changes WHERE update_id > ? AND update_id <= ? AND kind = 'changed' AND values_before IS NULL) AS legacy`,
         )
@@ -369,10 +398,11 @@ export function compareUpdates(
         total: selected.length,
         page: query.page,
         pageSize: query.pageSize,
-        legacyValues: legacy.legacy === 1,
+        legacyValues: legacyCheck.legacy === 1,
     };
 }
 
+// Item columns that are not part of the change rows; loaded only for the items on the current page.
 interface ItemInfoRow {
     id: number;
     type: string;
@@ -389,6 +419,7 @@ export const summarizeJson = (rawJson: string): Record<string, unknown> =>
     summarize(JSON.parse(rawJson) as Record<string, unknown>);
 
 /** Counters over the whole update, without filters. */
+// In SQLite a comparison like `c.kind = 'added'` evaluates to 1 or 0, so SUM() counts the matches.
 function countChanges(db: DatabaseSync, updateId: number): UpdateChangeCounts {
     const row = db
         .prepare(
@@ -415,6 +446,7 @@ function countChanges(db: DatabaseSync, updateId: number): UpdateChangeCounts {
     };
 }
 
+/** Converts a DB row to the API summary (camelCase). */
 export function toUpdateSummary(row: UpdateRow): UpdateSummary {
     return {
         id: row.id,

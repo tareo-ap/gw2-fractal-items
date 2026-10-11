@@ -1,15 +1,26 @@
 // Types shared by server and web.
 // Types only, no runtime code: the imports disappear during compilation.
+// TypeScript notes: "A | B" is a union type (value is one of the listed alternatives, here mostly string literals);
+// "interface" describes the shape of an object; a trailing "?" on a property makes it optional.
 
+/**
+ * Item type from the GW2 API. "Gizmo" = usable miscellaneous item (kits, toys, tonics ...),
+ * "Consumable" = item that is used up (food, boosters, tonics ...).
+ * `(string & {})` accepts any other string too, but keeps editor autocomplete for the two literals
+ * (a plain `| string` would collapse the union to just `string`).
+ */
 export type ItemType = 'Gizmo' | 'Consumable' | (string & {});
 
+/** Where an item may be used (API field game_types). "Dungeon" marks items that might work in Fractals of the Mist. */
 export type GameType = 'Activity' | 'Dungeon' | 'Pve' | 'Pvp' | 'PvpLobby' | 'Wvw';
 
+/** Result of the manual test in Fractals: not tested yet, works, or does not work. */
 export type TestStatus = 'untested' | 'works' | 'broken';
 
 /** Language of item names and descriptions (query parameter lang, default 'en'). */
 export type Lang = 'en' | 'de';
 
+/** GET /api/stats: counters for the page header. */
 export interface StatsResponse {
     items: number;
     candidates: { gizmo: number; consumable: number; tonic: number };
@@ -21,7 +32,10 @@ export interface StatsResponse {
 /** Result of the last automatic check for a new game build. */
 export type AutoCheckResult = 'unchanged' | 'started' | 'running' | 'error' | 'noBaseline';
 
-/** Schedule of the auto check: daily at dailyAt, plus every patchEveryMinutes in the patch window (local time in timeZone). */
+/**
+ * Schedule of the auto check: daily at dailyAt, plus every patchEveryMinutes in the patch window (local time in
+ * timeZone).
+ */
 export interface AutoCheckSchedule {
     timeZone: string; // IANA, e.g. Europe/Berlin
     dailyAt: string; // HH:MM
@@ -39,6 +53,7 @@ export interface AutoCheckStatus {
     nextCheckAt: string | null; // ISO timestamp
 }
 
+/** Short description of one update run (import of the item database from the GW2 API). */
 export interface UpdateSummary {
     id: number;
     startedAt: string;
@@ -49,6 +64,7 @@ export interface UpdateSummary {
     removed: number;
 }
 
+/** GET /api/health */
 export interface HealthResponse {
     status: 'ok';
     version: string;
@@ -58,6 +74,7 @@ export interface HealthResponse {
 // API contract. Server and web both adhere to it.
 // ---------------------------------------------------------------------------
 
+/** Item quality, from worst to best. */
 export type Rarity = 'Junk' | 'Basic' | 'Fine' | 'Masterwork' | 'Rare' | 'Exotic' | 'Ascended' | 'Legendary';
 
 /** View in the UI: gizmos and consumables are separate, tonics are their own view across both types. */
@@ -102,6 +119,7 @@ export interface ItemListQuery {
     pageSize?: number; // default 50, max 200
 }
 
+/** GET /api/items: one page of the result list plus the total number of matches. */
 export interface ItemListResponse {
     items: ItemListItem[];
     total: number;
@@ -109,6 +127,7 @@ export interface ItemListResponse {
     pageSize: number;
 }
 
+/** Manual test result of an item (table item_tests). */
 export interface ItemTest {
     status: TestStatus;
     note: string | null;
@@ -116,8 +135,10 @@ export interface ItemTest {
     gameTypesAtTest: GameType[] | null;
 }
 
+/** What happened to an item in an update: new, modified or no longer in the API. */
 export type ChangeKind = 'added' | 'changed' | 'removed';
 
+/** One entry in an item's history: what changed in one update. */
 export interface ItemChange {
     updateId: number;
     updateStartedAt: string;
@@ -202,6 +223,7 @@ export interface UpdateChangeCounts {
     dungeonLost: number;
 }
 
+/** One row of the changes page. `Omit<T, K>` is ItemChange without the listed keys. */
 export interface UpdateChangeEntry extends Omit<ItemChange, 'updateId' | 'updateStartedAt'> {
     id: number;
     name: string; // in the chosen language, falling back to English
@@ -224,6 +246,7 @@ export interface UpdateChangeEntry extends Omit<ItemChange, 'updateId' | 'update
     unknownFields?: string[];
 }
 
+/** GET /api/updates/:id/changes */
 export interface UpdateChangesResponse {
     update: UpdateDetail;
     counts: UpdateChangeCounts;
@@ -234,7 +257,10 @@ export interface UpdateChangesResponse {
     legacyValues: boolean; // at least one change without stored old values (before migration 3)
 }
 
-/** GET /api/updates/compare?from=A&to=B: state after update A versus state after update B (A < B). Same filters as /changes. */
+/**
+ * GET /api/updates/compare?from=A&to=B: state after update A versus state after update B (A < B). Same filters as
+ * /changes.
+ */
 export interface UpdateCompareResponse extends Omit<UpdateChangesResponse, 'update'> {
     from: UpdateDetail;
     to: UpdateDetail;

@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { nextCheckAt, parseCheckSchedule } from './checkSchedule.js';
 
-const cfg = parseCheckSchedule({ UPDATE_CHECK: 'on' })!;
-const next = (iso: string) => nextCheckAt(new Date(iso), cfg).toISOString();
+// Default schedule: daily 06:00 and Tuesday 17:00-19:00 every 30 min, time zone Europe/Berlin.
+const schedule = parseCheckSchedule({ UPDATE_CHECK: 'on' })!;
+const next = (iso: string) => nextCheckAt(new Date(iso), schedule).toISOString();
 
 // Daylight saving time (CEST = UTC+2): Monday 2026-07-06, Tuesday 2026-07-07
 describe('nextCheckAt (Europe/Berlin, daylight saving time)', () => {

@@ -17,6 +17,7 @@ process.on('uncaughtException', (err) => {
     process.exit(1);
 });
 
+// Startup wiring: database -> GW2 client -> importer -> optional build watcher -> HTTP app.
 const db = openDatabase(config.dbPath);
 // An import that was still running at the last shutdown cannot be resumed.
 failOrphanedUpdates(db);
@@ -27,6 +28,7 @@ const importer = new Importer(db, client);
 const watcher = config.updateCheck ? new BuildWatcher(db, client, importer, config.updateCheck) : undefined;
 const app = createApp(db, config.webDist, importer, watcher);
 
+// serve() starts a Node HTTP server; app.fetch is Hono's standard request handler.
 const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
     console.log(`Server running at http://localhost:${info.port} (DB: ${config.dbPath})`);
 });
@@ -42,6 +44,7 @@ server.on('error', (err: NodeJS.ErrnoException) => {
 });
 
 // Shut down cleanly so SQLite writes back the WAL file (important for "docker stop").
+// Ctrl+C (SIGINT) and docker stop (SIGTERM).
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     process.on(signal, () => {
         watcher?.stop();

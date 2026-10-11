@@ -15,24 +15,30 @@ import {
     type TestFilter,
 } from '../lib/filters';
 
+// Callback type for filter changes: `Partial<ListFilters>` = any subset of the filter fields. `keepPage` skips the
+// reset to page 1; `replace` overwrites the history entry (used while typing so "Back" is not flooded).
 export type FilterChange = (change: Partial<ListFilters>, options?: { replace?: boolean; keepPage?: boolean }) => void;
 
+// Options of the test status dropdown. `retest` = tested earlier but the item changed since.
 const TEST_FILTERS: TestFilter[] = ['untested', 'works', 'broken', 'retest'];
 
+/** Filter controls above the list: search, candidate, sort, and a collapsible section with the rest. */
 export function FilterBar({ filters, onChange }: { filters: ListFilters; onChange: FilterChange }) {
     const { t } = useT();
+    // Filters in the collapsible section that differ from their defaults (shown as a badge on the summary).
     const extraCount = countExtraFilters(filters);
     // Decide only on the first render whether the section is open; afterwards the user controls it.
+    // useState with only the first tuple element: the initial value is computed once and never updated.
     const [initiallyOpen] = useState(extraCount > 0);
     return (
         <section className="filters" aria-label={t('filter.aria')}>
             <div className="filter-row">
-                <SearchInput value={filters.q} onSearch={(q) => onChange({ q }, { replace: true })} />
+                <SearchInput value={filters.q} onSearch={(query) => onChange({ q: query }, { replace: true })} />
                 <label className="field">
                     <span className="field-label">{t('filter.candidate')}</span>
                     <select
                         value={filters.candidate}
-                        onChange={(e) => onChange({ candidate: e.target.value as Candidate })}
+                        onChange={(event) => onChange({ candidate: event.target.value as Candidate })}
                     >
                         <option value="yes">{t('filter.candidate.yes')}</option>
                         <option value="no">{t('filter.candidate.no')}</option>
@@ -42,10 +48,13 @@ export function FilterBar({ filters, onChange }: { filters: ListFilters; onChang
                 <label className="field">
                     <span className="field-label">{t('filter.sort')}</span>
                     <span className="sort-group">
-                        <select value={filters.sort} onChange={(e) => onChange({ sort: e.target.value as SortField })}>
-                            {SORTS.map((s) => (
-                                <option key={s} value={s}>
-                                    {t(`sort.${s}`)}
+                        <select
+                            value={filters.sort}
+                            onChange={(event) => onChange({ sort: event.target.value as SortField })}
+                        >
+                            {SORTS.map((sortField) => (
+                                <option key={sortField} value={sortField}>
+                                    {t(`sort.${sortField}`)}
                                 </option>
                             ))}
                         </select>
@@ -73,7 +82,7 @@ export function FilterBar({ filters, onChange }: { filters: ListFilters; onChang
                         options={RARITIES}
                         selected={filters.rarity}
                         onChange={(rarity) => onChange({ rarity })}
-                        chipClass={(r) => `rarity-${r.toLowerCase()}`}
+                        chipClass={(rarity) => `rarity-${rarity.toLowerCase()}`}
                     />
                     <ChipGroup
                         label={t('filter.gameTypes')}
@@ -86,14 +95,14 @@ export function FilterBar({ filters, onChange }: { filters: ListFilters; onChang
                             <span className="field-label">{t('filter.testStatus')}</span>
                             <select
                                 value={filters.testStatus ?? ''}
-                                onChange={(e) =>
-                                    onChange({ testStatus: (e.target.value || null) as TestFilter | null })
+                                onChange={(event) =>
+                                    onChange({ testStatus: (event.target.value || null) as TestFilter | null })
                                 }
                             >
                                 <option value="">{t('filter.all')}</option>
-                                {TEST_FILTERS.map((f) => (
-                                    <option key={f} value={f}>
-                                        {t(`test.${f}`)}
+                                {TEST_FILTERS.map((testFilter) => (
+                                    <option key={testFilter} value={testFilter}>
+                                        {t(`test.${testFilter}`)}
                                     </option>
                                 ))}
                             </select>
@@ -106,7 +115,7 @@ export function FilterBar({ filters, onChange }: { filters: ListFilters; onChang
                                 <input
                                     type="checkbox"
                                     checked={filters.hideCommon}
-                                    onChange={(e) => onChange({ hideCommon: e.target.checked })}
+                                    onChange={(event) => onChange({ hideCommon: event.target.checked })}
                                 />
                                 {t('filter.hideCommon')}
                             </label>
@@ -115,7 +124,7 @@ export function FilterBar({ filters, onChange }: { filters: ListFilters; onChang
                             <input
                                 type="checkbox"
                                 checked={filters.hidePlaceholders}
-                                onChange={(e) => onChange({ hidePlaceholders: e.target.checked })}
+                                onChange={(event) => onChange({ hidePlaceholders: event.target.checked })}
                             />
                             {t('filter.hidePlaceholders')}
                         </label>
@@ -123,7 +132,7 @@ export function FilterBar({ filters, onChange }: { filters: ListFilters; onChang
                             <input
                                 type="checkbox"
                                 checked={filters.includeRemoved}
-                                onChange={(e) => onChange({ includeRemoved: e.target.checked })}
+                                onChange={(event) => onChange({ includeRemoved: event.target.checked })}
                             />
                             {t('filter.includeRemoved')}
                         </label>
@@ -134,10 +143,14 @@ export function FilterBar({ filters, onChange }: { filters: ListFilters; onChang
     );
 }
 
+// `event.target.value as Candidate`: a type assertion (TS only, no runtime check) because <select> values are plain
+// strings.
 /** Debounced search field: the URL is updated only 300 ms after the last input. */
-function SearchInput({ value, onSearch }: { value: string; onSearch: (q: string) => void }) {
+function SearchInput({ value, onSearch }: { value: string; onSearch: (query: string) => void }) {
     const { t } = useT();
+    // Local text state so typing is instant; the URL (and thus the list query) follows after the debounce.
     const [text, setText] = useState(value);
+    // useRef: mutable box that survives re-renders without causing one; holds the pending timeout id.
     const timer = useRef<number | undefined>(undefined);
 
     // Take the value from the URL (e.g. after "Back"), but not while typing.
@@ -145,6 +158,7 @@ function SearchInput({ value, onSearch }: { value: string; onSearch: (q: string)
         if (timer.current === undefined) setText(value);
     }, [value]);
 
+    // Cleanup on unmount: cancel a pending debounce timer. (An effect returning a function = its cleanup.)
     useEffect(() => () => window.clearTimeout(timer.current), []);
 
     const handleChange = (next: string) => {
@@ -162,7 +176,7 @@ function SearchInput({ value, onSearch }: { value: string; onSearch: (q: string)
             <input
                 type="search"
                 value={text}
-                onChange={(e) => handleChange(e.target.value)}
+                onChange={(event) => handleChange(event.target.value)}
                 placeholder={t('filter.searchPlaceholder')}
                 autoComplete="off"
             />
@@ -170,6 +184,10 @@ function SearchInput({ value, onSearch }: { value: string; onSearch: (q: string)
     );
 }
 
+/**
+ * Multi-select as toggle buttons ("chips"). Generic over the option type T so it works for rarities and game types
+ * alike.
+ */
 function ChipGroup<T extends string>({
     label,
     options,
@@ -187,22 +205,22 @@ function ChipGroup<T extends string>({
     const toggle = (value: T) => {
         // Keep the order as in options so the URL stays stable.
         const next = selected.includes(value)
-            ? selected.filter((v) => v !== value)
-            : options.filter((o) => o === value || selected.includes(o));
+            ? selected.filter((selectedValue) => selectedValue !== value)
+            : options.filter((option) => option === value || selected.includes(option));
         onChange(next);
     };
     return (
         <fieldset className="chip-group">
             <legend className="field-label">{label}</legend>
-            {options.map((o) => (
+            {options.map((option) => (
                 <button
-                    key={o}
+                    key={option}
                     type="button"
-                    className={`chip ${chipClass?.(o) ?? ''} ${selected.includes(o) ? 'selected' : ''}`}
-                    aria-pressed={selected.includes(o)}
-                    onClick={() => toggle(o)}
+                    className={`chip ${chipClass?.(option) ?? ''} ${selected.includes(option) ? 'selected' : ''}`}
+                    aria-pressed={selected.includes(option)}
+                    onClick={() => toggle(option)}
                 >
-                    {o}
+                    {option}
                 </button>
             ))}
             {selected.length > 0 && (
@@ -214,31 +232,34 @@ function ChipGroup<T extends string>({
     );
 }
 
+/** Dropdown to filter by the update (stored snapshot) in which an item was added or changed. */
 function UpdateSelect({ value, onChange }: { value: number | null; onChange: (id: number | null) => void }) {
-    const i18n = useT();
+    const i18n = useT(); // kept whole because describeUpdate needs the i18n object
     const { t } = i18n;
+    // Same queryKey as in Header: TanStack Query serves both from one cached request.
     const updates = useQuery({ queryKey: ['updates'], queryFn: api.updates });
     // First state = full import (only needed for the static version, see below).
-    const baseline = updates.data?.length ? Math.min(...updates.data.map((u) => u.id)) : undefined;
+    const baseline = updates.data?.length ? Math.min(...updates.data.map((update) => update.id)) : undefined;
     return (
         <label className="field field-update">
             <span className="field-label">{t('filter.update')}</span>
             <select
                 value={value ?? ''}
-                onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
+                onChange={(event) => onChange(event.target.value ? Number(event.target.value) : null)}
                 disabled={updates.isPending}
             >
                 <option value="">{updates.isError ? t('filter.updatesFailed') : t('filter.allUpdates')}</option>
                 {/* Show the selected update even if it is not (yet) in the list. */}
-                {value !== null && !updates.data?.some((u) => u.id === value) && (
+                {value !== null && !updates.data?.some((update) => update.id === value) && (
                     <option value={value}>{t('filter.updateN', { id: value })}</option>
                 )}
                 {updates.data
-                    // The static version has no changes for the first state (full import), so the filter would stay empty.
-                    ?.filter((u) => import.meta.env.VITE_DATA_MODE !== 'static' || u.id !== baseline)
-                    .map((u) => (
-                        <option key={u.id} value={u.id}>
-                            {describeUpdate(u, i18n)}
+                    // The static version has no changes for the first state (full import), so the filter would stay
+                    // empty.
+                    ?.filter((update) => import.meta.env.VITE_DATA_MODE !== 'static' || update.id !== baseline)
+                    .map((update) => (
+                        <option key={update.id} value={update.id}>
+                            {describeUpdate(update, i18n)}
                         </option>
                     ))}
             </select>

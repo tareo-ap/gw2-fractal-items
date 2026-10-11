@@ -29,14 +29,14 @@ import { chatLinkFor, createTestImporter, fixtureItems, runImport } from './test
 let api: FakeGw2Api;
 let db: DatabaseSync;
 let exported: StaticExport;
-let ds: StaticDataset;
+let staticDataset: StaticDataset;
 let published: Set<number>;
 let baselineId: number;
 let updateIds: number[];
 
 const gizmo = fixtureItems()[0]!;
 const consumable = fixtureItems().find((i) => i.id === 8778)!;
-const entries = (qs: string): Record<string, string> => Object.fromEntries(new URLSearchParams(qs));
+const entries = (queryString: string): Record<string, string> => Object.fromEntries(new URLSearchParams(queryString));
 
 before(async () => {
     api = await startFakeGw2Api([
@@ -121,8 +121,8 @@ before(async () => {
 
     // Simulate export and "files": round-trip through JSON, as the browser loads them.
     exported = JSON.parse(JSON.stringify(buildStaticExport(db))) as StaticExport;
-    ds = prepareDataset(exported);
-    published = new Set(ds.items.map((i) => i.id));
+    staticDataset = prepareDataset(exported);
+    published = new Set(staticDataset.items.map((i) => i.id));
     updateIds = listUpdates(db)
         .map((u) => u.id)
         .sort((a, b) => a - b);
@@ -130,19 +130,20 @@ before(async () => {
 after(() => api.close());
 
 /** Server list response, restricted to published items. */
-function serverList(qs: string) {
-    const query = parseItemListQuery({ ...entries(qs), pageSize: '200', page: '1' });
+function serverList(queryString: string) {
+    const query = parseItemListQuery({ ...entries(queryString), pageSize: '200', page: '1' });
     const res = listItems(db, query);
     assert.ok(res.total <= 200, 'Test data fits on one page');
     return res.items.filter((i) => published.has(i.id));
 }
 
-function staticList(qs: string) {
-    return listStaticItems(ds, parseItemListQuery({ ...entries(qs), pageSize: '200', page: '1' })).items;
+function staticList(queryString: string) {
+    return listStaticItems(staticDataset, parseItemListQuery({ ...entries(queryString), pageSize: '200', page: '1' }))
+        .items;
 }
 
-function checkList(qs: string) {
-    assert.deepEqual(staticList(qs), serverList(qs), `List: ${qs}`);
+function checkList(queryString: string) {
+    assert.deepEqual(staticList(queryString), serverList(queryString), `List: ${queryString}`);
 }
 
 describe('Export: item selection', () => {
@@ -187,7 +188,7 @@ describe('Export: item selection', () => {
             [...published].sort((a, b) => a - b),
         );
         for (const item of exported.items) {
-            const block = detailBlockOf(ds, item.id)!;
+            const block = detailBlockOf(staticDataset, item.id)!;
             assert.ok(exported.detailBlocks[block]![item.id], `Detail for ${item.id}`);
         }
     });
@@ -335,7 +336,7 @@ describe('List: browser logic against server', () => {
         for (const pageSize of [1, 3, 7]) {
             for (const page of [1, 2, 4]) {
                 const query = parseItemListQuery({ ...entries(base), pageSize: String(pageSize), page: String(page) });
-                const fromStatic = listStaticItems(ds, query);
+                const fromStatic = listStaticItems(staticDataset, query);
                 assert.equal(fromStatic.page, page);
                 assert.equal(fromStatic.pageSize, pageSize);
                 assert.equal(fromStatic.total, staticList(base).length);
@@ -345,25 +346,25 @@ describe('List: browser logic against server', () => {
     });
 
     it('Export CSV/JSON: same rows as the server, CSV with semicolon and BOM', () => {
-        for (const qs of [
+        for (const queryString of [
             'view=all&candidate=all&hideCommon=false&hidePlaceholders=false&includeRemoved=true',
             'view=gizmo&sort=id&order=desc',
             'view=consumable&lang=de&testStatus=works',
             'view=tonic&lang=de',
         ]) {
-            const query = parseItemListQuery(entries(qs));
+            const query = parseItemListQuery(entries(queryString));
             const serverRows = exportItems(db, query).filter((r) => published.has(r.id));
-            const staticRows = exportStaticItems(ds, query);
-            assert.deepEqual(staticRows, serverRows, qs);
+            const staticRows = exportStaticItems(staticDataset, query);
+            assert.deepEqual(staticRows, serverRows, queryString);
             assert.equal(toCsv(staticRows), toCsv(serverRows));
         }
-        const csv = toCsv(exportStaticItems(ds, parseItemListQuery(entries('view=all'))));
+        const csv = toCsv(exportStaticItems(staticDataset, parseItemListQuery(entries('view=all'))));
         assert.ok(csv.startsWith('﻿id;name;'));
         assert.ok(csv.includes('\r\n'));
     });
 
     it('Key figures', () => {
-        const stats = staticStats(ds);
+        const stats = staticStats(staticDataset);
         const count = (sql: string) => (db.prepare(sql).get() as { n: number }).n;
         assert.equal(
             stats.candidates.gizmo,
@@ -382,8 +383,8 @@ describe('Details: browser logic against server', () => {
     it('all published items, both languages', () => {
         for (const id of published) {
             for (const lang of ['en', 'de'] as Lang[]) {
-                const rest = exported.detailBlocks[detailBlockOf(ds, id)!]![id];
-                const fromStatic = staticItemDetail(ds, id, lang, rest)!;
+                const rest = exported.detailBlocks[detailBlockOf(staticDataset, id)!]![id];
+                const fromStatic = staticItemDetail(staticDataset, id, lang, rest)!;
                 const fromServer = getItemDetail(db, id, lang)!;
                 // The changes of the first update (everything "new") are not part of the static version.
                 const expected: ItemDetail = {
@@ -396,8 +397,8 @@ describe('Details: browser logic against server', () => {
     });
 
     it('unknown ID -> null', () => {
-        assert.equal(staticItemDetail(ds, 424242, 'en', undefined), null);
-        assert.equal(detailBlockOf(ds, 424242), null);
+        assert.equal(staticItemDetail(staticDataset, 424242, 'en', undefined), null);
+        assert.equal(detailBlockOf(staticDataset, 424242), null);
     });
 });
 
@@ -422,11 +423,11 @@ describe('Changes: browser logic against server', () => {
         for (const id of updateIds.filter((u) => u !== baselineId)) {
             const update = getUpdate(db, id)!;
             for (const lang of ['en', 'de']) {
-                for (const qs of queries) {
-                    const params = { ...entries(qs), lang };
+                for (const queryString of queries) {
+                    const params = { ...entries(queryString), lang };
                     const fromServer = getUpdateChanges(db, update, parseUpdateChangesQuery(params));
-                    const fromStatic = staticUpdateChanges(ds, update, parseUpdateChangesQuery(params));
-                    assert.deepEqual(fromStatic, fromServer, `Changes ${id} ${lang} ${qs}`);
+                    const fromStatic = staticUpdateChanges(staticDataset, update, parseUpdateChangesQuery(params));
+                    assert.deepEqual(fromStatic, fromServer, `Changes ${id} ${lang} ${queryString}`);
                 }
             }
         }
@@ -439,11 +440,16 @@ describe('Changes: browser logic against server', () => {
                 const fromUpdate = getUpdate(db, from)!;
                 const toUpdate = getUpdate(db, to)!;
                 for (const lang of ['en', 'de']) {
-                    for (const qs of queries) {
-                        const params = { ...entries(qs), lang };
+                    for (const queryString of queries) {
+                        const params = { ...entries(queryString), lang };
                         const fromServer = compareUpdates(db, fromUpdate, toUpdate, parseUpdateChangesQuery(params));
-                        const fromStatic = staticCompare(ds, fromUpdate, toUpdate, parseUpdateChangesQuery(params));
-                        assert.deepEqual(fromStatic, fromServer, `Compare ${from}→${to} ${lang} ${qs}`);
+                        const fromStatic = staticCompare(
+                            staticDataset,
+                            fromUpdate,
+                            toUpdate,
+                            parseUpdateChangesQuery(params),
+                        );
+                        assert.deepEqual(fromStatic, fromServer, `Compare ${from}→${to} ${lang} ${queryString}`);
                         if (fromStatic.items.length > 0) nonEmpty++;
                     }
                 }
@@ -454,7 +460,7 @@ describe('Changes: browser logic against server', () => {
 
     it('the first state has no entries, the counters come from the update', () => {
         const baseline = getUpdate(db, baselineId)!;
-        const res = staticUpdateChanges(ds, baseline, parseUpdateChangesQuery({}));
+        const res = staticUpdateChanges(staticDataset, baseline, parseUpdateChangesQuery({}));
         assert.equal(res.total, 0);
         assert.equal(res.counts.added, baseline.added);
     });

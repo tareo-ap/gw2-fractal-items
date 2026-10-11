@@ -1,9 +1,15 @@
 // Rules and constants shared by the server (SQL) and the browser (static version).
 // Runtime code without Node or browser dependencies: the server builds its SQL conditions from it,
 // the static version evaluates the same rules in JavaScript.
+// TypeScript notes: `readonly T[]` is an array that cannot be modified; `as const` freezes a literal to its exact
+// values; `Pick<T, K>` is T reduced to the listed properties.
+// GW2 terms: a "candidate" is an item whose game_types contain "Dungeon" (might work in Fractals of the Mist);
+// a "gizmo" is a usable miscellaneous item; a "tonic" is a transformation item; a "placeholder" is an internal
+// dummy item without real content.
 
 import type { GameType, Lang, Rarity, TestStatus } from './types.js';
 
+/** All rarities from worst to best; the index is the sort rank. */
 export const RARITIES: readonly Rarity[] = [
     'Junk',
     'Basic',
@@ -14,8 +20,11 @@ export const RARITIES: readonly Rarity[] = [
     'Ascended',
     'Legendary',
 ];
+/** All game types the API knows. */
 export const GAME_TYPES: readonly GameType[] = ['Activity', 'Dungeon', 'Pve', 'Pvp', 'PvpLobby', 'Wvw'];
+/** All manual test results. */
 export const TEST_STATUSES: readonly TestStatus[] = ['untested', 'works', 'broken'];
+/** Sort keys of the item list (the type is derived from this tuple, see params.ts). */
 export const ITEM_SORTS = ['name', 'id', 'rarity', 'level', 'lastChanged'] as const;
 
 /** hideCommon hides consumables of these subtypes (Food, Utility, Unlock, Transmutation, Currency). */
@@ -40,7 +49,7 @@ export interface RuleItem {
  * Like SQLite lower(): only ASCII uppercase letters are converted. LIKE and COLLATE NOCASE
  * also only know ASCII, so the browser must compare the same way.
  */
-export const asciiLower = (text: string): string => text.replace(/[A-Z]+/g, (m) => m.toLowerCase());
+export const asciiLower = (text: string): string => text.replace(/[A-Z]+/g, (match) => match.toLowerCase());
 
 /** Like SQLite trim(): removes spaces only (no tab, no line break). */
 export const sqlTrim = (text: string): string => text.replace(/^ +| +$/g, '');
@@ -93,6 +102,7 @@ export const hideCommonApplies = (view: string): boolean => view === 'consumable
 // Wiki link and chat link
 // ---------------------------------------------------------------------------
 
+/** Wiki search URL for an item name, in the wiki of the given language. */
 export const wikiUrl = (lang: Lang, name: string): string =>
     lang === 'de'
         ? `https://wiki-de.guildwars2.com/wiki/Spezial:Suche/${encodeURIComponent(name)}`
@@ -106,6 +116,7 @@ export const wikiUrl = (lang: Lang, name: string): string =>
 export function itemIdFromChatLink(link: string): number | null {
     const match = /^\[&([A-Za-z0-9+/=]+)\]$/.exec(link);
     if (!match) return null;
+    // atob decodes Base64 into a "binary string": one character per byte.
     let binary: string;
     try {
         binary = atob(match[1]!);
@@ -113,11 +124,13 @@ export function itemIdFromChatLink(link: string): number | null {
         return null;
     }
     if (binary.length < 5 || binary.charCodeAt(0) !== 0x02) return null;
+    // Combine three bytes to a number (little endian: lowest byte first).
     return binary.charCodeAt(2) | (binary.charCodeAt(3) << 8) | (binary.charCodeAt(4) << 16);
 }
 
 /** Chat link of an item as the game generates it (type 2, quantity 1). */
 export function chatLinkForId(id: number): string {
+    // The trailing 0x00 byte matches what the game generates.
     const bytes = [0x02, 0x01, id & 0xff, (id >> 8) & 0xff, (id >> 16) & 0xff, 0x00];
     return `[&${btoa(String.fromCharCode(...bytes))}]`;
 }
@@ -134,6 +147,7 @@ export function chatLinkForId(id: number): string {
 export function stableStringify(value: unknown): string {
     if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
     if (value !== null && typeof value === 'object') {
+        // Keys sorted, undefined values dropped (JSON.stringify omits them as well).
         const entries = Object.keys(value)
             .sort()
             .filter((key) => (value as Record<string, unknown>)[key] !== undefined)
@@ -156,17 +170,20 @@ export function compareNoCase(a: string, b: string): number {
     return compareCodePoints(asciiLower(a), asciiLower(b));
 }
 
+/** Compares strings by code point order (like SQLite's BINARY collation on UTF-8); returns -1, 0 or 1. */
 export function compareCodePoints(a: string, b: string): number {
     if (a === b) return 0;
     const length = Math.min(a.length, b.length);
+    // Find the first position where the strings differ.
     for (let i = 0; i < length; i++) {
-        const ca = a.charCodeAt(i);
-        const cb = b.charCodeAt(i);
-        if (ca === cb) continue;
-        const surrogateA = ca >= 0xd800 && ca <= 0xdfff;
-        const surrogateB = cb >= 0xd800 && cb <= 0xdfff;
+        const codeUnitA = a.charCodeAt(i);
+        const codeUnitB = b.charCodeAt(i);
+        if (codeUnitA === codeUnitB) continue;
+        // Surrogates (0xD800-0xDFFF) are the UTF-16 halves of characters outside the BMP.
+        const surrogateA = codeUnitA >= 0xd800 && codeUnitA <= 0xdfff;
+        const surrogateB = codeUnitB >= 0xd800 && codeUnitB <= 0xdfff;
         if (surrogateA !== surrogateB) return surrogateA ? 1 : -1; // characters outside the BMP are greater
-        return ca < cb ? -1 : 1;
+        return codeUnitA < codeUnitB ? -1 : 1;
     }
     return a.length < b.length ? -1 : a.length > b.length ? 1 : 0;
 }

@@ -18,6 +18,7 @@ export interface Gw2Item {
     [field: string]: unknown;
 }
 
+/** Constructor options; everything except baseUrl is optional (tests pass tiny delays). */
 export interface Gw2ClientOptions {
     baseUrl: string;
     /** Minimum gap between two requests. 200 ms = at most 5 per second (the API allows about 300/min). */
@@ -38,10 +39,14 @@ export class Gw2ApiError extends Error {
     }
 }
 
+// Maximum number of IDs the GW2 API accepts in one /v2/items?ids= request.
 export const IDS_PER_REQUEST = 200;
 
+// Promise-based delay: `await sleep(500)` pauses for 500 ms.
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+// Throttled, retrying HTTP client for the GW2 API.
+// `private readonly` are TypeScript access modifiers (like Java): fields set once in the constructor.
 export class Gw2Client {
     private readonly baseUrl: string;
     private readonly minIntervalMs: number;
@@ -49,6 +54,7 @@ export class Gw2Client {
     private readonly maxAttempts: number;
     private nextSlot = 0; // earliest time (ms) for the next request
 
+    // Missing options fall back to defaults (`??` = use right side if left is null/undefined).
     constructor(options: Gw2ClientOptions) {
         this.baseUrl = options.baseUrl.replace(/\/+$/, '');
         this.minIntervalMs = options.minIntervalMs ?? 200;
@@ -91,25 +97,26 @@ export class Gw2Client {
     }
 
     // GET with throttling and retry. Retries on network errors, 429 and 5xx.
-    private async getJson(path: string, opts: { notFoundAsEmpty?: boolean } = {}): Promise<unknown> {
+    private async getJson(path: string, options: { notFoundAsEmpty?: boolean } = {}): Promise<unknown> {
         const url = this.baseUrl + path;
+        // Loop until a response is returned or an error is thrown (no loop condition on purpose).
         for (let attempt = 1; ; attempt++) {
             await this.throttle();
             let retryAfterMs: number | null = null;
             let error: Gw2ApiError;
-            let res: Response | null = null;
+            let response: Response | null = null;
             try {
-                res = await fetch(url, { headers: { Accept: 'application/json' } });
-                if (res.ok) return await res.json(); // 200 and 206
+                response = await fetch(url, { headers: { Accept: 'application/json' } });
+                if (response.ok) return await response.json(); // 200 and 206
             } catch {
-                res = null; // Network error or aborted/broken response -> treat like a network error
+                response = null; // Network error or aborted/broken response -> treat like a network error
             }
-            if (res) {
-                if (res.status === 404 && opts.notFoundAsEmpty) return [];
-                await res.body?.cancel();
-                error = new Gw2ApiError(`GW2 API ${res.status} for ${path}`, res.status);
-                if (res.status !== 429 && res.status < 500) throw error; // 4xx: retrying is pointless
-                retryAfterMs = parseRetryAfter(res.headers.get('retry-after'));
+            if (response) {
+                if (response.status === 404 && options.notFoundAsEmpty) return [];
+                await response.body?.cancel(); // release the connection without reading the body
+                error = new Gw2ApiError(`GW2 API ${response.status} for ${path}`, response.status);
+                if (response.status !== 429 && response.status < 500) throw error; // 4xx: retrying is pointless
+                retryAfterMs = parseRetryAfter(response.headers.get('retry-after'));
             } else {
                 error = new Gw2ApiError(`Network error for ${path}`, null);
             }
@@ -129,6 +136,7 @@ export class Gw2Client {
     }
 }
 
+// Converts the Retry-After header (seconds) to milliseconds, or null if missing/invalid.
 function parseRetryAfter(value: string | null): number | null {
     if (!value) return null;
     const seconds = Number(value);

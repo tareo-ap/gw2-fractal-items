@@ -21,6 +21,8 @@ export interface StaticMeta {
     lastUpdate: UpdateSummary | null; // last completed state
 }
 
+// Notes: "?" marks optional properties; the files omit empty values, so most fields are optional.
+
 /** Test status of an item (only present if there is a row in item_tests). */
 export interface StaticTest {
     status: TestStatus;
@@ -62,7 +64,7 @@ export interface StaticItem {
  */
 export type StaticDetailBlock = Record<string, Record<string, unknown>>;
 
-/** Fields of the API response that items.json already contains. */
+/** Fields of the API response that items.json already contains. `as const` makes it a read-only tuple of literals. */
 export const DETAIL_OMITTED_FIELDS = [
     'id',
     'name',
@@ -76,7 +78,9 @@ export const DETAIL_OMITTED_FIELDS = [
     'flags',
 ] as const;
 
-/** updates.json: like GET /api/updates, but only completed states and without deletion info. */
+/**
+ * updates.json: like GET /api/updates, but only completed states and without deletion info (`Omit` drops those keys).
+ */
 export type StaticUpdate = Omit<UpdateDetail, 'deletable' | 'deleteBlockedReason'>;
 
 /** Entry in changes.json (item_changes of all completed updates except the first full import). */
@@ -89,6 +93,9 @@ export interface StaticChange {
     gameTypesAfter?: GameType[];
     valuesBefore?: Record<string, unknown>;
     valuesAfter?: Record<string, unknown>;
-    /** Only for added/removed: summarize() of the API response (name, game_types, flags, description, rarity, details.type). */
+    /**
+     * Only for added/removed: summarize() of the API response (name, game_types, flags, description, rarity,
+     * details.type).
+     */
     summary?: Record<string, unknown>;
 }

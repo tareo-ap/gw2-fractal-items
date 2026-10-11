@@ -13,6 +13,7 @@ before(() => {
 });
 after(() => fs.rmSync(dir, { recursive: true, force: true }));
 
+// Creates a minimal valid database file with `itemCount` dummy items.
 function makeDb(file: string, itemCount: number): void {
     const db = openDatabase(file);
     db.exec(`INSERT INTO updates (started_at) VALUES ('2026-01-01T00:00:00Z')`);

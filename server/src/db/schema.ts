@@ -2,6 +2,7 @@
 // Always append new changes as a new entry, never modify existing ones.
 // SQLite tracks which migrations have run in PRAGMA user_version.
 
+// Each entry is a block of SQL run via db.exec; the array index + 1 is the schema version.
 export const migrations: string[] = [
     // 1: base schema
     `

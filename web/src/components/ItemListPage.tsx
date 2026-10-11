@@ -9,10 +9,12 @@ import { PAGE_SIZE, exportUrl, toApiQuery, type ListFilters } from '../lib/filte
 import { ErrorBox, GameTypeBadges, ItemIcon, Link, Loading, TestBadge } from './common';
 import { FilterBar, type FilterChange } from './FilterBar';
 
+// Display mode of the result list; the choice is remembered in localStorage.
 type Layout = 'table' | 'grid';
 const LAYOUT_KEY = 'gw2items.layout';
 
 // localStorage can be blocked (private mode etc.), so always use try/catch.
+/** Reads the stored layout choice, default table. */
 function loadLayout(): Layout {
     try {
         return localStorage.getItem(LAYOUT_KEY) === 'grid' ? 'grid' : 'table';
@@ -21,6 +23,7 @@ function loadLayout(): Layout {
     }
 }
 
+/** Persists the layout choice (ignores storage errors). */
 function saveLayout(layout: Layout) {
     try {
         localStorage.setItem(LAYOUT_KEY, layout);
@@ -29,10 +32,13 @@ function saveLayout(layout: Layout) {
     }
 }
 
+/** List page (route "/"): filter bar, result table or grid, export links and pagination. */
 export function ItemListPage({ filters, onChange }: { filters: ListFilters; onChange: FilterChange }) {
     const { t, lang, formatNumber } = useT();
-    const [layout, setLayout] = useState<Layout>(loadLayout);
-    const query = toApiQuery(filters);
+    const [layout, setLayout] = useState<Layout>(loadLayout); // passing the function (not calling it) runs it only on the first render
+
+    const query = toApiQuery(filters); // query string for the API, also used as part of the cache key
+    // queryKey: results are cached per language and filter combination; changing either triggers a new request.
     const items = useQuery({
         queryKey: ['items', lang, query],
         queryFn: () => api.items(query, lang),
@@ -134,6 +140,7 @@ export function ItemListPage({ filters, onChange }: { filters: ListFilters; onCh
     );
 }
 
+/** In-app link to the detail page of an item. */
 function itemHref(item: ItemListItem) {
     return `/items/${item.id}`;
 }
@@ -143,6 +150,7 @@ function nameTitle(item: ItemListItem) {
     return item.nameEn && item.nameEn !== item.name ? item.nameEn : undefined;
 }
 
+/** Item type with its subtype (e.g. Consumable · Food) in muted style. */
 function TypeText({ item }: { item: ItemListItem }) {
     return (
         <>
@@ -152,6 +160,7 @@ function TypeText({ item }: { item: ItemListItem }) {
     );
 }
 
+/** Result list as a table, one row per item. */
 function ItemTable({ items }: { items: ItemListItem[] }) {
     const { t, lang } = useT();
     return (
@@ -215,6 +224,7 @@ function ItemTable({ items }: { items: ItemListItem[] }) {
     );
 }
 
+/** Result list as a card grid, one card per item. */
 function ItemGrid({ items }: { items: ItemListItem[] }) {
     const { t } = useT();
     return (
@@ -241,6 +251,7 @@ function ItemGrid({ items }: { items: ItemListItem[] }) {
     );
 }
 
+/** First/prev/next/last buttons with "page X of Y"; renders nothing when everything fits on one page. */
 export function Pagination({
     page,
     total,
@@ -253,6 +264,7 @@ export function Pagination({
     onPage: (page: number) => void;
 }) {
     const { t, formatNumber } = useT();
+    // Total page count (at least 1).
     const pages = Math.max(1, Math.ceil(total / pageSize));
     if (pages <= 1) return null;
     return (

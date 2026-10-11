@@ -17,6 +17,8 @@ import { ApiError } from './apiError';
 // Values from the API that are filtered on (game_types, types, rarities, flags) are not translated,
 // nor are the field names in the "Changes" tab.
 
+// `as const` (end of the object) freezes the keys and texts as literal types, so `keyof typeof en` below is a union of
+// all keys.
 const en = {
     // Header and tabs
     'header.statsUnavailable': 'Statistics unavailable',
@@ -280,8 +282,11 @@ const en = {
     'manage.blocked.referenced': 'Items still refer to this state; deleting would falsify the history',
 } as const;
 
+// Key = union type of all translation keys, e.g. 'header.noUpdate' | ...; t() only accepts these (typos fail to
+// compile).
 export type Key = keyof typeof en;
 
+// Record<Key, string> forces the German dictionary to define exactly the same keys.
 const de: Record<Key, string> = {
     'header.statsUnavailable': 'Kennzahlen nicht verfügbar',
     'header.lastUpdate': 'Letztes Update',
@@ -536,12 +541,15 @@ const de: Record<Key, string> = {
     'manage.blocked.referenced': 'Items verweisen noch auf diesen Stand; Löschen würde den Verlauf verfälschen',
 };
 
+// Lookup by language code.
 const dictionaries: Record<Lang, Record<Key, string>> = { en, de };
 
 const LANG_KEY = 'gw2items.lang';
+// BCP 47 locale per language, passed to toLocaleString for number and date formatting.
 const LOCALES: Record<Lang, string> = { en: 'en-GB', de: 'de-DE' };
 
 // localStorage can be blocked (private mode etc.), so always use try/catch.
+/** Reads the stored language choice, default English. */
 function loadLang(): Lang {
     try {
         return localStorage.getItem(LANG_KEY) === 'de' ? 'de' : 'en';
@@ -550,6 +558,7 @@ function loadLang(): Lang {
     }
 }
 
+/** Persists the language choice (ignores storage errors). */
 function saveLang(lang: Lang) {
     try {
         localStorage.setItem(LANG_KEY, lang);
@@ -558,8 +567,10 @@ function saveLang(lang: Lang) {
     }
 }
 
+// Translate function: t('key') or t('key', { name: 'x' }) to fill {name} placeholders.
 export type TFunction = (key: Key, vars?: Record<string, string | number>) => string;
 
+// Everything a component gets from useT().
 export interface I18n {
     lang: Lang;
     setLang: (lang: Lang) => void;
@@ -570,6 +581,7 @@ export interface I18n {
     formatDateTime: (iso: string | null) => string;
 }
 
+// Builds the I18n object for one language (a plain function, called again whenever the language changes).
 function createI18n(lang: Lang, setLang: (lang: Lang) => void): I18n {
     const dict = dictionaries[lang];
     const locale = LOCALES[lang];
@@ -577,12 +589,13 @@ function createI18n(lang: Lang, setLang: (lang: Lang) => void): I18n {
         lang,
         setLang,
         t: (key, vars) => {
+            // Replace every {name} in the text by vars.name; unknown placeholders stay as they are.
             const text = dict[key];
             return vars
                 ? text.replace(/\{(\w+)\}/g, (match, name: string) => (name in vars ? String(vars[name]) : match))
                 : text;
         },
-        formatNumber: (n) => n.toLocaleString(locale),
+        formatNumber: (value) => value.toLocaleString(locale),
         formatDateTime: (iso) => {
             if (!iso) return '–';
             const date = new Date(iso);
@@ -592,22 +605,27 @@ function createI18n(lang: Lang, setLang: (lang: Lang) => void): I18n {
     };
 }
 
+// React context holding the I18n object; the default value is used outside of an I18nProvider (e.g. in tests).
 const I18nContext = createContext<I18n>(createI18n('en', () => {}));
 
 /** Provides language and translation, remembers the choice in the browser and sets <html lang>. */
 export function I18nProvider({ children }: { children: ReactNode }) {
+    // useState with a function argument: loadLang runs only once, on the first render.
     const [lang, setLangState] = useState<Lang>(loadLang);
     const setLang = useCallback((next: Lang) => {
         setLangState(next);
         saveLang(next);
     }, []);
+    // Keep <html lang> in sync (screen readers, hyphenation) after each language change.
     useEffect(() => {
         document.documentElement.lang = lang;
     }, [lang]);
+    // useMemo: rebuild the I18n object only when the language changes, so consumers don't re-render needlessly.
     const value = useMemo(() => createI18n(lang, setLang), [lang, setLang]);
     return createElement(I18nContext.Provider, { value }, children);
 }
 
+/** Hook: translation function, language and number/date formatting for the current language. */
 export function useT(): I18n {
     return useContext(I18nContext);
 }

@@ -13,6 +13,7 @@ let db: DatabaseSync;
 let importer: Importer;
 let watcher: BuildWatcher;
 
+// Number of update runs in the DB; a new one means the watcher started an import.
 const updateCount = () => (db.prepare('SELECT COUNT(*) AS n FROM updates').get() as { n: number }).n;
 
 describe('BuildWatcher', () => {

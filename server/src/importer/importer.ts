@@ -7,6 +7,7 @@ import { diffItem, hashItem, normalizeGameTypes } from './diff.js';
 /** How many items are written per DB transaction. */
 const WRITE_BLOCK_SIZE = 1000;
 
+// Thrown by Importer.start(); the route maps it to HTTP 409.
 export class ImportAlreadyRunningError extends Error {
     constructor() {
         super('An import is already running');
@@ -17,6 +18,7 @@ export class ImportAlreadyRunningError extends Error {
 /** Notice on update and status if the German part could not be loaded completely. */
 const GERMAN_INCOMPLETE = 'German texts not loaded completely';
 
+// Fresh status object for "nothing is running".
 const idleStatus = (): ImportStatus => ({
     running: false,
     updateId: null,
@@ -43,14 +45,18 @@ export function failOrphanedUpdates(db: DatabaseSync): void {
  * Exception: if only the German part fails, the update still counts (see run).
  */
 export class Importer {
+    // Live progress, polled by the UI via GET /api/updates/status.
     private status: ImportStatus = idleStatus();
+    // The running background job (a Promise); null if none has been started.
     private job: Promise<void> | null = null;
 
+    // `private readonly` in the constructor parameters declares and assigns the fields in one go.
     constructor(
         private readonly db: DatabaseSync,
         private readonly client: Gw2Client,
     ) {}
 
+    /** Copy of the current progress (a copy, so callers cannot modify the internal state). */
     getStatus(): ImportStatus {
         return { ...this.status };
     }
@@ -60,12 +66,14 @@ export class Importer {
         if (this.status.running) throw new ImportAlreadyRunningError();
 
         const startedAt = new Date().toISOString();
+        // .run() returns { changes, lastInsertRowid }; the latter is the new row's id (autoincrement).
         const { lastInsertRowid } = this.db
             .prepare(`INSERT INTO updates (started_at, status) VALUES (?, 'running')`)
             .run(startedAt);
         const updateId = Number(lastInsertRowid);
 
         this.status = { ...idleStatus(), running: true, updateId, phase: 'ids', startedAt };
+        // Not awaited on purpose: the import runs in the background while the HTTP request returns.
         this.job = this.run(updateId).catch((err: unknown) => this.fail(updateId, err));
         return this.getStatus();
     }
@@ -75,16 +83,19 @@ export class Importer {
         await this.job;
     }
 
+    // The actual import, phase by phase. Any thrown error ends up in fail().
     private async run(updateId: number): Promise<void> {
-        // Phase 1: build ID and item IDs
+        // Phase 1: build ID (game client version, recorded with the update) and the list of all item IDs
         const buildId = await this.client.getBuildId();
         this.db.prepare('UPDATE updates SET build_id = ? WHERE id = ?').run(buildId, updateId);
+        // Set removes duplicate IDs.
         const ids = [...new Set(await this.client.getItemIds())];
         this.status.total = ids.length;
 
         // Phase 2: details in blocks of 200 IDs
         this.status.phase = 'details';
         const items = new Map<number, Gw2Item>();
+        // The API takes at most 200 IDs per request: walk through the ID list in chunks.
         for (let i = 0; i < ids.length; i += IDS_PER_REQUEST) {
             const chunk = ids.slice(i, i + IDS_PER_REQUEST);
             for (const item of await this.client.getItems(chunk)) items.set(item.id, item);
@@ -103,6 +114,7 @@ export class Importer {
         let germanError: string | null = null;
         const loadedIds = [...items.keys()];
         try {
+            // Same chunking as above, now requesting lang=de.
             for (let i = 0; i < loadedIds.length; i += IDS_PER_REQUEST) {
                 const chunk = loadedIds.slice(i, i + IDS_PER_REQUEST);
                 for (const item of await this.client.getItems(chunk, 'de')) texts.set(item.id, toText(item));
@@ -131,6 +143,7 @@ export class Importer {
         this.status.running = false;
     }
 
+    // Marks the update as failed in the DB and in the live status.
     private fail(updateId: number, err: unknown): void {
         const message = err instanceof Error ? err.message : String(err);
         console.error(`Import ${updateId} failed:`, err);
@@ -145,12 +158,14 @@ export class Importer {
     }
 }
 
+/** Number of added/changed/removed items of one update. */
 export interface DiffCounts {
     added: number;
     changed: number;
     removed: number;
 }
 
+// Columns read from the items table for the comparison.
 interface StoredRow {
     hash: string;
     raw_json: string;
@@ -166,6 +181,8 @@ interface StoredRow {
 export function writeItems(db: DatabaseSync, updateId: number, items: Gw2Item[], liveIds: Set<number>): DiffCounts {
     const counts: DiffCounts = { added: 0, changed: 0, removed: 0 };
 
+    // Prepared statements are compiled once and reused for every item. :name placeholders are bound
+    // from an object (`.run({ id: 1, ... })`), ? placeholders from positional arguments.
     const selectStored = db.prepare('SELECT hash, raw_json, removed, game_types FROM items WHERE id = ?');
     const insertItem = db.prepare(`
     INSERT INTO items (id, name, description, type, subtype, rarity, level, icon, chat_link, game_types, flags,
@@ -183,10 +200,12 @@ export function writeItems(db: DatabaseSync, updateId: number, items: Gw2Item[],
                               values_before, values_after)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
 
+    // Write in blocks of WRITE_BLOCK_SIZE items, one transaction each, to keep transactions reasonably small.
     for (let i = 0; i < items.length; i += WRITE_BLOCK_SIZE) {
         const block = items.slice(i, i + WRITE_BLOCK_SIZE);
         transaction(db, () => {
             for (const item of block) {
+                // `row` is undefined if the item is new to the DB.
                 const row = selectStored.get(item.id) as StoredRow | undefined;
                 const hash = hashItem(item);
                 const diff = diffItem(
@@ -201,6 +220,7 @@ export function writeItems(db: DatabaseSync, updateId: number, items: Gw2Item[],
                 );
                 if (diff.kind === 'unchanged') continue;
 
+                // Values for the :named placeholders of insertItem/updateItem.
                 const params = { ...toColumns(item), hash, update_id: updateId };
                 if (row) updateItem.run(params);
                 else insertItem.run(params);
@@ -236,6 +256,7 @@ export function writeItems(db: DatabaseSync, updateId: number, items: Gw2Item[],
 
     // Removed items: do not delete, only mark, so test status and history are preserved.
     transaction(db, () => {
+        // Every non-removed item in the DB that /v2/items no longer lists has been removed from the game.
         const active = db.prepare('SELECT id, game_types FROM items WHERE removed = 0').all() as {
             id: number;
             game_types: string;
@@ -252,11 +273,13 @@ export function writeItems(db: DatabaseSync, updateId: number, items: Gw2Item[],
     return counts;
 }
 
+/** Translated name and description of an item. */
 export interface ItemText {
     name: string;
     description: string | null;
 }
 
+// Extracts the translatable texts from an API item; empty description becomes null.
 function toText(item: Gw2Item): ItemText {
     return {
         name: typeof item.name === 'string' ? item.name : '',
@@ -270,7 +293,7 @@ function toText(item: Gw2Item): ItemText {
  * Not part of the comparison: produces neither hash changes nor item_changes.
  */
 export function writeTexts(db: DatabaseSync, lang: 'de', texts: Map<number, ItemText>): void {
-    const select = db.prepare('SELECT name, description FROM item_texts WHERE item_id = ? AND lang = ?');
+    const selectStoredText = db.prepare('SELECT name, description FROM item_texts WHERE item_id = ? AND lang = ?');
     const upsert = db.prepare(`
     INSERT INTO item_texts (item_id, lang, name, description) VALUES (?, ?, ?, ?)
     ON CONFLICT(item_id, lang) DO UPDATE SET name = excluded.name, description = excluded.description`);
@@ -279,11 +302,14 @@ export function writeTexts(db: DatabaseSync, lang: 'de', texts: Map<number, Item
     const insertFts = db.prepare('INSERT INTO items_fts_de (rowid, name, description) VALUES (?, ?, ?)');
 
     const entries = [...texts];
+    // Blocks of WRITE_BLOCK_SIZE entries, one transaction each.
     for (let i = 0; i < entries.length; i += WRITE_BLOCK_SIZE) {
         transaction(db, () => {
             for (const [id, text] of entries.slice(i, i + WRITE_BLOCK_SIZE)) {
-                const old = select.get(id, lang) as { name: string; description: string | null } | undefined;
-                if (old && old.name === text.name && old.description === text.description) continue;
+                const storedText = selectStoredText.get(id, lang) as
+                    { name: string; description: string | null } | undefined;
+                if (storedText && storedText.name === text.name && storedText.description === text.description)
+                    continue;
                 upsert.run(id, lang, text.name, text.description);
                 deleteFts.run(id);
                 insertFts.run(id, text.name, text.description);
@@ -292,7 +318,7 @@ export function writeTexts(db: DatabaseSync, lang: 'de', texts: Map<number, Item
     }
 }
 
-/** Derived columns for the items table. */
+/** Derived columns for the items table (defensive: the API data is not trusted to have every field). */
 function toColumns(item: Gw2Item) {
     const gameTypes = normalizeGameTypes(item.game_types);
     const subtype = item.details?.type;
@@ -308,6 +334,7 @@ function toColumns(item: Gw2Item) {
         chat_link: typeof item.chat_link === 'string' ? item.chat_link : null,
         game_types: JSON.stringify(gameTypes),
         flags: JSON.stringify(Array.isArray(item.flags) ? item.flags : []),
+        // Candidate = usable in Fractals of the Mist, i.e. game type "Dungeon". SQLite has no boolean, so 1/0.
         is_candidate: gameTypes.includes('Dungeon') ? 1 : 0,
         raw_json: JSON.stringify(item),
     };

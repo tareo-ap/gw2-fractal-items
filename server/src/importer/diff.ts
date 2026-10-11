@@ -18,11 +18,13 @@ export function stableStringify(value: unknown): string {
     return JSON.stringify(value) ?? 'null';
 }
 
+/** SHA-256 hex digest of the item's stable JSON; used to detect changes cheaply. */
 export function hashItem(item: Gw2Item): string {
     return createHash('sha256').update(stableStringify(item)).digest('hex');
 }
 
 /** Top-level fields that differ between the old and new API response (sorted). */
+// Compares each key by its stable JSON, so nested objects are compared by value.
 export function changedFields(before: Record<string, unknown>, after: Record<string, unknown>): string[] {
     const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
     return [...keys].filter((key) => stableStringify(before[key]) !== stableStringify(after[key])).sort();
@@ -36,6 +38,7 @@ export interface StoredItem {
     gameTypes: string[];
 }
 
+// Discriminated union: `kind` tells which fields are present.
 export type ItemDiff =
     | { kind: 'unchanged' }
     | { kind: 'added'; gameTypesAfter: string[] }
@@ -61,6 +64,7 @@ export function diffItem(stored: StoredItem | undefined, item: Gw2Item, hash: st
     if (stored.hash === hash) return { kind: 'unchanged' };
     const before = JSON.parse(stored.rawJson) as Record<string, unknown>;
     const fields = changedFields(before, item);
+    // Keeps only the changed fields of an object.
     const pick = (source: Record<string, unknown>) =>
         Object.fromEntries(
             fields.filter((field) => source[field] !== undefined).map((field) => [field, source[field]]),
@@ -81,5 +85,5 @@ export function diffItem(stored: StoredItem | undefined, item: Gw2Item, hash: st
  */
 export function normalizeGameTypes(gameTypes: unknown): string[] {
     if (!Array.isArray(gameTypes)) return [];
-    return [...new Set(gameTypes.filter((t): t is string => typeof t === 'string'))].sort();
+    return [...new Set(gameTypes.filter((gameType): gameType is string => typeof gameType === 'string'))].sort();
 }

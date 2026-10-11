@@ -43,16 +43,23 @@ import {
     type UpdateRow,
 } from './routes/updates.js';
 
-// Builds the Hono app. Kept separate from index.ts so it can be tested without a running server.
+// Builds the Hono app (Hono = small web framework; routes are registered with app.get/put/post/delete).
+// Kept separate from index.ts so it can be tested without a running server.
+// Every handler receives `c`, Hono's Context: it gives access to the request (c.req) and builds
+// the response (c.json, c.body, c.text, c.html). Thrown errors end up in app.onError below.
 export function createApp(db: DatabaseSync, webDist: string | null, importer: Importer, watcher?: BuildWatcher): Hono {
     const app = new Hono();
 
     app.get('/api/health', (c) => c.json<HealthResponse>({ status: 'ok', version: '0.1.0' }));
 
+    // Dashboard numbers. db.prepare(sql) compiles a statement; .get() returns the first row (or undefined),
+    // .all() returns all rows, .run() executes without returning rows.
     app.get('/api/stats', (c) => {
+        // Runs a "SELECT COUNT(*) AS n" query and returns the number.
         const count = (sql: string) => (db.prepare(sql).get() as { n: number }).n;
-        const last = db.prepare(`SELECT * FROM updates WHERE status = 'done' ORDER BY id DESC LIMIT 1`).get() as
-            UpdateRow | undefined;
+        const lastDoneUpdate = db
+            .prepare(`SELECT * FROM updates WHERE status = 'done' ORDER BY id DESC LIMIT 1`)
+            .get() as UpdateRow | undefined;
 
         return c.json<StatsResponse>({
             items: count('SELECT COUNT(*) AS n FROM items WHERE removed = 0'),
@@ -68,7 +75,7 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
                 ),
             },
             germanTexts: count(`SELECT COUNT(*) AS n FROM item_texts WHERE lang = 'de'`),
-            lastUpdate: last ? toUpdateSummary(last) : null,
+            lastUpdate: lastDoneUpdate ? toUpdateSummary(lastDoneUpdate) : null,
             autoCheck: watcher?.getStatus() ?? null,
         });
     });
@@ -80,11 +87,13 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
     // Must come before /api/items/:id. Exports all filter matches, page/pageSize are ignored.
     app.get('/api/items/export', (c) => {
         const params = c.req.query();
+        // `as const` makes the array a tuple of literal types, so `format` is typed 'csv' | 'json'.
         const format = oneOf('format', params.format, ['csv', 'json'] as const);
         if (!format) throw new ValidationError('format must be one of: csv, json');
         const query = parseItemListQuery(params);
         const rows = exportItems(db, query);
         const filename = exportFilename(query.view, format);
+        // Makes the browser download the response as a file instead of displaying it.
         const headers = { 'Content-Disposition': `attachment; filename="${filename}"` };
         if (format === 'json') return c.body(toJson(rows), 200, { ...headers, 'Content-Type': 'application/json' });
         return c.body(toCsv(rows), 200, { ...headers, 'Content-Type': 'text/csv; charset=utf-8' });
@@ -95,13 +104,16 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
         return item ? c.json<ItemDetail>(item) : c.json({ error: 'Item not found' }, 404);
     });
 
+    // Saves the manual test result (status/note) of an item and returns the updated item.
     app.put('/api/items/:id/test', async (c) => {
         const id = parseId(c.req.param('id'));
         const lang = parseLang(c.req.query('lang'));
+        // `unknown` forces us to validate the body in parseItemTestUpdate before using it.
         const body: unknown = await c.req.json().catch(() => {
             throw new ValidationError('Body is not valid JSON');
         });
         if (!saveItemTest(db, id, parseItemTestUpdate(body))) return c.json({ error: 'Item not found' }, 404);
+        // `!` = non-null assertion: the item exists, saveItemTest just updated it.
         return c.json<ItemDetail>(getItemDetail(db, id, lang)!);
     });
 
@@ -134,6 +146,7 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
             : c.json({ error: 'Update not found' }, 404);
     });
 
+    // Starts an import in the background (202 Accepted). Only one import may run at a time.
     app.post('/api/updates', (c) => {
         try {
             return c.json<ImportStatus>(importer.start(), 202);
@@ -171,6 +184,7 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
 
     // -------------------------------------------------------------------------
 
+    // Central error handling: validation errors become 400, everything else a generic 500.
     app.onError((err, c) => {
         if (err instanceof ValidationError) return c.json({ error: err.message }, 400);
         console.error(err);
@@ -192,6 +206,7 @@ export function createApp(db: DatabaseSync, webDist: string | null, importer: Im
     return app;
 }
 
+// Parses a path/query value into a positive integer ID; throws ValidationError (-> HTTP 400) otherwise.
 function parseId(value: string, what = 'Item'): number {
     const id = Number(value);
     if (!Number.isInteger(id) || id < 1) throw new ValidationError(`Invalid ${what} ID`);

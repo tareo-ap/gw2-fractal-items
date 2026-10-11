@@ -3,6 +3,7 @@ import { PAGE_SIZE, VIEWS } from './filters';
 
 // Filters of the changes page /updates/:id. As in filters.ts they live in the URL; default values are omitted there.
 
+// ChangeKind / ChangeFocus are string-literal union types from shared/types.ts (like a Java enum, but plain strings).
 export const CHANGE_KINDS: ChangeKind[] = ['changed', 'added', 'removed'];
 export const FOCUSES: ChangeFocus[] = ['all', 'gameTypes', 'dungeonGained', 'dungeonLost'];
 
@@ -24,46 +25,50 @@ export const DEFAULT_CHANGES_FILTERS: ChangesFilters = {
     page: 1,
 };
 
+/** Reads the filters from the URL query parameters; invalid or missing values fall back to defaults. */
 export function parseChangesFilters(params: URLSearchParams): ChangesFilters {
+    // Whitelist: keep only known kinds, in canonical order.
     const kinds = (params.get('kind') ?? '').split(',');
     const page = Number(params.get('page'));
     return {
-        kind: CHANGE_KINDS.filter((k) => kinds.includes(k)),
-        focus: FOCUSES.find((f) => f === params.get('focus')) ?? 'all',
-        type: VIEWS.find((v) => v === params.get('type')) ?? 'all',
+        kind: CHANGE_KINDS.filter((kindName) => kinds.includes(kindName)),
+        focus: FOCUSES.find((focus) => focus === params.get('focus')) ?? 'all',
+        type: VIEWS.find((view) => view === params.get('type')) ?? 'all',
         q: params.get('q') ?? '',
         hidePlaceholders: params.get('hidePlaceholders') !== 'false',
         page: Number.isInteger(page) && page > 0 ? page : 1,
     };
 }
 
-export function changesToParams(f: ChangesFilters): URLSearchParams {
-    const p = new URLSearchParams();
-    if (f.kind.length) p.set('kind', f.kind.join(','));
-    if (f.focus !== 'all') p.set('focus', f.focus);
-    if (f.type !== 'all') p.set('type', f.type);
-    if (f.q.trim()) p.set('q', f.q.trim());
-    if (!f.hidePlaceholders) p.set('hidePlaceholders', 'false');
-    if (f.page > 1) p.set('page', String(f.page));
-    return p;
+/** Inverse of parseChangesFilters: URL parameters without default values. */
+export function changesToParams(filters: ChangesFilters): URLSearchParams {
+    const params = new URLSearchParams();
+    if (filters.kind.length) params.set('kind', filters.kind.join(','));
+    if (filters.focus !== 'all') params.set('focus', filters.focus);
+    if (filters.type !== 'all') params.set('type', filters.type);
+    if (filters.q.trim()) params.set('q', filters.q.trim());
+    if (!filters.hidePlaceholders) params.set('hidePlaceholders', 'false');
+    if (filters.page > 1) params.set('page', String(filters.page));
+    return params;
 }
 
-export function changesUrl(updateId: number, f: ChangesFilters = DEFAULT_CHANGES_FILTERS): string {
-    const qs = changesToParams(f).toString();
-    return qs ? `/updates/${updateId}?${qs}` : `/updates/${updateId}`;
+/** Path (with query string) of the changes page of one update. */
+export function changesUrl(updateId: number, filters: ChangesFilters = DEFAULT_CHANGES_FILTERS): string {
+    const queryString = changesToParams(filters).toString();
+    return queryString ? `/updates/${updateId}?${queryString}` : `/updates/${updateId}`;
 }
 
 /** Comparison of two states: /updates/compare?from=A&to=B plus filters. */
-export function compareUrl(from: number, to: number, f: ChangesFilters = DEFAULT_CHANGES_FILTERS): string {
-    const p = changesToParams(f);
-    return `/updates/compare?from=${from}&to=${to}${p.size ? `&${p}` : ''}`;
+export function compareUrl(from: number, to: number, filters: ChangesFilters = DEFAULT_CHANGES_FILTERS): string {
+    const params = changesToParams(filters);
+    return `/updates/compare?from=${from}&to=${to}${params.size ? `&${params}` : ''}`;
 }
 
 /** Query string for GET /api/updates/:id/changes and /api/updates/compare (which add from and to). */
-export function toChangesApiQuery(f: ChangesFilters): string {
-    const p = changesToParams(f);
-    p.set('hidePlaceholders', String(f.hidePlaceholders));
-    p.set('page', String(f.page));
-    p.set('pageSize', String(PAGE_SIZE));
-    return p.toString();
+export function toChangesApiQuery(filters: ChangesFilters): string {
+    const params = changesToParams(filters);
+    params.set('hidePlaceholders', String(filters.hidePlaceholders));
+    params.set('page', String(filters.page));
+    params.set('pageSize', String(PAGE_SIZE));
+    return params.toString();
 }
