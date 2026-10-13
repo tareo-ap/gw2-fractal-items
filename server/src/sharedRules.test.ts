@@ -6,8 +6,10 @@ import {
     compareNoCase,
     CONSUMABLE_SUBTYPES,
     HIDE_COMMON_SUBTYPES,
+    HOMESTEAD_PHRASE,
     isAutoConsumed,
     isCommonConsumable,
+    isGuildOrHomesteadItem,
     isHiddenByHideCommon,
     isPlaceholder,
     isTonic,
@@ -16,6 +18,7 @@ import {
     sqlTrim,
     subtypeFilterApplies,
 } from '../../shared/rules.js';
+import { parseItemListQuery, ValidationError } from '../../shared/params.js';
 import { searchPhrases, tokenize } from '../../shared/staticQuery.js';
 import { chatLinkFor } from './test/fixtures.js';
 
@@ -100,6 +103,36 @@ describe('Rules', () => {
         assert.equal(isAutoConsumed(''), false);
         assert.equal(isAutoConsumed(null), false);
         assert.equal(isAutoConsumed(undefined), false);
+    });
+
+    it('Guild hall / homestead: upgrade id, or phrase in name/description of Consumable/Gizmo', () => {
+        const check = (type: string, name: string, descriptionEn: string | null | undefined, hasGuildUpgrade = false) =>
+            isGuildOrHomesteadItem({ type, name, descriptionEn, hasGuildUpgrade });
+        for (const type of ['Consumable', 'Gizmo', 'Trophy']) {
+            assert.equal(check(type, 'Banner', null, true), true, type);
+        }
+        for (const type of ['Consumable', 'Gizmo']) {
+            assert.equal(check(type, 'Homestead Relic', null), true, type);
+            assert.equal(check(type, 'Relic', 'For your homestead.'), true, type);
+            assert.equal(check(type, 'Recipe: HOMESTEAD Bench', 'Plain'), true, type);
+            assert.equal(check(type, 'Relic', '<c=@flavor>HOMESTEAD</c>'), true, type);
+        }
+        assert.equal(check('Trophy', 'Homestead Relic', 'Homestead'), false);
+        assert.equal(check('Container', 'Homestead Relic', 'Homestead'), false);
+        assert.equal(check('Consumable', 'Heimstatt-Relikt', 'Für deine Heimstatt.'), false);
+        assert.equal(check('Consumable', 'Relic', null), false);
+        assert.equal(check('Gizmo', 'Relic', undefined), false);
+        assert.equal(check('Gizmo', 'Relic', ''), false);
+        assert.ok(!/[%_]/.test(HOMESTEAD_PHRASE) && HOMESTEAD_PHRASE === HOMESTEAD_PHRASE.toLowerCase());
+    });
+
+    it('hideGuildHomestead param: default true, bool parsing, invalid value throws', () => {
+        assert.equal(parseItemListQuery({}).hideGuildHomestead, true);
+        assert.equal(parseItemListQuery({ hideGuildHomestead: 'false' }).hideGuildHomestead, false);
+        assert.equal(parseItemListQuery({ hideGuildHomestead: '0' }).hideGuildHomestead, false);
+        assert.equal(parseItemListQuery({ hideGuildHomestead: '1' }).hideGuildHomestead, true);
+        assert.equal(parseItemListQuery({ hideGuildHomestead: '' }).hideGuildHomestead, true);
+        assert.throws(() => parseItemListQuery({ hideGuildHomestead: 'maybe' }), ValidationError);
     });
 
     it('Chat link: round trip as in the game', () => {

@@ -169,6 +169,14 @@ export function FilterBar({ filters, onChange }: { filters: ListFilters; onChang
                         <label className="check">
                             <input
                                 type="checkbox"
+                                checked={filters.hideGuildHomestead}
+                                onChange={(event) => onChange({ hideGuildHomestead: event.target.checked })}
+                            />
+                            {t('filter.hideGuildHomestead')}
+                        </label>
+                        <label className="check">
+                            <input
+                                type="checkbox"
                                 checked={filters.includeRemoved}
                                 onChange={(event) => onChange({ includeRemoved: event.target.checked })}
                             />

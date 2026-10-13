@@ -107,4 +107,17 @@ export const migrations: string[] = [
   -- Full-text index for the German texts (own content, rowid = item_id). The importer maintains it.
   CREATE VIRTUAL TABLE items_fts_de USING fts5(name, description);
   `,
+    // 5: guild upgrade id of guild hall items, for the hideGuildHomestead filter
+    `
+  -- details.guild_upgrade_id: the guild hall upgrade or decoration the item unlocks or deposits.
+  -- Derived from raw_json like subtype, so it is not part of the hash or the diff. 0 counts as set (not NULL).
+  ALTER TABLE items ADD COLUMN guild_upgrade_id INTEGER;
+  -- Back-fill existing rows from raw_json so an existing DB works without a re-import.
+  -- CASE guards against malformed raw_json: json_extract/json_type raise an error on invalid JSON, which would abort
+  -- the migration, and AND does not reliably short-circuit in SQLite.
+  UPDATE items SET guild_upgrade_id = CASE WHEN json_valid(raw_json)
+                                           THEN json_extract(raw_json, '$.details.guild_upgrade_id') END
+   WHERE CASE WHEN json_valid(raw_json)
+              THEN json_type(raw_json, '$.details.guild_upgrade_id') = 'integer' ELSE 0 END;
+  `,
 ];

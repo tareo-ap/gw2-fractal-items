@@ -148,6 +148,36 @@ export function isAutoConsumed(descriptionEn: string | null | undefined): boolea
     return AUTO_CONSUMED_PHRASES.some((phrase) => lowered.includes(phrase));
 }
 
+/**
+ * Lowercase phrase that marks an item as belonging to the homestead (the player's personal housing instance from
+ * Janthir Wilds). ASCII only and free of '%' and '_' because it is used in SQL LIKE patterns.
+ */
+export const HOMESTEAD_PHRASE = 'homestead';
+
+/** Item types whose texts are checked for HOMESTEAD_PHRASE (limits false hits on trophies, containers etc.). */
+export const HOMESTEAD_ITEM_TYPES = ['Consumable', 'Gizmo'] as const;
+
+/**
+ * Is the item a guild hall or homestead item? True if the API says it belongs to a guild upgrade
+ * (`details.guild_upgrade_id`: the guild hall upgrade or decoration the item unlocks or deposits; the caller passes
+ * whether it is set, 0 counts as set), or if a Consumable/Gizmo mentions the homestead in its English name or
+ * description. The API has no homestead flag, so that part is text based. German texts never contain
+ * "homestead", so only the English fields are used.
+ */
+export function isGuildOrHomesteadItem(item: {
+    type: string;
+    name: string;
+    descriptionEn: string | null | undefined;
+    hasGuildUpgrade: boolean;
+}): boolean {
+    if (item.hasGuildUpgrade) return true;
+    if (!(HOMESTEAD_ITEM_TYPES as readonly string[]).includes(item.type)) return false;
+    return (
+        asciiLower(item.name).includes(HOMESTEAD_PHRASE) ||
+        asciiLower(item.descriptionEn ?? '').includes(HOMESTEAD_PHRASE)
+    );
+}
+
 /** The hideCommon filter only applies in the Consumables and All views. */
 export const hideCommonApplies = (view: string): boolean => view === 'consumable' || view === 'all';
 

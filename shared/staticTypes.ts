@@ -56,6 +56,8 @@ export interface StaticItem {
     chatLink?: string; // only if it differs from the default (type 2, quantity 1, ID)
     test?: StaticTest;
     needsRetest?: true;
+    // details.guild_upgrade_id is set (guild hall item); omitted otherwise. Used by hideGuildHomestead.
+    guildUpgrade?: true;
 }
 
 /**

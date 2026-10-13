@@ -51,6 +51,7 @@ interface ItemRow {
     game_types: string;
     flags: string;
     is_candidate: number;
+    guild_upgrade_id: number | null;
     removed: number;
     last_changed_update: number;
     raw_json: string;
@@ -95,7 +96,7 @@ export function buildStaticExport(db: DatabaseSync, now: Date = new Date()): Sta
     const itemRows = db
         .prepare(
             `SELECT i.id, i.name, i.description, i.type, i.subtype, i.rarity, i.level, i.icon, i.chat_link, i.game_types, i.flags,
-              i.is_candidate, i.removed, i.last_changed_update, i.raw_json,
+              i.is_candidate, i.guild_upgrade_id, i.removed, i.last_changed_update, i.raw_json,
               t.status AS test_status, t.note AS test_note, t.tested_at, t.game_types_at_test, ${NEEDS_RETEST_SQL} AS needs_retest,
               d.item_id AS de_id, d.name AS de_name, d.description AS de_description
        FROM items i
@@ -172,6 +173,9 @@ function toStaticItem(row: ItemRow): StaticItem {
     const flags = JSON.parse(row.flags) as string[];
     if (flags.length > 0) item.flags = flags;
     if (row.removed === 1) item.removed = true;
+    // Flag only (not the id): enough for hideGuildHomestead and costs about 20 bytes per guild hall item.
+    // site-data exported before this field existed has no flag, so until re-export only the homestead text part works.
+    if (row.guild_upgrade_id !== null) item.guildUpgrade = true;
     if (row.description !== null) item.description = row.description;
     if (row.de_id !== null) {
         item.de = {};

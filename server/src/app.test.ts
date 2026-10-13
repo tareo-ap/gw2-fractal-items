@@ -20,7 +20,14 @@ import { migrations } from './db/schema.js';
 import { Gw2Client } from './gw2/client.js';
 import { Importer } from './importer/importer.js';
 import { startFakeGw2Api, type FakeGw2Api } from './test/fakeGw2Api.js';
-import { autoConsumedFixtureItems, chatLinkFor, createTestImporter, fixtureItems, runImport } from './test/fixtures.js';
+import {
+    autoConsumedFixtureItems,
+    chatLinkFor,
+    createTestImporter,
+    fixtureItems,
+    guildHomesteadFixtureItems,
+    runImport,
+} from './test/fixtures.js';
 
 // End-to-end API tests: the real Hono app and importer run against a fake GW2 API and an in-memory DB.
 // app.request(path) calls a route directly, without opening a network port.
@@ -200,6 +207,142 @@ describe('Auto-consumed filter', () => {
     it('an invalid value -> 400', async () => {
         const res = await autoApp.request('/api/items?hideAutoConsumed=maybe');
         assert.equal(res.status, 400);
+    });
+});
+
+describe('Guild hall and homestead filter', () => {
+    let ghApi: FakeGw2Api;
+    let ghApp: Hono;
+    let ghImporter: Importer;
+    let ghDb: DatabaseSync;
+
+    before(async () => {
+        ghApi = await startFakeGw2Api([
+            ...fixtureItems(),
+            ...autoConsumedFixtureItems(),
+            ...guildHomesteadFixtureItems(),
+        ]);
+        // The German texts do not contain "homestead": only the English texts decide.
+        ghApi.german.set(705, { name: 'Rezept: Bank', description: 'Eine Bank.' });
+        ghApi.german.set(706, { name: 'Jukebox-Lied', description: 'Fügt ein Lied hinzu.' });
+        ({ db: ghDb, importer: ghImporter } = createTestImporter(ghApi.url));
+        ghApp = createApp(ghDb, null, ghImporter);
+        await runImport(ghImporter);
+    });
+    after(() => ghApi.close());
+
+    // IDs of the 70x fixtures only (the other fixtures are not relevant here).
+    const ghIds = async (query: string) =>
+        ((await (await ghApp.request(`/api/items${query}`)).json()) as ItemListResponse).items
+            .map((i) => i.id)
+            .filter((id) => id >= 700 && id < 800);
+    const all = '?view=all&candidate=all&hideCommon=false&sort=id';
+
+    it('hides guild upgrade and homestead items by default (all views, English text decides)', async () => {
+        assert.deepEqual(await ghIds(all), [704, 707]);
+        assert.deepEqual(await ghIds(`${all}&lang=de`), [704, 707]);
+        assert.deepEqual(await ghIds('?view=all&sort=id'), [704, 707]);
+        assert.deepEqual(await ghIds('?view=gizmo&candidate=all&sort=id'), []);
+        assert.deepEqual(await ghIds('?view=consumable&candidate=all&hideCommon=false&sort=id'), [704]);
+    });
+
+    it('hideGuildHomestead=false shows them again', async () => {
+        assert.deepEqual(await ghIds(`${all}&hideGuildHomestead=false`), [701, 702, 703, 704, 705, 706, 707, 708, 709]);
+        assert.deepEqual(
+            await ghIds('?view=all&hideGuildHomestead=false&sort=id'),
+            [701, 702, 703, 704, 706, 707, 708], // 705 (Unlock) stays hidden by hideCommon
+        );
+        assert.deepEqual(await ghIds('?view=gizmo&candidate=all&hideGuildHomestead=false&sort=id'), [703, 709]);
+        assert.deepEqual(
+            await ghIds('?view=consumable&candidate=all&hideCommon=false&hideGuildHomestead=false&sort=id'),
+            [701, 702, 704, 705, 706, 708],
+        );
+    });
+
+    it('is independent of hideAutoConsumed and accepts the usual boolean values', async () => {
+        const hiding = await ghIds(all);
+        assert.deepEqual(await ghIds(`${all}&hideAutoConsumed=false`), hiding);
+        for (const value of ['1', 'true', ''])
+            assert.deepEqual(await ghIds(`${all}&hideGuildHomestead=${value}`), hiding);
+        assert.deepEqual(await ghIds(`${all}&hideGuildHomestead=0`), await ghIds(`${all}&hideGuildHomestead=false`));
+        // The auto-consumed fixtures (401-403) are still hidden when only hideGuildHomestead is off.
+        const res401 = (await (
+            await ghApp.request(`/api/items${all}&hideGuildHomestead=false`)
+        ).json()) as ItemListResponse;
+        assert.ok(!res401.items.some((i) => i.id >= 401 && i.id <= 403));
+        const res = await ghApp.request('/api/items?hideGuildHomestead=maybe');
+        assert.equal(res.status, 400);
+    });
+
+    it('the export respects the flag', async () => {
+        const exportIds = async (query: string) =>
+            ((await (await ghApp.request(`/api/items/export?format=json&${query}`)).json()) as { id: number }[])
+                .map((row) => row.id)
+                .filter((id) => id >= 700 && id < 800);
+        assert.deepEqual(await exportIds('view=all&candidate=all&hideCommon=false&sort=id'), [704, 707]);
+        assert.deepEqual(
+            await exportIds('view=all&candidate=all&hideCommon=false&sort=id&hideGuildHomestead=false'),
+            [701, 702, 703, 704, 705, 706, 707, 708, 709],
+        );
+    });
+
+    it('a re-import that changes guild_upgrade_id updates the stored column', async () => {
+        const column = (id: number) =>
+            (
+                ghDb.prepare('SELECT guild_upgrade_id AS value FROM items WHERE id = ?').get(id) as {
+                    value: number | null;
+                }
+            ).value;
+        assert.equal(column(701), 123);
+        assert.equal(column(708), 0);
+        assert.equal(column(704), null);
+        ghApi.items.set(701, { ...ghApi.items.get(701)!, details: { type: 'Generic' } });
+        ghApi.items.set(704, { ...ghApi.items.get(704)!, details: { type: 'Generic', guild_upgrade_id: 9 } });
+        ghApi.buildId = 123457;
+        await runImport(ghImporter);
+        assert.equal(column(701), null);
+        assert.equal(column(704), 9);
+        assert.deepEqual(await ghIds(all), [701, 707]);
+    });
+
+    it('migration 5 back-fills guild_upgrade_id from raw_json without a re-import', async () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gw2-items-mig5-'));
+        const file = path.join(dir, 'v4.db');
+        const old = new DatabaseSync(file);
+        for (const migration of migrations.slice(0, 4)) old.exec(migration);
+        old.exec('PRAGMA user_version = 4');
+        old.exec(
+            `INSERT INTO updates (id, started_at, status, build_id, added, changed, removed) VALUES (1, '2026-01-01T00:00:00Z', 'done', 1, 2, 0, 0)`,
+        );
+        const insert =
+            old.prepare(`INSERT INTO items (id, name, type, rarity, level, icon, game_types, flags, is_candidate, raw_json, hash, first_seen_update, last_changed_update)
+      VALUES (?, ?, 'Consumable', 'Rare', 0, 'x.png', '["Dungeon","Pve"]', '[]', 1, ?, 'h', 1, 1)`);
+        insert.run(1, 'Guild Thing', JSON.stringify({ details: { type: 'Generic', guild_upgrade_id: 77 } }));
+        insert.run(2, 'Plain Thing', JSON.stringify({ details: { type: 'Generic' } }));
+        old.close();
+
+        const db = openDatabase(file);
+        try {
+            assert.equal(
+                (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version,
+                migrations.length,
+            );
+            assert.ok(migrations.length >= 5);
+            const client = new Gw2Client({ baseUrl: 'http://127.0.0.1:1', minIntervalMs: 0, retryBaseDelayMs: 1 });
+            const migrated = createApp(db, null, new Importer(db, client));
+            const hidden = (await (await migrated.request('/api/items?view=all')).json()) as ItemListResponse;
+            assert.deepEqual(
+                hidden.items.map((i) => i.id),
+                [2],
+            );
+            const shown = (await (
+                await migrated.request('/api/items?view=all&hideGuildHomestead=false')
+            ).json()) as ItemListResponse;
+            assert.deepEqual(shown.items.map((i) => i.id).sort(), [1, 2]);
+        } finally {
+            db.close();
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
     });
 });
 

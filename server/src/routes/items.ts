@@ -22,6 +22,8 @@ import {
     AUTO_CONSUMED_PHRASES,
     GAME_TYPES,
     HIDE_COMMON_SUBTYPES,
+    HOMESTEAD_ITEM_TYPES,
+    HOMESTEAD_PHRASE,
     ITEM_SORTS,
     RARITIES,
     TEST_STATUSES,
@@ -66,6 +68,12 @@ export const TONIC_SQL = `(i.type IN ('Gizmo', 'Consumable')
 
 // Placeholders: empty name, no icon, or internal name such as "((906936))" or "[[913817]]". Expects the alias i.
 export const PLACEHOLDER_SQL = `(trim(i.name) = '' OR i.icon IS NULL OR i.name GLOB '((*))' OR i.name GLOB '[[][[]*]]')`;
+
+// Guild hall and homestead items (rule: isGuildOrHomesteadItem in shared/rules.ts). Expects the alias i and two
+// LIKE parameters (`%homestead%`, once for the name and once for the description).
+// The item types interpolated below are constants from shared/rules.ts (no user input), so this is safe.
+export const GUILD_OR_HOMESTEAD_SQL = `(i.guild_upgrade_id IS NOT NULL
+  OR (i.type IN (${HOMESTEAD_ITEM_TYPES.map((type) => `'${type}'`).join(', ')}) AND (i.name LIKE ? OR COALESCE(i.description, '') LIKE ?)))`;
 
 // Sorts rarity by quality (Junk first ... Legendary last) instead of alphabetically.
 const RARITY_RANK_SQL = `CASE i.rarity ${RARITIES.map((rarity, rank) => `WHEN '${rarity}' THEN ${rank}`).join(' ')} ELSE 99 END`;
@@ -203,6 +211,13 @@ function buildWhere(query: ParsedItemListQuery): { whereSql: string; params: SQL
         // COALESCE turns a missing description into '' so NOT(...) keeps the row instead of dropping it (NULL).
         where.push(`NOT (${AUTO_CONSUMED_PHRASES.map(() => `COALESCE(i.description, '') LIKE ?`).join(' OR ')})`);
         params.push(...AUTO_CONSUMED_PHRASES.map((phrase) => `%${phrase}%`));
+    }
+    if (query.hideGuildHomestead) {
+        // Guild hall items (stored guild_upgrade_id, 0 counts as set) and Consumables/Gizmos with "homestead" in the
+        // English name or description. Always English, whatever the UI language is. i.name is NOT NULL and the
+        // description is wrapped in COALESCE, so NOT(...) never drops a row through NULL.
+        where.push(`NOT ${GUILD_OR_HOMESTEAD_SQL}`);
+        params.push(`%${HOMESTEAD_PHRASE}%`, `%${HOMESTEAD_PHRASE}%`);
     }
     // Type filter (tonic view only) and subtype filter (consumable view only); several values mean "any of them".
     // They combine with hideCommon by AND, so a hidden subtype stays hidden while hideCommon is on.

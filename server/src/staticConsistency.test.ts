@@ -19,7 +19,14 @@ import { buildStaticExport, type StaticExport } from './cli/exportStatic.js';
 import { exportItems, getItemDetail, listItems, saveItemTest } from './routes/items.js';
 import { compareUpdates, getUpdate, getUpdateChanges, listUpdates } from './routes/updates.js';
 import { startFakeGw2Api, type FakeGw2Api } from './test/fakeGw2Api.js';
-import { autoConsumedFixtureItems, chatLinkFor, createTestImporter, fixtureItems, runImport } from './test/fixtures.js';
+import {
+    autoConsumedFixtureItems,
+    chatLinkFor,
+    createTestImporter,
+    fixtureItems,
+    guildHomesteadFixtureItems,
+    runImport,
+} from './test/fixtures.js';
 
 // Consistency test: the browser logic of the static version (shared/staticQuery.ts, reading from the export)
 // must return the same results as the server's SQL queries (same IDs, same order).
@@ -88,7 +95,11 @@ before(async () => {
             description: 'Consumed automatically when acquired.',
             game_types: ['Dungeon'],
         },
+        // hideGuildHomestead (701-709, see guildHomesteadFixtureItems)
+        ...guildHomesteadFixtureItems(),
     ]);
+    api.german.set(705, { name: 'Rezept: Bank', description: 'Eine Bank.' });
+    api.german.set(706, { name: 'Jukebox-Lied', description: 'Fügt ein Lied hinzu.' });
     api.german.set(404, { name: 'Manuelle Trophäe', description: 'Consumed automatically when acquired.' });
     api.german.set(1, { name: 'Mini-Golem-Bausatz', description: 'Beschreibung des Bausatzes.' });
     api.german.set(8778, { name: 'Mini-Golem-Bombe' });
@@ -118,6 +129,7 @@ before(async () => {
     api.items.get(8778)!.game_types = ['Wvw', 'Pve', 'Dungeon'];
     api.items.get(301)!.name = 'Sweet Cheddar';
     api.items.get(4)!.level = 5;
+    api.items.get(709)!.level = 3; // the non-candidate 709 gets published through this change
     api.buildId = 123457;
     await runImport(importer);
 
@@ -221,10 +233,12 @@ describe('List: browser logic against server', () => {
                     for (const hidePlaceholders of ['true', 'false']) {
                         for (const includeRemoved of ['true', 'false']) {
                             for (const hideAutoConsumed of ['true', 'false']) {
-                                for (const lang of ['en', 'de']) {
-                                    checkList(
-                                        `view=${view}&candidate=${candidate}&hideCommon=${hideCommon}&hidePlaceholders=${hidePlaceholders}&includeRemoved=${includeRemoved}&hideAutoConsumed=${hideAutoConsumed}&lang=${lang}`,
-                                    );
+                                for (const hideGuildHomestead of ['true', 'false']) {
+                                    for (const lang of ['en', 'de']) {
+                                        checkList(
+                                            `view=${view}&candidate=${candidate}&hideCommon=${hideCommon}&hidePlaceholders=${hidePlaceholders}&includeRemoved=${includeRemoved}&hideAutoConsumed=${hideAutoConsumed}&hideGuildHomestead=${hideGuildHomestead}&lang=${lang}`,
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -245,6 +259,37 @@ describe('List: browser logic against server', () => {
                 [401, 402, 403],
             );
             assert.ok(hidden.includes(404));
+        }
+    });
+
+    it('hideGuildHomestead hides the guild upgrade and homestead fixtures (701-709), 704 stays (trophy 707 is not exported)', () => {
+        const base = 'view=all&candidate=all&hideCommon=false&sort=id';
+        const fixtureIds = (queryString: string) =>
+            staticList(queryString)
+                .map((i) => i.id)
+                .filter((id) => id >= 700 && id < 800);
+        for (const lang of ['en', 'de']) {
+            assert.deepEqual(fixtureIds(`${base}&lang=${lang}`), [704]);
+            assert.deepEqual(
+                fixtureIds(`${base}&hideGuildHomestead=false&lang=${lang}`),
+                [701, 702, 703, 704, 705, 706, 708, 709],
+            );
+            assert.deepEqual(
+                fixtureIds(`${base}&hideGuildHomestead=0&lang=${lang}`),
+                [701, 702, 703, 704, 705, 706, 708, 709],
+            );
+        }
+        // The export carries the flag only for the guild upgrade fixtures (0 counts as set).
+        const flagged = exported.items.filter((i) => i.guildUpgrade).map((i) => i.id);
+        assert.deepEqual(flagged, [701, 702, 703, 708]);
+        for (const query of [
+            `${base}&q=homestead`,
+            `${base}&hideGuildHomestead=false&q=homestead`,
+            `${base}&pageSize=3&page=2`,
+            'view=gizmo&candidate=all&hideGuildHomestead=false',
+            'view=consumable&candidate=all&hideCommon=false&hideGuildHomestead=false',
+        ]) {
+            checkList(query);
         }
     });
 

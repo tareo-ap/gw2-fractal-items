@@ -186,13 +186,14 @@ export function writeItems(db: DatabaseSync, updateId: number, items: Gw2Item[],
     const selectStored = db.prepare('SELECT hash, raw_json, removed, game_types FROM items WHERE id = ?');
     const insertItem = db.prepare(`
     INSERT INTO items (id, name, description, type, subtype, rarity, level, icon, chat_link, game_types, flags,
-                       is_candidate, raw_json, hash, first_seen_update, last_changed_update, removed)
+                       is_candidate, guild_upgrade_id, raw_json, hash, first_seen_update, last_changed_update, removed)
     VALUES (:id, :name, :description, :type, :subtype, :rarity, :level, :icon, :chat_link, :game_types, :flags,
-            :is_candidate, :raw_json, :hash, :update_id, :update_id, 0)`);
+            :is_candidate, :guild_upgrade_id, :raw_json, :hash, :update_id, :update_id, 0)`);
     const updateItem = db.prepare(`
     UPDATE items SET name = :name, description = :description, type = :type, subtype = :subtype,
       rarity = :rarity, level = :level, icon = :icon, chat_link = :chat_link, game_types = :game_types,
-      flags = :flags, is_candidate = :is_candidate, raw_json = :raw_json, hash = :hash,
+      flags = :flags, is_candidate = :is_candidate, guild_upgrade_id = :guild_upgrade_id,
+      raw_json = :raw_json, hash = :hash,
       last_changed_update = :update_id, removed = 0
     WHERE id = :id`);
     const insertChange = db.prepare(`
@@ -322,6 +323,9 @@ export function writeTexts(db: DatabaseSync, lang: 'de', texts: Map<number, Item
 function toColumns(item: Gw2Item) {
     const gameTypes = normalizeGameTypes(item.game_types);
     const subtype = item.details?.type;
+    // Guild hall upgrade the item belongs to (any item type). Safe integers only, so this agrees with
+    // migration 5 (json_type = 'integer'): a huge number such as 1e21 is serialized as a real there.
+    const guildUpgradeId = item.details?.guild_upgrade_id;
     return {
         id: item.id,
         name: typeof item.name === 'string' ? item.name : '',
@@ -336,6 +340,7 @@ function toColumns(item: Gw2Item) {
         flags: JSON.stringify(Array.isArray(item.flags) ? item.flags : []),
         // Candidate = usable in Fractals of the Mist, i.e. game type "Dungeon". SQLite has no boolean, so 1/0.
         is_candidate: gameTypes.includes('Dungeon') ? 1 : 0,
+        guild_upgrade_id: Number.isSafeInteger(guildUpgradeId) ? (guildUpgradeId as number) : null,
         raw_json: JSON.stringify(item),
     };
 }

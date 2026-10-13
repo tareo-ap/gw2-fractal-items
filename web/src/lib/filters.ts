@@ -39,6 +39,8 @@ export interface ListFilters {
     hidePlaceholders: boolean;
     // Hide items whose English description says they are consumed automatically when acquired.
     hideAutoConsumed: boolean;
+    // Hide guild hall items (guild upgrade) and Consumables/Gizmos that mention the homestead (housing instance).
+    hideGuildHomestead: boolean;
     // Only used in the Tonics view (empty = both types).
     itemType: ItemTypeFilter[];
     // Only used in the Consumables view (empty = all subtypes).
@@ -60,6 +62,7 @@ export const DEFAULT_FILTERS: ListFilters = {
     hideCommon: true,
     hidePlaceholders: true,
     hideAutoConsumed: true,
+    hideGuildHomestead: true,
     itemType: [],
     subtype: [],
     rarity: [],
@@ -102,6 +105,7 @@ export function parseFilters(params: URLSearchParams): ListFilters {
         hideCommon: params.get('hideCommon') !== 'false',
         hidePlaceholders: params.get('hidePlaceholders') !== 'false',
         hideAutoConsumed: params.get('hideAutoConsumed') !== 'false',
+        hideGuildHomestead: params.get('hideGuildHomestead') !== 'false',
         itemType: listOf(params.get('itemType'), ITEM_TYPE_FILTER),
         subtype: listOf(params.get('subtype'), CONSUMABLE_SUBTYPES),
         rarity: listOf(params.get('rarity'), RARITIES),
@@ -125,6 +129,7 @@ export function filtersToParams(filters: ListFilters): URLSearchParams {
     if (!filters.hideCommon) params.set('hideCommon', 'false');
     if (!filters.hidePlaceholders) params.set('hidePlaceholders', 'false');
     if (!filters.hideAutoConsumed) params.set('hideAutoConsumed', 'false');
+    if (!filters.hideGuildHomestead) params.set('hideGuildHomestead', 'false');
     // itemType and subtype are left out in views where they do not apply, so links stay clean.
     if (filters.itemType.length && itemTypeFilterApplies(filters.view))
         params.set('itemType', filters.itemType.join(','));
@@ -154,6 +159,7 @@ export function toApiQuery(filters: ListFilters): string {
     params.set('hideCommon', String(filters.hideCommon));
     params.set('hidePlaceholders', String(filters.hidePlaceholders));
     params.set('hideAutoConsumed', String(filters.hideAutoConsumed));
+    params.set('hideGuildHomestead', String(filters.hideGuildHomestead));
     params.set('page', String(filters.page));
     params.set('pageSize', String(PAGE_SIZE));
     return params.toString();
@@ -192,5 +198,6 @@ export function countExtraFilters(filters: ListFilters): number {
     if (hasHideCommon(filters.view) && !filters.hideCommon) count++;
     if (!filters.hidePlaceholders) count++;
     if (!filters.hideAutoConsumed) count++;
+    if (!filters.hideGuildHomestead) count++;
     return count;
 }

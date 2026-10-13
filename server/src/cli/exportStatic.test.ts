@@ -139,6 +139,7 @@ describe('buildStaticExport', () => {
         assert.equal('subtype' in item!, false);
         assert.equal('removed' in item!, false);
         assert.equal('chatLink' in item!, false);
+        assert.equal('guildUpgrade' in item!, false);
         assert.equal(item!.icon, '1.png');
         assert.deepEqual(item!.test, {
             status: 'works',
@@ -146,6 +147,34 @@ describe('buildStaticExport', () => {
             testedAt: '2026-10-10T10:00:00.000Z',
             gameTypesAtTest: ['Dungeon', 'Pve', 'Wvw'],
         });
+    });
+});
+
+describe('buildStaticExport: guildUpgrade flag', () => {
+    let api: FakeGw2Api;
+    afterEach(() => api.close());
+
+    it('sets guildUpgrade: true only where guild_upgrade_id is set (0 counts), otherwise omits the key', async () => {
+        api = await startFakeGw2Api([
+            { ...gizmo, id: 1, details: { type: 'Default', guild_upgrade_id: 12 } },
+            { ...gizmo, id: 2, details: { type: 'Default', guild_upgrade_id: 0 } },
+            { ...gizmo, id: 3, details: { type: 'Default', guild_upgrade_id: null } },
+            { ...gizmo, id: 4, details: { type: 'Default' } },
+        ]);
+        const { db, importer } = createTestImporter(api.url);
+        await runImport(importer);
+        const items = buildStaticExport(db).items;
+        assert.deepEqual(
+            items.map((item) => [item.id, item.guildUpgrade]),
+            [
+                [1, true],
+                [2, true],
+                [3, undefined],
+                [4, undefined],
+            ],
+        );
+        assert.equal('guildUpgrade' in items[2]!, false);
+        assert.equal('guildUpgrade' in items[3]!, false);
     });
 });
 

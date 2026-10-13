@@ -151,6 +151,7 @@ const en = {
     'filter.subtypeHiddenByHideCommon':
         'These subtypes give no results while the option "{option}" below is on. Turn it off to use them.',
     'filter.hideAutoConsumed': 'Hide items consumed automatically when acquired (by description)',
+    'filter.hideGuildHomestead': 'Hide guild hall & homestead items',
     'subtype.AppearanceChange': 'Appearance change',
     'subtype.Booze': 'Booze',
     'subtype.ContractNpc': 'Contract NPC',
@@ -436,6 +437,7 @@ const de: Record<Key, string> = {
     'filter.subtypeHiddenByHideCommon':
         'Diese Untertypen liefern keine Treffer, solange die Option „{option}“ unten aktiv ist. Zum Verwenden ausschalten.',
     'filter.hideAutoConsumed': 'Beim Erwerb automatisch verbrauchte Items ausblenden (laut Beschreibung)',
+    'filter.hideGuildHomestead': 'Gildenhallen- & Homestead-Items ausblenden',
     'subtype.AppearanceChange': 'Aussehensänderung',
     'subtype.Booze': 'Alkohol',
     'subtype.ContractNpc': 'Vertrags-NSC',

@@ -32,6 +32,7 @@ import {
     hideCommonApplies,
     isAutoConsumed,
     isCommonConsumable,
+    isGuildOrHomesteadItem,
     isPlaceholder,
     isTonic,
     itemIdFromChatLink,
@@ -77,6 +78,7 @@ export interface PreparedItem {
     tonic: boolean;
     common: boolean;
     autoConsumed: boolean; // English description says the item is consumed on acquisition (see isAutoConsumed)
+    guildOrHomestead: boolean; // guild hall or homestead item (see isGuildOrHomesteadItem)
     rarityRank: number;
     chatLink: string | null;
     /** Words for the full-text search per column [name, description], computed on the first search. */
@@ -150,6 +152,12 @@ function prepareItem(src: StaticItem): PreparedItem {
         tonic: isTonic(rule),
         common: isCommonConsumable(rule),
         autoConsumed: isAutoConsumed(src.description),
+        guildOrHomestead: isGuildOrHomesteadItem({
+            type: src.type,
+            name: src.name,
+            descriptionEn: src.description,
+            hasGuildUpgrade: src.guildUpgrade === true,
+        }),
         rarityRank: rarityRank(src.rarity),
         chatLink: src.chatLink === undefined ? chatLinkForId(src.id) : src.chatLink || null,
     };
@@ -271,6 +279,7 @@ function compileFilter(dataset: StaticDataset, query: ParsedItemListQuery): (ite
         if (hideCommon && item.common) return false;
         if (query.hidePlaceholders && item.placeholder) return false;
         if (query.hideAutoConsumed && item.autoConsumed) return false;
+        if (query.hideGuildHomestead && item.guildOrHomestead) return false;
         // Any of the listed types / subtypes; see the matching conditions in buildWhere on the server.
         if (filterItemTypes.length > 0 && !filterItemTypes.includes(item.src.type)) return false;
         if (filterSubtypes.length > 0 && (item.subtype === null || !filterSubtypes.includes(item.subtype)))

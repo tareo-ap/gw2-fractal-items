@@ -67,6 +67,41 @@ export const autoConsumedFixtureItems = (): Gw2Item[] => {
     ];
 };
 
+/**
+ * Extra items for the hideGuildHomestead filter (IDs 701-709), meant to be added to fixtureItems().
+ * Candidates unless noted. Hidden by default: 701-703 (guild_upgrade_id set), 705 (homestead in the name only,
+ * upper case), 706 (homestead in the description only), 708 (guild_upgrade_id 0 counts as set), 709 (Gizmo without
+ * description, not a candidate). Shown: 704 (guild_upgrade_id null, neutral texts) and 707 (Trophy: the text rule
+ * only covers Consumable and Gizmo).
+ */
+export const guildHomesteadFixtureItems = (): Gw2Item[] => {
+    const base = item(701, 'Guild Decoration', 'Consumable', 'Generic', 'Fine', ['Dungeon', 'Pve']);
+    return [
+        { ...base, details: { type: 'Generic', guild_upgrade_id: 123 } },
+        { ...base, id: 702, name: 'Guild Banner', details: { type: 'Immediate', guild_upgrade_id: 45 } },
+        { ...base, id: 703, name: 'Guild Gizmo', type: 'Gizmo', details: { type: 'Default', guild_upgrade_id: 67 } },
+        { ...base, id: 704, name: 'Plain Decoration', details: { type: 'Generic', guild_upgrade_id: null } },
+        { ...base, id: 705, name: 'Recipe: HOMESTEAD Bench', details: { type: 'Unlock' } },
+        {
+            ...base,
+            id: 706,
+            name: 'Jukebox Track',
+            description: 'Adds a song to your Homestead and home instance jukebox.',
+        },
+        { ...base, id: 707, name: 'Homestead Relic', type: 'Trophy', details: { type: 'Default' } },
+        { ...base, id: 708, name: 'Zero Upgrade', details: { type: 'Generic', guild_upgrade_id: 0 } },
+        {
+            ...base,
+            id: 709,
+            name: 'Homestead Gizmo',
+            type: 'Gizmo',
+            description: undefined,
+            game_types: ['Pve'],
+            details: { type: 'Default' },
+        },
+    ];
+};
+
 /** In-memory DB plus importer against the fake server, without throttling and with short backoff. */
 // `:memory:` = SQLite database that lives only in RAM and vanishes on close.
 export function createTestImporter(apiUrl: string) {

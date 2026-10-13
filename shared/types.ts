@@ -110,6 +110,7 @@ export interface ItemListQuery {
     hidePlaceholders?: boolean; // Default true; hides placeholders (empty name, no icon, or name like "((906936))" or "[[913817]]"), in all views
     hideCommon?: boolean; // Default true; does not apply in the tonic view; hides consumables with subtype Food, Utility, Unlock, Transmutation, Currency as well as Mastery Points, Emote Tomes and currency packs
     hideAutoConsumed?: boolean; // Default true; in all views; hides items whose English description says they are consumed automatically on acquisition
+    hideGuildHomestead?: boolean; // Default true; in all views; hides guild hall items (details.guild_upgrade_id set) and Consumables/Gizmos mentioning "homestead" in the English name or description
     itemType?: ('Gizmo' | 'Consumable')[]; // only in the tonic view (ignored elsewhere); empty = both
     subtype?: string[]; // only in the consumable view (ignored elsewhere); one of CONSUMABLE_SUBTYPES, any of the listed; empty = all
     rarity?: Rarity[];

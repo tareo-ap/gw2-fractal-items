@@ -74,6 +74,7 @@ export function parseItemListQuery(params: Record<string, string | undefined>): 
         hideCommon: bool('hideCommon', params.hideCommon) ?? true,
         hidePlaceholders: bool('hidePlaceholders', params.hidePlaceholders) ?? true,
         hideAutoConsumed: bool('hideAutoConsumed', params.hideAutoConsumed) ?? true,
+        hideGuildHomestead: bool('hideGuildHomestead', params.hideGuildHomestead) ?? true,
         itemType: list('itemType', params.itemType, ITEM_TYPE_FILTER),
         subtype: list('subtype', params.subtype, CONSUMABLE_SUBTYPES),
         rarity: list('rarity', params.rarity, RARITIES),
